@@ -419,6 +419,16 @@ class BusinessWarehouses extends Table
     $customConstraints: 'NOT NULL DEFAULT \'\'',
     defaultValue: const CustomExpression('\'\''),
   );
+  late final GeneratedColumn<String> locationKind = GeneratedColumn<String>(
+    'location_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT \'warehouse\' CHECK (location_kind IN (\'branch_store\', \'warehouse\'))',
+    defaultValue: const CustomExpression('\'warehouse\''),
+  );
   late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
     'is_active',
     aliasedName,
@@ -444,6 +454,7 @@ class BusinessWarehouses extends Table
     branchId,
     code,
     name,
+    locationKind,
     isActive,
     createdAt,
   ];
@@ -483,6 +494,10 @@ class BusinessWarehouses extends Table
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      locationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}location_kind'],
+      )!,
       isActive: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}is_active'],
@@ -517,6 +532,7 @@ class BusinessWarehousesData extends DataClass
   final String branchId;
   final String code;
   final String name;
+  final String locationKind;
   final int isActive;
   final String createdAt;
   const BusinessWarehousesData({
@@ -525,6 +541,7 @@ class BusinessWarehousesData extends DataClass
     required this.branchId,
     required this.code,
     required this.name,
+    required this.locationKind,
     required this.isActive,
     required this.createdAt,
   });
@@ -536,6 +553,7 @@ class BusinessWarehousesData extends DataClass
     map['branch_id'] = Variable<String>(branchId);
     map['code'] = Variable<String>(code);
     map['name'] = Variable<String>(name);
+    map['location_kind'] = Variable<String>(locationKind);
     map['is_active'] = Variable<int>(isActive);
     map['created_at'] = Variable<String>(createdAt);
     return map;
@@ -552,6 +570,7 @@ class BusinessWarehousesData extends DataClass
       branchId: serializer.fromJson<String>(json['branchId']),
       code: serializer.fromJson<String>(json['code']),
       name: serializer.fromJson<String>(json['name']),
+      locationKind: serializer.fromJson<String>(json['locationKind']),
       isActive: serializer.fromJson<int>(json['isActive']),
       createdAt: serializer.fromJson<String>(json['createdAt']),
     );
@@ -565,6 +584,7 @@ class BusinessWarehousesData extends DataClass
       'branchId': serializer.toJson<String>(branchId),
       'code': serializer.toJson<String>(code),
       'name': serializer.toJson<String>(name),
+      'locationKind': serializer.toJson<String>(locationKind),
       'isActive': serializer.toJson<int>(isActive),
       'createdAt': serializer.toJson<String>(createdAt),
     };
@@ -576,6 +596,7 @@ class BusinessWarehousesData extends DataClass
     String? branchId,
     String? code,
     String? name,
+    String? locationKind,
     int? isActive,
     String? createdAt,
   }) => BusinessWarehousesData(
@@ -584,6 +605,7 @@ class BusinessWarehousesData extends DataClass
     branchId: branchId ?? this.branchId,
     code: code ?? this.code,
     name: name ?? this.name,
+    locationKind: locationKind ?? this.locationKind,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -595,6 +617,7 @@ class BusinessWarehousesData extends DataClass
           ..write('branchId: $branchId, ')
           ..write('code: $code, ')
           ..write('name: $name, ')
+          ..write('locationKind: $locationKind, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -608,6 +631,7 @@ class BusinessWarehousesData extends DataClass
     branchId,
     code,
     name,
+    locationKind,
     isActive,
     createdAt,
   );
@@ -620,6 +644,7 @@ class BusinessWarehousesData extends DataClass
           other.branchId == this.branchId &&
           other.code == this.code &&
           other.name == this.name &&
+          other.locationKind == this.locationKind &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt);
 }
@@ -4120,6 +4145,32 @@ class Users extends Table with TableInfo<Users, UsersData> {
     requiredDuringInsert: false,
     $customConstraints: 'NULL',
   );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> globalLocationAccess = GeneratedColumn<int>(
+    'global_location_access',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 0 CHECK (global_location_access IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
   late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
     'is_active',
     aliasedName,
@@ -4177,6 +4228,9 @@ class Users extends Table with TableInfo<Users, UsersData> {
     passwordHash,
     role,
     employeeId,
+    branchId,
+    warehouseId,
+    globalLocationAccess,
     isActive,
     securityQuestion,
     securityAnswerHash,
@@ -4215,6 +4269,18 @@ class Users extends Table with TableInfo<Users, UsersData> {
         DriftSqlType.int,
         data['${effectivePrefix}employee_id'],
       ),
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      ),
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      ),
+      globalLocationAccess: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}global_location_access'],
+      )!,
       isActive: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}is_active'],
@@ -4257,6 +4323,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
   final String passwordHash;
   final String role;
   final int? employeeId;
+  final String? branchId;
+  final String? warehouseId;
+  final int globalLocationAccess;
   final int isActive;
   final String? securityQuestion;
   final String? securityAnswerHash;
@@ -4269,6 +4338,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
     required this.passwordHash,
     required this.role,
     this.employeeId,
+    this.branchId,
+    this.warehouseId,
+    required this.globalLocationAccess,
     required this.isActive,
     this.securityQuestion,
     this.securityAnswerHash,
@@ -4286,6 +4358,13 @@ class UsersData extends DataClass implements Insertable<UsersData> {
     if (!nullToAbsent || employeeId != null) {
       map['employee_id'] = Variable<int>(employeeId);
     }
+    if (!nullToAbsent || branchId != null) {
+      map['branch_id'] = Variable<String>(branchId);
+    }
+    if (!nullToAbsent || warehouseId != null) {
+      map['warehouse_id'] = Variable<String>(warehouseId);
+    }
+    map['global_location_access'] = Variable<int>(globalLocationAccess);
     map['is_active'] = Variable<int>(isActive);
     if (!nullToAbsent || securityQuestion != null) {
       map['security_question'] = Variable<String>(securityQuestion);
@@ -4312,6 +4391,11 @@ class UsersData extends DataClass implements Insertable<UsersData> {
       passwordHash: serializer.fromJson<String>(json['passwordHash']),
       role: serializer.fromJson<String>(json['role']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
+      branchId: serializer.fromJson<String?>(json['branchId']),
+      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      globalLocationAccess: serializer.fromJson<int>(
+        json['globalLocationAccess'],
+      ),
       isActive: serializer.fromJson<int>(json['isActive']),
       securityQuestion: serializer.fromJson<String?>(json['securityQuestion']),
       securityAnswerHash: serializer.fromJson<String?>(
@@ -4331,6 +4415,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
       'passwordHash': serializer.toJson<String>(passwordHash),
       'role': serializer.toJson<String>(role),
       'employeeId': serializer.toJson<int?>(employeeId),
+      'branchId': serializer.toJson<String?>(branchId),
+      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'globalLocationAccess': serializer.toJson<int>(globalLocationAccess),
       'isActive': serializer.toJson<int>(isActive),
       'securityQuestion': serializer.toJson<String?>(securityQuestion),
       'securityAnswerHash': serializer.toJson<String?>(securityAnswerHash),
@@ -4346,6 +4433,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
     String? passwordHash,
     String? role,
     Value<int?> employeeId = const Value.absent(),
+    Value<String?> branchId = const Value.absent(),
+    Value<String?> warehouseId = const Value.absent(),
+    int? globalLocationAccess,
     int? isActive,
     Value<String?> securityQuestion = const Value.absent(),
     Value<String?> securityAnswerHash = const Value.absent(),
@@ -4358,6 +4448,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
     passwordHash: passwordHash ?? this.passwordHash,
     role: role ?? this.role,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
+    branchId: branchId.present ? branchId.value : this.branchId,
+    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    globalLocationAccess: globalLocationAccess ?? this.globalLocationAccess,
     isActive: isActive ?? this.isActive,
     securityQuestion: securityQuestion.present
         ? securityQuestion.value
@@ -4377,6 +4470,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
           ..write('passwordHash: $passwordHash, ')
           ..write('role: $role, ')
           ..write('employeeId: $employeeId, ')
+          ..write('branchId: $branchId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('globalLocationAccess: $globalLocationAccess, ')
           ..write('isActive: $isActive, ')
           ..write('securityQuestion: $securityQuestion, ')
           ..write('securityAnswerHash: $securityAnswerHash, ')
@@ -4394,6 +4490,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
     passwordHash,
     role,
     employeeId,
+    branchId,
+    warehouseId,
+    globalLocationAccess,
     isActive,
     securityQuestion,
     securityAnswerHash,
@@ -4410,6 +4509,9 @@ class UsersData extends DataClass implements Insertable<UsersData> {
           other.passwordHash == this.passwordHash &&
           other.role == this.role &&
           other.employeeId == this.employeeId &&
+          other.branchId == this.branchId &&
+          other.warehouseId == this.warehouseId &&
+          other.globalLocationAccess == this.globalLocationAccess &&
           other.isActive == this.isActive &&
           other.securityQuestion == this.securityQuestion &&
           other.securityAnswerHash == this.securityAnswerHash &&
@@ -4472,7 +4574,8 @@ class WarehouseTransfers extends Table
         false,
         type: DriftSqlType.string,
         requiredDuringInsert: true,
-        $customConstraints: 'NOT NULL',
+        $customConstraints:
+            'NOT NULL REFERENCES business_warehouses(id)ON DELETE RESTRICT',
       );
   late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
     'currency_id',
@@ -4651,9 +4754,8 @@ class WarehouseTransfers extends Table
   List<String> get customConstraints => const [
     'PRIMARY KEY(id)',
     'FOREIGN KEY(source_warehouse_id, branch_id, organization_id)REFERENCES business_warehouses(id, branch_id, organization_id)ON DELETE RESTRICT',
-    'FOREIGN KEY(destination_warehouse_id, branch_id, organization_id)REFERENCES business_warehouses(id, branch_id, organization_id)ON DELETE RESTRICT',
     'CHECK(source_warehouse_id != destination_warehouse_id)',
-    'CHECK(status IN (\'draft\', \'cancelled\'))',
+    'CHECK(status IN (\'draft\', \'in_transit\', \'partially_received\', \'completed\', \'cancelled\'))',
     'CHECK(line_count BETWEEN 1 AND 500)',
     'CHECK(length(notes) <= 500)',
   ];
@@ -4907,6 +5009,23 @@ class WarehouseTransferLines extends Table
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<int> requestedOwnedQuantity = GeneratedColumn<int>(
+    'requested_owned_quantity',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> requestedConsignmentQuantity =
+      GeneratedColumn<int>(
+        'requested_consignment_quantity',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
   late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
     'quantity_scale',
     aliasedName,
@@ -4938,6 +5057,8 @@ class WarehouseTransferLines extends Table
     productId,
     variantId,
     quantity,
+    requestedOwnedQuantity,
+    requestedConsignmentQuantity,
     quantityScale,
     measurementType,
     previewValueCents,
@@ -4980,6 +5101,14 @@ class WarehouseTransferLines extends Table
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      requestedOwnedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_owned_quantity'],
+      ),
+      requestedConsignmentQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_consignment_quantity'],
+      ),
       quantityScale: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}quantity_scale'],
@@ -5019,6 +5148,8 @@ class WarehouseTransferLinesData extends DataClass
   final int productId;
   final int variantId;
   final int quantity;
+  final int? requestedOwnedQuantity;
+  final int? requestedConsignmentQuantity;
   final int quantityScale;
   final String measurementType;
   final int previewValueCents;
@@ -5028,6 +5159,8 @@ class WarehouseTransferLinesData extends DataClass
     required this.productId,
     required this.variantId,
     required this.quantity,
+    this.requestedOwnedQuantity,
+    this.requestedConsignmentQuantity,
     required this.quantityScale,
     required this.measurementType,
     required this.previewValueCents,
@@ -5040,6 +5173,14 @@ class WarehouseTransferLinesData extends DataClass
     map['product_id'] = Variable<int>(productId);
     map['variant_id'] = Variable<int>(variantId);
     map['quantity'] = Variable<int>(quantity);
+    if (!nullToAbsent || requestedOwnedQuantity != null) {
+      map['requested_owned_quantity'] = Variable<int>(requestedOwnedQuantity);
+    }
+    if (!nullToAbsent || requestedConsignmentQuantity != null) {
+      map['requested_consignment_quantity'] = Variable<int>(
+        requestedConsignmentQuantity,
+      );
+    }
     map['quantity_scale'] = Variable<int>(quantityScale);
     map['measurement_type'] = Variable<String>(measurementType);
     map['preview_value_cents'] = Variable<int>(previewValueCents);
@@ -5057,6 +5198,12 @@ class WarehouseTransferLinesData extends DataClass
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      requestedOwnedQuantity: serializer.fromJson<int?>(
+        json['requestedOwnedQuantity'],
+      ),
+      requestedConsignmentQuantity: serializer.fromJson<int?>(
+        json['requestedConsignmentQuantity'],
+      ),
       quantityScale: serializer.fromJson<int>(json['quantityScale']),
       measurementType: serializer.fromJson<String>(json['measurementType']),
       previewValueCents: serializer.fromJson<int>(json['previewValueCents']),
@@ -5071,6 +5218,10 @@ class WarehouseTransferLinesData extends DataClass
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int>(variantId),
       'quantity': serializer.toJson<int>(quantity),
+      'requestedOwnedQuantity': serializer.toJson<int?>(requestedOwnedQuantity),
+      'requestedConsignmentQuantity': serializer.toJson<int?>(
+        requestedConsignmentQuantity,
+      ),
       'quantityScale': serializer.toJson<int>(quantityScale),
       'measurementType': serializer.toJson<String>(measurementType),
       'previewValueCents': serializer.toJson<int>(previewValueCents),
@@ -5083,6 +5234,8 @@ class WarehouseTransferLinesData extends DataClass
     int? productId,
     int? variantId,
     int? quantity,
+    Value<int?> requestedOwnedQuantity = const Value.absent(),
+    Value<int?> requestedConsignmentQuantity = const Value.absent(),
     int? quantityScale,
     String? measurementType,
     int? previewValueCents,
@@ -5092,6 +5245,12 @@ class WarehouseTransferLinesData extends DataClass
     productId: productId ?? this.productId,
     variantId: variantId ?? this.variantId,
     quantity: quantity ?? this.quantity,
+    requestedOwnedQuantity: requestedOwnedQuantity.present
+        ? requestedOwnedQuantity.value
+        : this.requestedOwnedQuantity,
+    requestedConsignmentQuantity: requestedConsignmentQuantity.present
+        ? requestedConsignmentQuantity.value
+        : this.requestedConsignmentQuantity,
     quantityScale: quantityScale ?? this.quantityScale,
     measurementType: measurementType ?? this.measurementType,
     previewValueCents: previewValueCents ?? this.previewValueCents,
@@ -5104,6 +5263,10 @@ class WarehouseTransferLinesData extends DataClass
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('requestedOwnedQuantity: $requestedOwnedQuantity, ')
+          ..write(
+            'requestedConsignmentQuantity: $requestedConsignmentQuantity, ',
+          )
           ..write('quantityScale: $quantityScale, ')
           ..write('measurementType: $measurementType, ')
           ..write('previewValueCents: $previewValueCents')
@@ -5118,6 +5281,8 @@ class WarehouseTransferLinesData extends DataClass
     productId,
     variantId,
     quantity,
+    requestedOwnedQuantity,
+    requestedConsignmentQuantity,
     quantityScale,
     measurementType,
     previewValueCents,
@@ -5131,24 +5296,841 @@ class WarehouseTransferLinesData extends DataClass
           other.productId == this.productId &&
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
+          other.requestedOwnedQuantity == this.requestedOwnedQuantity &&
+          other.requestedConsignmentQuantity ==
+              this.requestedConsignmentQuantity &&
           other.quantityScale == this.quantityScale &&
           other.measurementType == this.measurementType &&
           other.previewValueCents == this.previewValueCents);
 }
 
-class WarehouseTransferEvents extends Table
-    with TableInfo<WarehouseTransferEvents, WarehouseTransferEventsData> {
+class AccountingPeriods extends Table
+    with TableInfo<AccountingPeriods, AccountingPeriodsData> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  WarehouseTransferEvents(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+  AccountingPeriods(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
     'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> periodName = GeneratedColumn<String>(
+    'period_name',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> startDate = GeneratedColumn<String>(
+    'start_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> endDate = GeneratedColumn<String>(
+    'end_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> isClosed = GeneratedColumn<int>(
+    'is_closed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (is_closed IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> closedAt = GeneratedColumn<String>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> closedBy = GeneratedColumn<int>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    periodName,
+    startDate,
+    endDate,
+    isClosed,
+    closedAt,
+    closedBy,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'accounting_periods';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AccountingPeriodsData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AccountingPeriodsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      periodName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}period_name'],
+      )!,
+      startDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}start_date'],
+      )!,
+      endDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}end_date'],
+      )!,
+      isClosed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_closed'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closed_at'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}closed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  AccountingPeriods createAlias(String alias) {
+    return AccountingPeriods(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class AccountingPeriodsData extends DataClass
+    implements Insertable<AccountingPeriodsData> {
+  final int id;
+  final String periodName;
+  final String startDate;
+  final String endDate;
+  final int isClosed;
+  final String? closedAt;
+  final int? closedBy;
+  final String createdAt;
+  final String updatedAt;
+  const AccountingPeriodsData({
+    required this.id,
+    required this.periodName,
+    required this.startDate,
+    required this.endDate,
+    required this.isClosed,
+    this.closedAt,
+    this.closedBy,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['period_name'] = Variable<String>(periodName);
+    map['start_date'] = Variable<String>(startDate);
+    map['end_date'] = Variable<String>(endDate);
+    map['is_closed'] = Variable<int>(isClosed);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<String>(closedAt);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<int>(closedBy);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory AccountingPeriodsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AccountingPeriodsData(
+      id: serializer.fromJson<int>(json['id']),
+      periodName: serializer.fromJson<String>(json['periodName']),
+      startDate: serializer.fromJson<String>(json['startDate']),
+      endDate: serializer.fromJson<String>(json['endDate']),
+      isClosed: serializer.fromJson<int>(json['isClosed']),
+      closedAt: serializer.fromJson<String?>(json['closedAt']),
+      closedBy: serializer.fromJson<int?>(json['closedBy']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'periodName': serializer.toJson<String>(periodName),
+      'startDate': serializer.toJson<String>(startDate),
+      'endDate': serializer.toJson<String>(endDate),
+      'isClosed': serializer.toJson<int>(isClosed),
+      'closedAt': serializer.toJson<String?>(closedAt),
+      'closedBy': serializer.toJson<int?>(closedBy),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  AccountingPeriodsData copyWith({
+    int? id,
+    String? periodName,
+    String? startDate,
+    String? endDate,
+    int? isClosed,
+    Value<String?> closedAt = const Value.absent(),
+    Value<int?> closedBy = const Value.absent(),
+    String? createdAt,
+    String? updatedAt,
+  }) => AccountingPeriodsData(
+    id: id ?? this.id,
+    periodName: periodName ?? this.periodName,
+    startDate: startDate ?? this.startDate,
+    endDate: endDate ?? this.endDate,
+    isClosed: isClosed ?? this.isClosed,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('AccountingPeriodsData(')
+          ..write('id: $id, ')
+          ..write('periodName: $periodName, ')
+          ..write('startDate: $startDate, ')
+          ..write('endDate: $endDate, ')
+          ..write('isClosed: $isClosed, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    periodName,
+    startDate,
+    endDate,
+    isClosed,
+    closedAt,
+    closedBy,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AccountingPeriodsData &&
+          other.id == this.id &&
+          other.periodName == this.periodName &&
+          other.startDate == this.startDate &&
+          other.endDate == this.endDate &&
+          other.isClosed == this.isClosed &&
+          other.closedAt == this.closedAt &&
+          other.closedBy == this.closedBy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class JournalEntries extends Table
+    with TableInfo<JournalEntries, JournalEntriesData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  JournalEntries(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> entryNumber = GeneratedColumn<String>(
+    'entry_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> entryDate = GeneratedColumn<String>(
+    'entry_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<int> accountingPeriodId = GeneratedColumn<int>(
+    'accounting_period_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES accounting_periods(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
+    defaultValue: const CustomExpression('\'draft\''),
+  );
+  late final GeneratedColumn<String> entryType = GeneratedColumn<String>(
+    'entry_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'manual\'',
+    defaultValue: const CustomExpression('\'manual\''),
+  );
+  late final GeneratedColumn<String> sourceTable = GeneratedColumn<String>(
+    'source_table',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> sourceId = GeneratedColumn<int>(
+    'source_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> reversedEntryId = GeneratedColumn<int>(
+    'reversed_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES journal_entries(id)',
+  );
+  late final GeneratedColumn<int> isReversed = GeneratedColumn<int>(
+    'is_reversed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (is_reversed IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> totalDebitCents = GeneratedColumn<int>(
+    'total_debit_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> totalCreditCents = GeneratedColumn<int>(
+    'total_credit_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
+    'posted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    entryNumber,
+    description,
+    entryDate,
+    accountingPeriodId,
+    status,
+    entryType,
+    sourceTable,
+    sourceId,
+    reversedEntryId,
+    isReversed,
+    totalDebitCents,
+    totalCreditCents,
+    createdBy,
+    postedBy,
+    postedAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'journal_entries';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JournalEntriesData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JournalEntriesData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      entryNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_number'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      entryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_date'],
+      )!,
+      accountingPeriodId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accounting_period_id'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      entryType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_type'],
+      )!,
+      sourceTable: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_table'],
+      ),
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_id'],
+      ),
+      reversedEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversed_entry_id'],
+      ),
+      isReversed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_reversed'],
+      )!,
+      totalDebitCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_debit_cents'],
+      )!,
+      totalCreditCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_credit_cents'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      ),
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      postedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}posted_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  JournalEntries createAlias(String alias) {
+    return JournalEntries(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class JournalEntriesData extends DataClass
+    implements Insertable<JournalEntriesData> {
+  final int id;
+  final String entryNumber;
+  final String description;
+  final String entryDate;
+  final int? accountingPeriodId;
+  final String status;
+  final String entryType;
+  final String? sourceTable;
+  final int? sourceId;
+  final int? reversedEntryId;
+  final int isReversed;
+  final int totalDebitCents;
+  final int totalCreditCents;
+  final int? createdBy;
+  final int? postedBy;
+  final String? postedAt;
+  final String createdAt;
+  final String updatedAt;
+  const JournalEntriesData({
+    required this.id,
+    required this.entryNumber,
+    required this.description,
+    required this.entryDate,
+    this.accountingPeriodId,
+    required this.status,
+    required this.entryType,
+    this.sourceTable,
+    this.sourceId,
+    this.reversedEntryId,
+    required this.isReversed,
+    required this.totalDebitCents,
+    required this.totalCreditCents,
+    this.createdBy,
+    this.postedBy,
+    this.postedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['entry_number'] = Variable<String>(entryNumber);
+    map['description'] = Variable<String>(description);
+    map['entry_date'] = Variable<String>(entryDate);
+    if (!nullToAbsent || accountingPeriodId != null) {
+      map['accounting_period_id'] = Variable<int>(accountingPeriodId);
+    }
+    map['status'] = Variable<String>(status);
+    map['entry_type'] = Variable<String>(entryType);
+    if (!nullToAbsent || sourceTable != null) {
+      map['source_table'] = Variable<String>(sourceTable);
+    }
+    if (!nullToAbsent || sourceId != null) {
+      map['source_id'] = Variable<int>(sourceId);
+    }
+    if (!nullToAbsent || reversedEntryId != null) {
+      map['reversed_entry_id'] = Variable<int>(reversedEntryId);
+    }
+    map['is_reversed'] = Variable<int>(isReversed);
+    map['total_debit_cents'] = Variable<int>(totalDebitCents);
+    map['total_credit_cents'] = Variable<int>(totalCreditCents);
+    if (!nullToAbsent || createdBy != null) {
+      map['created_by'] = Variable<int>(createdBy);
+    }
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    if (!nullToAbsent || postedAt != null) {
+      map['posted_at'] = Variable<String>(postedAt);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory JournalEntriesData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JournalEntriesData(
+      id: serializer.fromJson<int>(json['id']),
+      entryNumber: serializer.fromJson<String>(json['entryNumber']),
+      description: serializer.fromJson<String>(json['description']),
+      entryDate: serializer.fromJson<String>(json['entryDate']),
+      accountingPeriodId: serializer.fromJson<int?>(json['accountingPeriodId']),
+      status: serializer.fromJson<String>(json['status']),
+      entryType: serializer.fromJson<String>(json['entryType']),
+      sourceTable: serializer.fromJson<String?>(json['sourceTable']),
+      sourceId: serializer.fromJson<int?>(json['sourceId']),
+      reversedEntryId: serializer.fromJson<int?>(json['reversedEntryId']),
+      isReversed: serializer.fromJson<int>(json['isReversed']),
+      totalDebitCents: serializer.fromJson<int>(json['totalDebitCents']),
+      totalCreditCents: serializer.fromJson<int>(json['totalCreditCents']),
+      createdBy: serializer.fromJson<int?>(json['createdBy']),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      postedAt: serializer.fromJson<String?>(json['postedAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'entryNumber': serializer.toJson<String>(entryNumber),
+      'description': serializer.toJson<String>(description),
+      'entryDate': serializer.toJson<String>(entryDate),
+      'accountingPeriodId': serializer.toJson<int?>(accountingPeriodId),
+      'status': serializer.toJson<String>(status),
+      'entryType': serializer.toJson<String>(entryType),
+      'sourceTable': serializer.toJson<String?>(sourceTable),
+      'sourceId': serializer.toJson<int?>(sourceId),
+      'reversedEntryId': serializer.toJson<int?>(reversedEntryId),
+      'isReversed': serializer.toJson<int>(isReversed),
+      'totalDebitCents': serializer.toJson<int>(totalDebitCents),
+      'totalCreditCents': serializer.toJson<int>(totalCreditCents),
+      'createdBy': serializer.toJson<int?>(createdBy),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'postedAt': serializer.toJson<String?>(postedAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  JournalEntriesData copyWith({
+    int? id,
+    String? entryNumber,
+    String? description,
+    String? entryDate,
+    Value<int?> accountingPeriodId = const Value.absent(),
+    String? status,
+    String? entryType,
+    Value<String?> sourceTable = const Value.absent(),
+    Value<int?> sourceId = const Value.absent(),
+    Value<int?> reversedEntryId = const Value.absent(),
+    int? isReversed,
+    int? totalDebitCents,
+    int? totalCreditCents,
+    Value<int?> createdBy = const Value.absent(),
+    Value<int?> postedBy = const Value.absent(),
+    Value<String?> postedAt = const Value.absent(),
+    String? createdAt,
+    String? updatedAt,
+  }) => JournalEntriesData(
+    id: id ?? this.id,
+    entryNumber: entryNumber ?? this.entryNumber,
+    description: description ?? this.description,
+    entryDate: entryDate ?? this.entryDate,
+    accountingPeriodId: accountingPeriodId.present
+        ? accountingPeriodId.value
+        : this.accountingPeriodId,
+    status: status ?? this.status,
+    entryType: entryType ?? this.entryType,
+    sourceTable: sourceTable.present ? sourceTable.value : this.sourceTable,
+    sourceId: sourceId.present ? sourceId.value : this.sourceId,
+    reversedEntryId: reversedEntryId.present
+        ? reversedEntryId.value
+        : this.reversedEntryId,
+    isReversed: isReversed ?? this.isReversed,
+    totalDebitCents: totalDebitCents ?? this.totalDebitCents,
+    totalCreditCents: totalCreditCents ?? this.totalCreditCents,
+    createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    postedAt: postedAt.present ? postedAt.value : this.postedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('JournalEntriesData(')
+          ..write('id: $id, ')
+          ..write('entryNumber: $entryNumber, ')
+          ..write('description: $description, ')
+          ..write('entryDate: $entryDate, ')
+          ..write('accountingPeriodId: $accountingPeriodId, ')
+          ..write('status: $status, ')
+          ..write('entryType: $entryType, ')
+          ..write('sourceTable: $sourceTable, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('reversedEntryId: $reversedEntryId, ')
+          ..write('isReversed: $isReversed, ')
+          ..write('totalDebitCents: $totalDebitCents, ')
+          ..write('totalCreditCents: $totalCreditCents, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    entryNumber,
+    description,
+    entryDate,
+    accountingPeriodId,
+    status,
+    entryType,
+    sourceTable,
+    sourceId,
+    reversedEntryId,
+    isReversed,
+    totalDebitCents,
+    totalCreditCents,
+    createdBy,
+    postedBy,
+    postedAt,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JournalEntriesData &&
+          other.id == this.id &&
+          other.entryNumber == this.entryNumber &&
+          other.description == this.description &&
+          other.entryDate == this.entryDate &&
+          other.accountingPeriodId == this.accountingPeriodId &&
+          other.status == this.status &&
+          other.entryType == this.entryType &&
+          other.sourceTable == this.sourceTable &&
+          other.sourceId == this.sourceId &&
+          other.reversedEntryId == this.reversedEntryId &&
+          other.isReversed == this.isReversed &&
+          other.totalDebitCents == this.totalDebitCents &&
+          other.totalCreditCents == this.totalCreditCents &&
+          other.createdBy == this.createdBy &&
+          other.postedBy == this.postedBy &&
+          other.postedAt == this.postedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class WarehouseTransferDispatches extends Table
+    with
+        TableInfo<
+          WarehouseTransferDispatches,
+          WarehouseTransferDispatchesData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferDispatches(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
   );
   late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
     'transfer_id',
@@ -5157,15 +6139,7 @@ class WarehouseTransferEvents extends Table
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints:
-        'NOT NULL REFERENCES warehouse_transfers(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
-    'kind',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
+        'NOT NULL UNIQUE REFERENCES warehouse_transfers(id)ON DELETE RESTRICT',
   );
   late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
     'request_key',
@@ -5191,14 +6165,47 @@ class WarehouseTransferEvents extends Table
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL REFERENCES users(id)',
   );
-  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
-    'reason',
+  late final GeneratedColumn<int> allocationCount = GeneratedColumn<int>(
+    'allocation_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> ownedValueCents = GeneratedColumn<int>(
+    'owned_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> sealed = GeneratedColumn<int>(
+    'sealed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (sealed IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> dispatchedAt = GeneratedColumn<String>(
+    'dispatched_at',
     aliasedName,
     false,
     type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'\'',
-    defaultValue: const CustomExpression('\'\''),
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
   );
   late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
     'created_at',
@@ -5213,42 +6220,37 @@ class WarehouseTransferEvents extends Table
   List<GeneratedColumn> get $columns => [
     id,
     transferId,
-    kind,
     requestKey,
     requestHash,
     actorId,
-    reason,
+    allocationCount,
+    ownedValueCents,
+    journalEntryId,
+    sealed,
+    dispatchedAt,
     createdAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'warehouse_transfer_events';
+  static const String $name = 'warehouse_transfer_dispatches';
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  List<Set<GeneratedColumn>> get uniqueKeys => [
-    {transferId, kind},
-  ];
-  @override
-  WarehouseTransferEventsData map(
+  WarehouseTransferDispatchesData map(
     Map<String, dynamic> data, {
     String? tablePrefix,
   }) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return WarehouseTransferEventsData(
+    return WarehouseTransferDispatchesData(
       id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
+        DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
       transferId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}transfer_id'],
-      )!,
-      kind: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}kind'],
       )!,
       requestKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -5262,9 +6264,25 @@ class WarehouseTransferEvents extends Table
         DriftSqlType.int,
         data['${effectivePrefix}actor_id'],
       )!,
-      reason: attachedDatabase.typeMapping.read(
+      allocationCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}allocation_count'],
+      )!,
+      ownedValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}owned_value_cents'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      sealed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sealed'],
+      )!,
+      dispatchedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}reason'],
+        data['${effectivePrefix}dispatched_at'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -5274,69 +6292,81 @@ class WarehouseTransferEvents extends Table
   }
 
   @override
-  WarehouseTransferEvents createAlias(String alias) {
-    return WarehouseTransferEvents(attachedDatabase, alias);
+  WarehouseTransferDispatches createAlias(String alias) {
+    return WarehouseTransferDispatches(attachedDatabase, alias);
   }
 
   @override
   List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'UNIQUE(transfer_id, kind)',
-    'CHECK(kind IN (\'created\', \'cancelled\'))',
-    'CHECK(length(reason) <= 500)',
-    'CHECK(kind != \'cancelled\' OR length(trim(reason)) > 0)',
+    'CHECK(allocation_count BETWEEN 1 AND 5000)',
+    'CHECK(owned_value_cents BETWEEN 0 AND 9007199254740991)',
+    'CHECK(sealed = 0 AND journal_entry_id IS NULL OR sealed = 1 AND owned_value_cents = 0 AND journal_entry_id IS NULL OR sealed = 1 AND owned_value_cents > 0 AND journal_entry_id IS NOT NULL)',
   ];
   @override
   bool get dontWriteConstraints => true;
 }
 
-class WarehouseTransferEventsData extends DataClass
-    implements Insertable<WarehouseTransferEventsData> {
-  final String id;
+class WarehouseTransferDispatchesData extends DataClass
+    implements Insertable<WarehouseTransferDispatchesData> {
+  final int id;
   final String transferId;
-  final String kind;
   final String requestKey;
   final String requestHash;
   final int actorId;
-  final String reason;
+  final int allocationCount;
+  final int ownedValueCents;
+  final int? journalEntryId;
+  final int sealed;
+  final String dispatchedAt;
   final String createdAt;
-  const WarehouseTransferEventsData({
+  const WarehouseTransferDispatchesData({
     required this.id,
     required this.transferId,
-    required this.kind,
     required this.requestKey,
     required this.requestHash,
     required this.actorId,
-    required this.reason,
+    required this.allocationCount,
+    required this.ownedValueCents,
+    this.journalEntryId,
+    required this.sealed,
+    required this.dispatchedAt,
     required this.createdAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
+    map['id'] = Variable<int>(id);
     map['transfer_id'] = Variable<String>(transferId);
-    map['kind'] = Variable<String>(kind);
     map['request_key'] = Variable<String>(requestKey);
     map['request_hash'] = Variable<String>(requestHash);
     map['actor_id'] = Variable<int>(actorId);
-    map['reason'] = Variable<String>(reason);
+    map['allocation_count'] = Variable<int>(allocationCount);
+    map['owned_value_cents'] = Variable<int>(ownedValueCents);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    map['sealed'] = Variable<int>(sealed);
+    map['dispatched_at'] = Variable<String>(dispatchedAt);
     map['created_at'] = Variable<String>(createdAt);
     return map;
   }
 
-  factory WarehouseTransferEventsData.fromJson(
+  factory WarehouseTransferDispatchesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return WarehouseTransferEventsData(
-      id: serializer.fromJson<String>(json['id']),
+    return WarehouseTransferDispatchesData(
+      id: serializer.fromJson<int>(json['id']),
       transferId: serializer.fromJson<String>(json['transferId']),
-      kind: serializer.fromJson<String>(json['kind']),
       requestKey: serializer.fromJson<String>(json['requestKey']),
       requestHash: serializer.fromJson<String>(json['requestHash']),
       actorId: serializer.fromJson<int>(json['actorId']),
-      reason: serializer.fromJson<String>(json['reason']),
+      allocationCount: serializer.fromJson<int>(json['allocationCount']),
+      ownedValueCents: serializer.fromJson<int>(json['ownedValueCents']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      sealed: serializer.fromJson<int>(json['sealed']),
+      dispatchedAt: serializer.fromJson<String>(json['dispatchedAt']),
       createdAt: serializer.fromJson<String>(json['createdAt']),
     );
   }
@@ -5344,46 +6374,60 @@ class WarehouseTransferEventsData extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
+      'id': serializer.toJson<int>(id),
       'transferId': serializer.toJson<String>(transferId),
-      'kind': serializer.toJson<String>(kind),
       'requestKey': serializer.toJson<String>(requestKey),
       'requestHash': serializer.toJson<String>(requestHash),
       'actorId': serializer.toJson<int>(actorId),
-      'reason': serializer.toJson<String>(reason),
+      'allocationCount': serializer.toJson<int>(allocationCount),
+      'ownedValueCents': serializer.toJson<int>(ownedValueCents),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'sealed': serializer.toJson<int>(sealed),
+      'dispatchedAt': serializer.toJson<String>(dispatchedAt),
       'createdAt': serializer.toJson<String>(createdAt),
     };
   }
 
-  WarehouseTransferEventsData copyWith({
-    String? id,
+  WarehouseTransferDispatchesData copyWith({
+    int? id,
     String? transferId,
-    String? kind,
     String? requestKey,
     String? requestHash,
     int? actorId,
-    String? reason,
+    int? allocationCount,
+    int? ownedValueCents,
+    Value<int?> journalEntryId = const Value.absent(),
+    int? sealed,
+    String? dispatchedAt,
     String? createdAt,
-  }) => WarehouseTransferEventsData(
+  }) => WarehouseTransferDispatchesData(
     id: id ?? this.id,
     transferId: transferId ?? this.transferId,
-    kind: kind ?? this.kind,
     requestKey: requestKey ?? this.requestKey,
     requestHash: requestHash ?? this.requestHash,
     actorId: actorId ?? this.actorId,
-    reason: reason ?? this.reason,
+    allocationCount: allocationCount ?? this.allocationCount,
+    ownedValueCents: ownedValueCents ?? this.ownedValueCents,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    sealed: sealed ?? this.sealed,
+    dispatchedAt: dispatchedAt ?? this.dispatchedAt,
     createdAt: createdAt ?? this.createdAt,
   );
   @override
   String toString() {
-    return (StringBuffer('WarehouseTransferEventsData(')
+    return (StringBuffer('WarehouseTransferDispatchesData(')
           ..write('id: $id, ')
           ..write('transferId: $transferId, ')
-          ..write('kind: $kind, ')
           ..write('requestKey: $requestKey, ')
           ..write('requestHash: $requestHash, ')
           ..write('actorId: $actorId, ')
-          ..write('reason: $reason, ')
+          ..write('allocationCount: $allocationCount, ')
+          ..write('ownedValueCents: $ownedValueCents, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('sealed: $sealed, ')
+          ..write('dispatchedAt: $dispatchedAt, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -5393,1531 +6437,30 @@ class WarehouseTransferEventsData extends DataClass
   int get hashCode => Object.hash(
     id,
     transferId,
-    kind,
     requestKey,
     requestHash,
     actorId,
-    reason,
+    allocationCount,
+    ownedValueCents,
+    journalEntryId,
+    sealed,
+    dispatchedAt,
     createdAt,
   );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is WarehouseTransferEventsData &&
+      (other is WarehouseTransferDispatchesData &&
           other.id == this.id &&
           other.transferId == this.transferId &&
-          other.kind == this.kind &&
           other.requestKey == this.requestKey &&
           other.requestHash == this.requestHash &&
           other.actorId == this.actorId &&
-          other.reason == this.reason &&
-          other.createdAt == this.createdAt);
-}
-
-class InventoryOriginStates extends Table
-    with TableInfo<InventoryOriginStates, InventoryOriginStatesData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  InventoryOriginStates(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_warehouses(id)',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES product_variants(id)',
-  );
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
-    'quantity',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
-    'measurement_type',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> dirty = GeneratedColumn<int>(
-    'dirty',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<String> layers = GeneratedColumn<String>(
-    'layers',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    warehouseId,
-    variantId,
-    quantity,
-    measurementType,
-    dirty,
-    layers,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'inventory_origin_states';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {warehouseId, variantId};
-  @override
-  InventoryOriginStatesData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return InventoryOriginStatesData(
-      warehouseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      )!,
-      quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}quantity'],
-      )!,
-      measurementType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}measurement_type'],
-      )!,
-      dirty: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}dirty'],
-      )!,
-      layers: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}layers'],
-      )!,
-    );
-  }
-
-  @override
-  InventoryOriginStates createAlias(String alias) {
-    return InventoryOriginStates(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(warehouse_id, variant_id)',
-    'CHECK(dirty IN (0, 1))',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class InventoryOriginStatesData extends DataClass
-    implements Insertable<InventoryOriginStatesData> {
-  final String warehouseId;
-  final int variantId;
-  final int quantity;
-  final String measurementType;
-  final int dirty;
-  final String layers;
-  const InventoryOriginStatesData({
-    required this.warehouseId,
-    required this.variantId,
-    required this.quantity,
-    required this.measurementType,
-    required this.dirty,
-    required this.layers,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['warehouse_id'] = Variable<String>(warehouseId);
-    map['variant_id'] = Variable<int>(variantId);
-    map['quantity'] = Variable<int>(quantity);
-    map['measurement_type'] = Variable<String>(measurementType);
-    map['dirty'] = Variable<int>(dirty);
-    map['layers'] = Variable<String>(layers);
-    return map;
-  }
-
-  factory InventoryOriginStatesData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return InventoryOriginStatesData(
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
-      variantId: serializer.fromJson<int>(json['variantId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
-      measurementType: serializer.fromJson<String>(json['measurementType']),
-      dirty: serializer.fromJson<int>(json['dirty']),
-      layers: serializer.fromJson<String>(json['layers']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'warehouseId': serializer.toJson<String>(warehouseId),
-      'variantId': serializer.toJson<int>(variantId),
-      'quantity': serializer.toJson<int>(quantity),
-      'measurementType': serializer.toJson<String>(measurementType),
-      'dirty': serializer.toJson<int>(dirty),
-      'layers': serializer.toJson<String>(layers),
-    };
-  }
-
-  InventoryOriginStatesData copyWith({
-    String? warehouseId,
-    int? variantId,
-    int? quantity,
-    String? measurementType,
-    int? dirty,
-    String? layers,
-  }) => InventoryOriginStatesData(
-    warehouseId: warehouseId ?? this.warehouseId,
-    variantId: variantId ?? this.variantId,
-    quantity: quantity ?? this.quantity,
-    measurementType: measurementType ?? this.measurementType,
-    dirty: dirty ?? this.dirty,
-    layers: layers ?? this.layers,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('InventoryOriginStatesData(')
-          ..write('warehouseId: $warehouseId, ')
-          ..write('variantId: $variantId, ')
-          ..write('quantity: $quantity, ')
-          ..write('measurementType: $measurementType, ')
-          ..write('dirty: $dirty, ')
-          ..write('layers: $layers')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    warehouseId,
-    variantId,
-    quantity,
-    measurementType,
-    dirty,
-    layers,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is InventoryOriginStatesData &&
-          other.warehouseId == this.warehouseId &&
-          other.variantId == this.variantId &&
-          other.quantity == this.quantity &&
-          other.measurementType == this.measurementType &&
-          other.dirty == this.dirty &&
-          other.layers == this.layers);
-}
-
-class InventoryOriginEvents extends Table
-    with TableInfo<InventoryOriginEvents, InventoryOriginEventsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  InventoryOriginEvents(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_warehouses(id)',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES product_variants(id)',
-  );
-  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
-    'product_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES products(id)',
-  );
-  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
-    'measurement_type',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> eventKey = GeneratedColumn<String>(
-    'event_key',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> claimKey = GeneratedColumn<String>(
-    'claim_key',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> delta = GeneratedColumn<int>(
-    'delta',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> allocations = GeneratedColumn<String>(
-    'allocations',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT ((strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\')))',
-    defaultValue: const CustomExpression(
-      '(strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\'))',
-    ),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    warehouseId,
-    variantId,
-    productId,
-    measurementType,
-    eventKey,
-    claimKey,
-    delta,
-    allocations,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'inventory_origin_events';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  List<Set<GeneratedColumn>> get uniqueKeys => [
-    {warehouseId, eventKey},
-  ];
-  @override
-  InventoryOriginEventsData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return InventoryOriginEventsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      warehouseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      )!,
-      productId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}product_id'],
-      )!,
-      measurementType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}measurement_type'],
-      )!,
-      eventKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}event_key'],
-      )!,
-      claimKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}claim_key'],
-      ),
-      delta: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}delta'],
-      )!,
-      allocations: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}allocations'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  InventoryOriginEvents createAlias(String alias) {
-    return InventoryOriginEvents(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'UNIQUE(warehouse_id, event_key)',
-    'CHECK(delta != 0)',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class InventoryOriginEventsData extends DataClass
-    implements Insertable<InventoryOriginEventsData> {
-  final int id;
-  final String warehouseId;
-  final int variantId;
-  final int productId;
-  final String measurementType;
-  final String eventKey;
-  final String? claimKey;
-  final int delta;
-  final String allocations;
-  final String createdAt;
-  const InventoryOriginEventsData({
-    required this.id,
-    required this.warehouseId,
-    required this.variantId,
-    required this.productId,
-    required this.measurementType,
-    required this.eventKey,
-    this.claimKey,
-    required this.delta,
-    required this.allocations,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['warehouse_id'] = Variable<String>(warehouseId);
-    map['variant_id'] = Variable<int>(variantId);
-    map['product_id'] = Variable<int>(productId);
-    map['measurement_type'] = Variable<String>(measurementType);
-    map['event_key'] = Variable<String>(eventKey);
-    if (!nullToAbsent || claimKey != null) {
-      map['claim_key'] = Variable<String>(claimKey);
-    }
-    map['delta'] = Variable<int>(delta);
-    map['allocations'] = Variable<String>(allocations);
-    map['created_at'] = Variable<String>(createdAt);
-    return map;
-  }
-
-  factory InventoryOriginEventsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return InventoryOriginEventsData(
-      id: serializer.fromJson<int>(json['id']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
-      variantId: serializer.fromJson<int>(json['variantId']),
-      productId: serializer.fromJson<int>(json['productId']),
-      measurementType: serializer.fromJson<String>(json['measurementType']),
-      eventKey: serializer.fromJson<String>(json['eventKey']),
-      claimKey: serializer.fromJson<String?>(json['claimKey']),
-      delta: serializer.fromJson<int>(json['delta']),
-      allocations: serializer.fromJson<String>(json['allocations']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'warehouseId': serializer.toJson<String>(warehouseId),
-      'variantId': serializer.toJson<int>(variantId),
-      'productId': serializer.toJson<int>(productId),
-      'measurementType': serializer.toJson<String>(measurementType),
-      'eventKey': serializer.toJson<String>(eventKey),
-      'claimKey': serializer.toJson<String?>(claimKey),
-      'delta': serializer.toJson<int>(delta),
-      'allocations': serializer.toJson<String>(allocations),
-      'createdAt': serializer.toJson<String>(createdAt),
-    };
-  }
-
-  InventoryOriginEventsData copyWith({
-    int? id,
-    String? warehouseId,
-    int? variantId,
-    int? productId,
-    String? measurementType,
-    String? eventKey,
-    Value<String?> claimKey = const Value.absent(),
-    int? delta,
-    String? allocations,
-    String? createdAt,
-  }) => InventoryOriginEventsData(
-    id: id ?? this.id,
-    warehouseId: warehouseId ?? this.warehouseId,
-    variantId: variantId ?? this.variantId,
-    productId: productId ?? this.productId,
-    measurementType: measurementType ?? this.measurementType,
-    eventKey: eventKey ?? this.eventKey,
-    claimKey: claimKey.present ? claimKey.value : this.claimKey,
-    delta: delta ?? this.delta,
-    allocations: allocations ?? this.allocations,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('InventoryOriginEventsData(')
-          ..write('id: $id, ')
-          ..write('warehouseId: $warehouseId, ')
-          ..write('variantId: $variantId, ')
-          ..write('productId: $productId, ')
-          ..write('measurementType: $measurementType, ')
-          ..write('eventKey: $eventKey, ')
-          ..write('claimKey: $claimKey, ')
-          ..write('delta: $delta, ')
-          ..write('allocations: $allocations, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    warehouseId,
-    variantId,
-    productId,
-    measurementType,
-    eventKey,
-    claimKey,
-    delta,
-    allocations,
-    createdAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is InventoryOriginEventsData &&
-          other.id == this.id &&
-          other.warehouseId == this.warehouseId &&
-          other.variantId == this.variantId &&
-          other.productId == this.productId &&
-          other.measurementType == this.measurementType &&
-          other.eventKey == this.eventKey &&
-          other.claimKey == this.claimKey &&
-          other.delta == this.delta &&
-          other.allocations == this.allocations &&
-          other.createdAt == this.createdAt);
-}
-
-class AppSettings extends Table with TableInfo<AppSettings, AppSettingsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  AppSettings(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> key = GeneratedColumn<String>(
-    'key',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL UNIQUE',
-  );
-  late final GeneratedColumn<String> value = GeneratedColumn<String>(
-    'value',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    key,
-    value,
-    description,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'app_settings';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  AppSettingsData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AppSettingsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      key: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}key'],
-      )!,
-      value: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}value'],
-      )!,
-      description: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}description'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  AppSettings createAlias(String alias) {
-    return AppSettings(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class AppSettingsData extends DataClass implements Insertable<AppSettingsData> {
-  final int id;
-  final String key;
-  final String value;
-  final String? description;
-  final String createdAt;
-  final String updatedAt;
-  const AppSettingsData({
-    required this.id,
-    required this.key,
-    required this.value,
-    this.description,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['key'] = Variable<String>(key);
-    map['value'] = Variable<String>(value);
-    if (!nullToAbsent || description != null) {
-      map['description'] = Variable<String>(description);
-    }
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory AppSettingsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AppSettingsData(
-      id: serializer.fromJson<int>(json['id']),
-      key: serializer.fromJson<String>(json['key']),
-      value: serializer.fromJson<String>(json['value']),
-      description: serializer.fromJson<String?>(json['description']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'key': serializer.toJson<String>(key),
-      'value': serializer.toJson<String>(value),
-      'description': serializer.toJson<String?>(description),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  AppSettingsData copyWith({
-    int? id,
-    String? key,
-    String? value,
-    Value<String?> description = const Value.absent(),
-    String? createdAt,
-    String? updatedAt,
-  }) => AppSettingsData(
-    id: id ?? this.id,
-    key: key ?? this.key,
-    value: value ?? this.value,
-    description: description.present ? description.value : this.description,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('AppSettingsData(')
-          ..write('id: $id, ')
-          ..write('key: $key, ')
-          ..write('value: $value, ')
-          ..write('description: $description, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode =>
-      Object.hash(id, key, value, description, createdAt, updatedAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is AppSettingsData &&
-          other.id == this.id &&
-          other.key == this.key &&
-          other.value == this.value &&
-          other.description == this.description &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class StoreLogos extends Table with TableInfo<StoreLogos, StoreLogosData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  StoreLogos(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> logoPath = GeneratedColumn<String>(
-    'logo_path',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
-    'is_active',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))',
-    defaultValue: const CustomExpression('1'),
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [id, logoPath, isActive, createdAt];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'store_logos';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  StoreLogosData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return StoreLogosData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      logoPath: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}logo_path'],
-      )!,
-      isActive: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}is_active'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  StoreLogos createAlias(String alias) {
-    return StoreLogos(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class StoreLogosData extends DataClass implements Insertable<StoreLogosData> {
-  final int id;
-  final String logoPath;
-  final int isActive;
-  final String createdAt;
-  const StoreLogosData({
-    required this.id,
-    required this.logoPath,
-    required this.isActive,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['logo_path'] = Variable<String>(logoPath);
-    map['is_active'] = Variable<int>(isActive);
-    map['created_at'] = Variable<String>(createdAt);
-    return map;
-  }
-
-  factory StoreLogosData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return StoreLogosData(
-      id: serializer.fromJson<int>(json['id']),
-      logoPath: serializer.fromJson<String>(json['logoPath']),
-      isActive: serializer.fromJson<int>(json['isActive']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'logoPath': serializer.toJson<String>(logoPath),
-      'isActive': serializer.toJson<int>(isActive),
-      'createdAt': serializer.toJson<String>(createdAt),
-    };
-  }
-
-  StoreLogosData copyWith({
-    int? id,
-    String? logoPath,
-    int? isActive,
-    String? createdAt,
-  }) => StoreLogosData(
-    id: id ?? this.id,
-    logoPath: logoPath ?? this.logoPath,
-    isActive: isActive ?? this.isActive,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('StoreLogosData(')
-          ..write('id: $id, ')
-          ..write('logoPath: $logoPath, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(id, logoPath, isActive, createdAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is StoreLogosData &&
-          other.id == this.id &&
-          other.logoPath == this.logoPath &&
-          other.isActive == this.isActive &&
-          other.createdAt == this.createdAt);
-}
-
-class ExpenseCategories extends Table
-    with TableInfo<ExpenseCategories, ExpenseCategoriesData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ExpenseCategories(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
-    'is_active',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))',
-    defaultValue: const CustomExpression('1'),
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    name,
-    description,
-    isActive,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'expense_categories';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ExpenseCategoriesData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ExpenseCategoriesData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      description: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}description'],
-      ),
-      isActive: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}is_active'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  ExpenseCategories createAlias(String alias) {
-    return ExpenseCategories(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ExpenseCategoriesData extends DataClass
-    implements Insertable<ExpenseCategoriesData> {
-  final int id;
-  final String name;
-  final String? description;
-  final int isActive;
-  final String createdAt;
-  final String updatedAt;
-  const ExpenseCategoriesData({
-    required this.id,
-    required this.name,
-    this.description,
-    required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['name'] = Variable<String>(name);
-    if (!nullToAbsent || description != null) {
-      map['description'] = Variable<String>(description);
-    }
-    map['is_active'] = Variable<int>(isActive);
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory ExpenseCategoriesData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ExpenseCategoriesData(
-      id: serializer.fromJson<int>(json['id']),
-      name: serializer.fromJson<String>(json['name']),
-      description: serializer.fromJson<String?>(json['description']),
-      isActive: serializer.fromJson<int>(json['isActive']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'name': serializer.toJson<String>(name),
-      'description': serializer.toJson<String?>(description),
-      'isActive': serializer.toJson<int>(isActive),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  ExpenseCategoriesData copyWith({
-    int? id,
-    String? name,
-    Value<String?> description = const Value.absent(),
-    int? isActive,
-    String? createdAt,
-    String? updatedAt,
-  }) => ExpenseCategoriesData(
-    id: id ?? this.id,
-    name: name ?? this.name,
-    description: description.present ? description.value : this.description,
-    isActive: isActive ?? this.isActive,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ExpenseCategoriesData(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('description: $description, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode =>
-      Object.hash(id, name, description, isActive, createdAt, updatedAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ExpenseCategoriesData &&
-          other.id == this.id &&
-          other.name == this.name &&
-          other.description == this.description &&
-          other.isActive == this.isActive &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class ProductPriceHistories extends Table
-    with TableInfo<ProductPriceHistories, ProductPriceHistoriesData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ProductPriceHistories(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
-    'product_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE CASCADE',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES product_variants(id)ON DELETE CASCADE',
-  );
-  late final GeneratedColumn<int> oldCostCents = GeneratedColumn<int>(
-    'old_cost_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> newCostCents = GeneratedColumn<int>(
-    'new_cost_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> oldPriceCents = GeneratedColumn<int>(
-    'old_price_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> newPriceCents = GeneratedColumn<int>(
-    'new_price_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> oldWholesalePriceCents = GeneratedColumn<int>(
-    'old_wholesale_price_cents',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> newWholesalePriceCents = GeneratedColumn<int>(
-    'new_wholesale_price_cents',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
-    'user_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)ON DELETE SET NULL',
-  );
-  late final GeneratedColumn<String> changeReason = GeneratedColumn<String>(
-    'change_reason',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    productId,
-    variantId,
-    oldCostCents,
-    newCostCents,
-    oldPriceCents,
-    newPriceCents,
-    oldWholesalePriceCents,
-    newWholesalePriceCents,
-    userId,
-    changeReason,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'product_price_histories';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ProductPriceHistoriesData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ProductPriceHistoriesData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      productId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}product_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      ),
-      oldCostCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}old_cost_cents'],
-      )!,
-      newCostCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}new_cost_cents'],
-      )!,
-      oldPriceCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}old_price_cents'],
-      )!,
-      newPriceCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}new_price_cents'],
-      )!,
-      oldWholesalePriceCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}old_wholesale_price_cents'],
-      ),
-      newWholesalePriceCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}new_wholesale_price_cents'],
-      ),
-      userId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}user_id'],
-      ),
-      changeReason: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}change_reason'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  ProductPriceHistories createAlias(String alias) {
-    return ProductPriceHistories(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ProductPriceHistoriesData extends DataClass
-    implements Insertable<ProductPriceHistoriesData> {
-  final int id;
-  final int productId;
-  final int? variantId;
-  final int oldCostCents;
-  final int newCostCents;
-  final int oldPriceCents;
-  final int newPriceCents;
-  final int? oldWholesalePriceCents;
-  final int? newWholesalePriceCents;
-  final int? userId;
-  final String? changeReason;
-  final String createdAt;
-  const ProductPriceHistoriesData({
-    required this.id,
-    required this.productId,
-    this.variantId,
-    required this.oldCostCents,
-    required this.newCostCents,
-    required this.oldPriceCents,
-    required this.newPriceCents,
-    this.oldWholesalePriceCents,
-    this.newWholesalePriceCents,
-    this.userId,
-    this.changeReason,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['product_id'] = Variable<int>(productId);
-    if (!nullToAbsent || variantId != null) {
-      map['variant_id'] = Variable<int>(variantId);
-    }
-    map['old_cost_cents'] = Variable<int>(oldCostCents);
-    map['new_cost_cents'] = Variable<int>(newCostCents);
-    map['old_price_cents'] = Variable<int>(oldPriceCents);
-    map['new_price_cents'] = Variable<int>(newPriceCents);
-    if (!nullToAbsent || oldWholesalePriceCents != null) {
-      map['old_wholesale_price_cents'] = Variable<int>(oldWholesalePriceCents);
-    }
-    if (!nullToAbsent || newWholesalePriceCents != null) {
-      map['new_wholesale_price_cents'] = Variable<int>(newWholesalePriceCents);
-    }
-    if (!nullToAbsent || userId != null) {
-      map['user_id'] = Variable<int>(userId);
-    }
-    if (!nullToAbsent || changeReason != null) {
-      map['change_reason'] = Variable<String>(changeReason);
-    }
-    map['created_at'] = Variable<String>(createdAt);
-    return map;
-  }
-
-  factory ProductPriceHistoriesData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ProductPriceHistoriesData(
-      id: serializer.fromJson<int>(json['id']),
-      productId: serializer.fromJson<int>(json['productId']),
-      variantId: serializer.fromJson<int?>(json['variantId']),
-      oldCostCents: serializer.fromJson<int>(json['oldCostCents']),
-      newCostCents: serializer.fromJson<int>(json['newCostCents']),
-      oldPriceCents: serializer.fromJson<int>(json['oldPriceCents']),
-      newPriceCents: serializer.fromJson<int>(json['newPriceCents']),
-      oldWholesalePriceCents: serializer.fromJson<int?>(
-        json['oldWholesalePriceCents'],
-      ),
-      newWholesalePriceCents: serializer.fromJson<int?>(
-        json['newWholesalePriceCents'],
-      ),
-      userId: serializer.fromJson<int?>(json['userId']),
-      changeReason: serializer.fromJson<String?>(json['changeReason']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'productId': serializer.toJson<int>(productId),
-      'variantId': serializer.toJson<int?>(variantId),
-      'oldCostCents': serializer.toJson<int>(oldCostCents),
-      'newCostCents': serializer.toJson<int>(newCostCents),
-      'oldPriceCents': serializer.toJson<int>(oldPriceCents),
-      'newPriceCents': serializer.toJson<int>(newPriceCents),
-      'oldWholesalePriceCents': serializer.toJson<int?>(oldWholesalePriceCents),
-      'newWholesalePriceCents': serializer.toJson<int?>(newWholesalePriceCents),
-      'userId': serializer.toJson<int?>(userId),
-      'changeReason': serializer.toJson<String?>(changeReason),
-      'createdAt': serializer.toJson<String>(createdAt),
-    };
-  }
-
-  ProductPriceHistoriesData copyWith({
-    int? id,
-    int? productId,
-    Value<int?> variantId = const Value.absent(),
-    int? oldCostCents,
-    int? newCostCents,
-    int? oldPriceCents,
-    int? newPriceCents,
-    Value<int?> oldWholesalePriceCents = const Value.absent(),
-    Value<int?> newWholesalePriceCents = const Value.absent(),
-    Value<int?> userId = const Value.absent(),
-    Value<String?> changeReason = const Value.absent(),
-    String? createdAt,
-  }) => ProductPriceHistoriesData(
-    id: id ?? this.id,
-    productId: productId ?? this.productId,
-    variantId: variantId.present ? variantId.value : this.variantId,
-    oldCostCents: oldCostCents ?? this.oldCostCents,
-    newCostCents: newCostCents ?? this.newCostCents,
-    oldPriceCents: oldPriceCents ?? this.oldPriceCents,
-    newPriceCents: newPriceCents ?? this.newPriceCents,
-    oldWholesalePriceCents: oldWholesalePriceCents.present
-        ? oldWholesalePriceCents.value
-        : this.oldWholesalePriceCents,
-    newWholesalePriceCents: newWholesalePriceCents.present
-        ? newWholesalePriceCents.value
-        : this.newWholesalePriceCents,
-    userId: userId.present ? userId.value : this.userId,
-    changeReason: changeReason.present ? changeReason.value : this.changeReason,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ProductPriceHistoriesData(')
-          ..write('id: $id, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('oldCostCents: $oldCostCents, ')
-          ..write('newCostCents: $newCostCents, ')
-          ..write('oldPriceCents: $oldPriceCents, ')
-          ..write('newPriceCents: $newPriceCents, ')
-          ..write('oldWholesalePriceCents: $oldWholesalePriceCents, ')
-          ..write('newWholesalePriceCents: $newWholesalePriceCents, ')
-          ..write('userId: $userId, ')
-          ..write('changeReason: $changeReason, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    productId,
-    variantId,
-    oldCostCents,
-    newCostCents,
-    oldPriceCents,
-    newPriceCents,
-    oldWholesalePriceCents,
-    newWholesalePriceCents,
-    userId,
-    changeReason,
-    createdAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ProductPriceHistoriesData &&
-          other.id == this.id &&
-          other.productId == this.productId &&
-          other.variantId == this.variantId &&
-          other.oldCostCents == this.oldCostCents &&
-          other.newCostCents == this.newCostCents &&
-          other.oldPriceCents == this.oldPriceCents &&
-          other.newPriceCents == this.newPriceCents &&
-          other.oldWholesalePriceCents == this.oldWholesalePriceCents &&
-          other.newWholesalePriceCents == this.newWholesalePriceCents &&
-          other.userId == this.userId &&
-          other.changeReason == this.changeReason &&
+          other.allocationCount == this.allocationCount &&
+          other.ownedValueCents == this.ownedValueCents &&
+          other.journalEntryId == this.journalEntryId &&
+          other.sealed == this.sealed &&
+          other.dispatchedAt == this.dispatchedAt &&
           other.createdAt == this.createdAt);
 }
 
@@ -8602,6 +8145,23 @@ class ProductBatches extends Table
     requiredDuringInsert: false,
     $customConstraints: 'NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
   );
+  late final GeneratedColumn<int> originBatchId = GeneratedColumn<int>(
+    'origin_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> transferAllocationId =
+      GeneratedColumn<String>(
+        'transfer_allocation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
   late final GeneratedColumn<String> source = GeneratedColumn<String>(
     'source',
     aliasedName,
@@ -8689,6 +8249,8 @@ class ProductBatches extends Table
     manufacturerLotNumber,
     purchaseItemId,
     supplierId,
+    originBatchId,
+    transferAllocationId,
     source,
     receivedDate,
     expiryDate,
@@ -8741,6 +8303,14 @@ class ProductBatches extends Table
       supplierId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}supplier_id'],
+      ),
+      originBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}origin_batch_id'],
+      ),
+      transferAllocationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_allocation_id'],
       ),
       source: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -8800,6 +8370,8 @@ class ProductBatchesData extends DataClass
   final String? manufacturerLotNumber;
   final int? purchaseItemId;
   final int? supplierId;
+  final int? originBatchId;
+  final String? transferAllocationId;
   final String source;
   final String receivedDate;
   final String? expiryDate;
@@ -8818,6 +8390,8 @@ class ProductBatchesData extends DataClass
     this.manufacturerLotNumber,
     this.purchaseItemId,
     this.supplierId,
+    this.originBatchId,
+    this.transferAllocationId,
     required this.source,
     required this.receivedDate,
     this.expiryDate,
@@ -8849,6 +8423,12 @@ class ProductBatchesData extends DataClass
     if (!nullToAbsent || supplierId != null) {
       map['supplier_id'] = Variable<int>(supplierId);
     }
+    if (!nullToAbsent || originBatchId != null) {
+      map['origin_batch_id'] = Variable<int>(originBatchId);
+    }
+    if (!nullToAbsent || transferAllocationId != null) {
+      map['transfer_allocation_id'] = Variable<String>(transferAllocationId);
+    }
     map['source'] = Variable<String>(source);
     map['received_date'] = Variable<String>(receivedDate);
     if (!nullToAbsent || expiryDate != null) {
@@ -8879,6 +8459,10 @@ class ProductBatchesData extends DataClass
       ),
       purchaseItemId: serializer.fromJson<int?>(json['purchaseItemId']),
       supplierId: serializer.fromJson<int?>(json['supplierId']),
+      originBatchId: serializer.fromJson<int?>(json['originBatchId']),
+      transferAllocationId: serializer.fromJson<String?>(
+        json['transferAllocationId'],
+      ),
       source: serializer.fromJson<String>(json['source']),
       receivedDate: serializer.fromJson<String>(json['receivedDate']),
       expiryDate: serializer.fromJson<String?>(json['expiryDate']),
@@ -8904,6 +8488,8 @@ class ProductBatchesData extends DataClass
       ),
       'purchaseItemId': serializer.toJson<int?>(purchaseItemId),
       'supplierId': serializer.toJson<int?>(supplierId),
+      'originBatchId': serializer.toJson<int?>(originBatchId),
+      'transferAllocationId': serializer.toJson<String?>(transferAllocationId),
       'source': serializer.toJson<String>(source),
       'receivedDate': serializer.toJson<String>(receivedDate),
       'expiryDate': serializer.toJson<String?>(expiryDate),
@@ -8925,6 +8511,8 @@ class ProductBatchesData extends DataClass
     Value<String?> manufacturerLotNumber = const Value.absent(),
     Value<int?> purchaseItemId = const Value.absent(),
     Value<int?> supplierId = const Value.absent(),
+    Value<int?> originBatchId = const Value.absent(),
+    Value<String?> transferAllocationId = const Value.absent(),
     String? source,
     String? receivedDate,
     Value<String?> expiryDate = const Value.absent(),
@@ -8947,6 +8535,12 @@ class ProductBatchesData extends DataClass
         ? purchaseItemId.value
         : this.purchaseItemId,
     supplierId: supplierId.present ? supplierId.value : this.supplierId,
+    originBatchId: originBatchId.present
+        ? originBatchId.value
+        : this.originBatchId,
+    transferAllocationId: transferAllocationId.present
+        ? transferAllocationId.value
+        : this.transferAllocationId,
     source: source ?? this.source,
     receivedDate: receivedDate ?? this.receivedDate,
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
@@ -8968,6 +8562,8 @@ class ProductBatchesData extends DataClass
           ..write('manufacturerLotNumber: $manufacturerLotNumber, ')
           ..write('purchaseItemId: $purchaseItemId, ')
           ..write('supplierId: $supplierId, ')
+          ..write('originBatchId: $originBatchId, ')
+          ..write('transferAllocationId: $transferAllocationId, ')
           ..write('source: $source, ')
           ..write('receivedDate: $receivedDate, ')
           ..write('expiryDate: $expiryDate, ')
@@ -8991,6 +8587,8 @@ class ProductBatchesData extends DataClass
     manufacturerLotNumber,
     purchaseItemId,
     supplierId,
+    originBatchId,
+    transferAllocationId,
     source,
     receivedDate,
     expiryDate,
@@ -9013,6 +8611,8 @@ class ProductBatchesData extends DataClass
           other.manufacturerLotNumber == this.manufacturerLotNumber &&
           other.purchaseItemId == this.purchaseItemId &&
           other.supplierId == this.supplierId &&
+          other.originBatchId == this.originBatchId &&
+          other.transferAllocationId == this.transferAllocationId &&
           other.source == this.source &&
           other.receivedDate == this.receivedDate &&
           other.expiryDate == this.expiryDate &&
@@ -9022,6 +8622,6521 @@ class ProductBatchesData extends DataClass
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
+}
+
+class ConsignmentAgreements extends Table
+    with TableInfo<ConsignmentAgreements, ConsignmentAgreementsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentAgreements(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> agreementKey = GeneratedColumn<String>(
+    'agreement_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 1',
+    defaultValue: const CustomExpression('1'),
+  );
+  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
+    'organization_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
+  );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
+    'database_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementNumber = GeneratedColumn<String>(
+    'agreement_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
+    defaultValue: const CustomExpression('\'draft\''),
+  );
+  late final GeneratedColumn<String> effectiveFrom = GeneratedColumn<String>(
+    'effective_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> effectiveTo = GeneratedColumn<String>(
+    'effective_to',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> settlementFrequency =
+      GeneratedColumn<String>(
+        'settlement_frequency',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NOT NULL DEFAULT \'monthly\'',
+        defaultValue: const CustomExpression('\'monthly\''),
+      );
+  late final GeneratedColumn<int> paymentTermsDays = GeneratedColumn<int>(
+    'payment_terms_days',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> settlementTaxRateBps = GeneratedColumn<int>(
+    'settlement_tax_rate_bps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 0 CHECK (settlement_tax_rate_bps BETWEEN 0 AND 10000)',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> settlementTaxInclusive = GeneratedColumn<int>(
+    'settlement_tax_inclusive',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 0 CHECK (settlement_tax_inclusive IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> activatedBy = GeneratedColumn<int>(
+    'activated_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> activatedAt = GeneratedColumn<String>(
+    'activated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> endedBy = GeneratedColumn<int>(
+    'ended_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> endedAt = GeneratedColumn<String>(
+    'ended_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    agreementKey,
+    revision,
+    organizationId,
+    branchId,
+    databaseId,
+    supplierId,
+    currencyId,
+    agreementNumber,
+    status,
+    effectiveFrom,
+    effectiveTo,
+    settlementFrequency,
+    paymentTermsDays,
+    settlementTaxRateBps,
+    settlementTaxInclusive,
+    notes,
+    createdBy,
+    activatedBy,
+    activatedAt,
+    endedBy,
+    endedAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_agreements';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {agreementKey, revision},
+    {branchId, agreementNumber, revision},
+  ];
+  @override
+  ConsignmentAgreementsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentAgreementsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      agreementKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_key'],
+      )!,
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      )!,
+      organizationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_id'],
+      )!,
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      databaseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}database_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      agreementNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_number'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      effectiveFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}effective_from'],
+      )!,
+      effectiveTo: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}effective_to'],
+      ),
+      settlementFrequency: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_frequency'],
+      )!,
+      paymentTermsDays: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}payment_terms_days'],
+      )!,
+      settlementTaxRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}settlement_tax_rate_bps'],
+      )!,
+      settlementTaxInclusive: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}settlement_tax_inclusive'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      activatedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}activated_by'],
+      ),
+      activatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}activated_at'],
+      ),
+      endedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ended_by'],
+      ),
+      endedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ended_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentAgreements createAlias(String alias) {
+    return ConsignmentAgreements(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'UNIQUE(agreement_key, revision)',
+    'UNIQUE(branch_id, agreement_number, revision)',
+    'FOREIGN KEY(branch_id, organization_id)REFERENCES business_branches(id, organization_id)ON DELETE RESTRICT',
+    'CHECK(status IN (\'draft\', \'active\', \'superseded\', \'closed\'))',
+    'CHECK(settlement_frequency IN (\'immediate\', \'daily\', \'weekly\', \'monthly\', \'manual\'))',
+    'CHECK(revision >= 1 AND revision <= 9007199254740991)',
+    'CHECK(payment_terms_days BETWEEN 0 AND 3650)',
+    'CHECK(length(notes) <= 2000)',
+    'CHECK(effective_to IS NULL OR effective_to >= effective_from)',
+    'CHECK((status = \'draft\' AND activated_by IS NULL AND activated_at IS NULL)OR(status != \'draft\' AND activated_by IS NOT NULL AND activated_at IS NOT NULL))',
+    'CHECK((status IN (\'draft\', \'active\') AND ended_by IS NULL AND ended_at IS NULL)OR(status IN (\'superseded\', \'closed\') AND ended_by IS NOT NULL AND ended_at IS NOT NULL))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentAgreementsData extends DataClass
+    implements Insertable<ConsignmentAgreementsData> {
+  final String id;
+  final String agreementKey;
+  final int revision;
+  final String organizationId;
+  final String branchId;
+  final String databaseId;
+  final int supplierId;
+  final int currencyId;
+  final String agreementNumber;
+  final String status;
+  final String effectiveFrom;
+  final String? effectiveTo;
+  final String settlementFrequency;
+  final int paymentTermsDays;
+  final int settlementTaxRateBps;
+  final int settlementTaxInclusive;
+  final String notes;
+  final int createdBy;
+  final int? activatedBy;
+  final String? activatedAt;
+  final int? endedBy;
+  final String? endedAt;
+  final String createdAt;
+  final String updatedAt;
+  const ConsignmentAgreementsData({
+    required this.id,
+    required this.agreementKey,
+    required this.revision,
+    required this.organizationId,
+    required this.branchId,
+    required this.databaseId,
+    required this.supplierId,
+    required this.currencyId,
+    required this.agreementNumber,
+    required this.status,
+    required this.effectiveFrom,
+    this.effectiveTo,
+    required this.settlementFrequency,
+    required this.paymentTermsDays,
+    required this.settlementTaxRateBps,
+    required this.settlementTaxInclusive,
+    required this.notes,
+    required this.createdBy,
+    this.activatedBy,
+    this.activatedAt,
+    this.endedBy,
+    this.endedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['agreement_key'] = Variable<String>(agreementKey);
+    map['revision'] = Variable<int>(revision);
+    map['organization_id'] = Variable<String>(organizationId);
+    map['branch_id'] = Variable<String>(branchId);
+    map['database_id'] = Variable<String>(databaseId);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['agreement_number'] = Variable<String>(agreementNumber);
+    map['status'] = Variable<String>(status);
+    map['effective_from'] = Variable<String>(effectiveFrom);
+    if (!nullToAbsent || effectiveTo != null) {
+      map['effective_to'] = Variable<String>(effectiveTo);
+    }
+    map['settlement_frequency'] = Variable<String>(settlementFrequency);
+    map['payment_terms_days'] = Variable<int>(paymentTermsDays);
+    map['settlement_tax_rate_bps'] = Variable<int>(settlementTaxRateBps);
+    map['settlement_tax_inclusive'] = Variable<int>(settlementTaxInclusive);
+    map['notes'] = Variable<String>(notes);
+    map['created_by'] = Variable<int>(createdBy);
+    if (!nullToAbsent || activatedBy != null) {
+      map['activated_by'] = Variable<int>(activatedBy);
+    }
+    if (!nullToAbsent || activatedAt != null) {
+      map['activated_at'] = Variable<String>(activatedAt);
+    }
+    if (!nullToAbsent || endedBy != null) {
+      map['ended_by'] = Variable<int>(endedBy);
+    }
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<String>(endedAt);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory ConsignmentAgreementsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentAgreementsData(
+      id: serializer.fromJson<String>(json['id']),
+      agreementKey: serializer.fromJson<String>(json['agreementKey']),
+      revision: serializer.fromJson<int>(json['revision']),
+      organizationId: serializer.fromJson<String>(json['organizationId']),
+      branchId: serializer.fromJson<String>(json['branchId']),
+      databaseId: serializer.fromJson<String>(json['databaseId']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      agreementNumber: serializer.fromJson<String>(json['agreementNumber']),
+      status: serializer.fromJson<String>(json['status']),
+      effectiveFrom: serializer.fromJson<String>(json['effectiveFrom']),
+      effectiveTo: serializer.fromJson<String?>(json['effectiveTo']),
+      settlementFrequency: serializer.fromJson<String>(
+        json['settlementFrequency'],
+      ),
+      paymentTermsDays: serializer.fromJson<int>(json['paymentTermsDays']),
+      settlementTaxRateBps: serializer.fromJson<int>(
+        json['settlementTaxRateBps'],
+      ),
+      settlementTaxInclusive: serializer.fromJson<int>(
+        json['settlementTaxInclusive'],
+      ),
+      notes: serializer.fromJson<String>(json['notes']),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      activatedBy: serializer.fromJson<int?>(json['activatedBy']),
+      activatedAt: serializer.fromJson<String?>(json['activatedAt']),
+      endedBy: serializer.fromJson<int?>(json['endedBy']),
+      endedAt: serializer.fromJson<String?>(json['endedAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'agreementKey': serializer.toJson<String>(agreementKey),
+      'revision': serializer.toJson<int>(revision),
+      'organizationId': serializer.toJson<String>(organizationId),
+      'branchId': serializer.toJson<String>(branchId),
+      'databaseId': serializer.toJson<String>(databaseId),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'agreementNumber': serializer.toJson<String>(agreementNumber),
+      'status': serializer.toJson<String>(status),
+      'effectiveFrom': serializer.toJson<String>(effectiveFrom),
+      'effectiveTo': serializer.toJson<String?>(effectiveTo),
+      'settlementFrequency': serializer.toJson<String>(settlementFrequency),
+      'paymentTermsDays': serializer.toJson<int>(paymentTermsDays),
+      'settlementTaxRateBps': serializer.toJson<int>(settlementTaxRateBps),
+      'settlementTaxInclusive': serializer.toJson<int>(settlementTaxInclusive),
+      'notes': serializer.toJson<String>(notes),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'activatedBy': serializer.toJson<int?>(activatedBy),
+      'activatedAt': serializer.toJson<String?>(activatedAt),
+      'endedBy': serializer.toJson<int?>(endedBy),
+      'endedAt': serializer.toJson<String?>(endedAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  ConsignmentAgreementsData copyWith({
+    String? id,
+    String? agreementKey,
+    int? revision,
+    String? organizationId,
+    String? branchId,
+    String? databaseId,
+    int? supplierId,
+    int? currencyId,
+    String? agreementNumber,
+    String? status,
+    String? effectiveFrom,
+    Value<String?> effectiveTo = const Value.absent(),
+    String? settlementFrequency,
+    int? paymentTermsDays,
+    int? settlementTaxRateBps,
+    int? settlementTaxInclusive,
+    String? notes,
+    int? createdBy,
+    Value<int?> activatedBy = const Value.absent(),
+    Value<String?> activatedAt = const Value.absent(),
+    Value<int?> endedBy = const Value.absent(),
+    Value<String?> endedAt = const Value.absent(),
+    String? createdAt,
+    String? updatedAt,
+  }) => ConsignmentAgreementsData(
+    id: id ?? this.id,
+    agreementKey: agreementKey ?? this.agreementKey,
+    revision: revision ?? this.revision,
+    organizationId: organizationId ?? this.organizationId,
+    branchId: branchId ?? this.branchId,
+    databaseId: databaseId ?? this.databaseId,
+    supplierId: supplierId ?? this.supplierId,
+    currencyId: currencyId ?? this.currencyId,
+    agreementNumber: agreementNumber ?? this.agreementNumber,
+    status: status ?? this.status,
+    effectiveFrom: effectiveFrom ?? this.effectiveFrom,
+    effectiveTo: effectiveTo.present ? effectiveTo.value : this.effectiveTo,
+    settlementFrequency: settlementFrequency ?? this.settlementFrequency,
+    paymentTermsDays: paymentTermsDays ?? this.paymentTermsDays,
+    settlementTaxRateBps: settlementTaxRateBps ?? this.settlementTaxRateBps,
+    settlementTaxInclusive:
+        settlementTaxInclusive ?? this.settlementTaxInclusive,
+    notes: notes ?? this.notes,
+    createdBy: createdBy ?? this.createdBy,
+    activatedBy: activatedBy.present ? activatedBy.value : this.activatedBy,
+    activatedAt: activatedAt.present ? activatedAt.value : this.activatedAt,
+    endedBy: endedBy.present ? endedBy.value : this.endedBy,
+    endedAt: endedAt.present ? endedAt.value : this.endedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentAgreementsData(')
+          ..write('id: $id, ')
+          ..write('agreementKey: $agreementKey, ')
+          ..write('revision: $revision, ')
+          ..write('organizationId: $organizationId, ')
+          ..write('branchId: $branchId, ')
+          ..write('databaseId: $databaseId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('agreementNumber: $agreementNumber, ')
+          ..write('status: $status, ')
+          ..write('effectiveFrom: $effectiveFrom, ')
+          ..write('effectiveTo: $effectiveTo, ')
+          ..write('settlementFrequency: $settlementFrequency, ')
+          ..write('paymentTermsDays: $paymentTermsDays, ')
+          ..write('settlementTaxRateBps: $settlementTaxRateBps, ')
+          ..write('settlementTaxInclusive: $settlementTaxInclusive, ')
+          ..write('notes: $notes, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('activatedBy: $activatedBy, ')
+          ..write('activatedAt: $activatedAt, ')
+          ..write('endedBy: $endedBy, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    agreementKey,
+    revision,
+    organizationId,
+    branchId,
+    databaseId,
+    supplierId,
+    currencyId,
+    agreementNumber,
+    status,
+    effectiveFrom,
+    effectiveTo,
+    settlementFrequency,
+    paymentTermsDays,
+    settlementTaxRateBps,
+    settlementTaxInclusive,
+    notes,
+    createdBy,
+    activatedBy,
+    activatedAt,
+    endedBy,
+    endedAt,
+    createdAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentAgreementsData &&
+          other.id == this.id &&
+          other.agreementKey == this.agreementKey &&
+          other.revision == this.revision &&
+          other.organizationId == this.organizationId &&
+          other.branchId == this.branchId &&
+          other.databaseId == this.databaseId &&
+          other.supplierId == this.supplierId &&
+          other.currencyId == this.currencyId &&
+          other.agreementNumber == this.agreementNumber &&
+          other.status == this.status &&
+          other.effectiveFrom == this.effectiveFrom &&
+          other.effectiveTo == this.effectiveTo &&
+          other.settlementFrequency == this.settlementFrequency &&
+          other.paymentTermsDays == this.paymentTermsDays &&
+          other.settlementTaxRateBps == this.settlementTaxRateBps &&
+          other.settlementTaxInclusive == this.settlementTaxInclusive &&
+          other.notes == this.notes &&
+          other.createdBy == this.createdBy &&
+          other.activatedBy == this.activatedBy &&
+          other.activatedAt == this.activatedAt &&
+          other.endedBy == this.endedBy &&
+          other.endedAt == this.endedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ConsignmentReceipts extends Table
+    with TableInfo<ConsignmentReceipts, ConsignmentReceiptsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentReceipts(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
+    'organization_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
+  );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
+    'database_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
+  );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> receiptNumber = GeneratedColumn<String>(
+    'receipt_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
+    defaultValue: const CustomExpression('\'draft\''),
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> receivedAt = GeneratedColumn<String>(
+    'received_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> lineCount = GeneratedColumn<int>(
+    'line_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
+    'posted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> voidedBy = GeneratedColumn<int>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> voidedAt = GeneratedColumn<String>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    receiptNumber,
+    status,
+    requestKey,
+    requestHash,
+    receivedAt,
+    notes,
+    lineCount,
+    createdBy,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_receipts';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {branchId, receiptNumber},
+  ];
+  @override
+  ConsignmentReceiptsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentReceiptsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      organizationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_id'],
+      )!,
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      databaseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}database_id'],
+      )!,
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      receiptNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_number'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      receivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}received_at'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      lineCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}line_count'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      postedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}posted_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentReceipts createAlias(String alias) {
+    return ConsignmentReceipts(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'UNIQUE(branch_id, receipt_number)',
+    'FOREIGN KEY(warehouse_id, branch_id, organization_id)REFERENCES business_warehouses(id, branch_id, organization_id)ON DELETE RESTRICT',
+    'CHECK(status IN (\'draft\', \'posted\', \'voided\'))',
+    'CHECK(line_count BETWEEN 1 AND 500)',
+    'CHECK(length(notes) <= 2000)',
+    'CHECK(length(void_reason) <= 500)',
+    'CHECK((status = \'draft\' AND posted_by IS NULL AND posted_at IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0)OR(status = \'posted\' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0)OR(status = \'voided\' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NOT NULL AND voided_at IS NOT NULL AND length(trim(void_reason)) > 0))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentReceiptsData extends DataClass
+    implements Insertable<ConsignmentReceiptsData> {
+  final String id;
+  final String organizationId;
+  final String branchId;
+  final String databaseId;
+  final String warehouseId;
+  final int supplierId;
+  final String agreementId;
+  final int currencyId;
+  final String receiptNumber;
+  final String status;
+  final String requestKey;
+  final String requestHash;
+  final String receivedAt;
+  final String notes;
+  final int lineCount;
+  final int createdBy;
+  final int? postedBy;
+  final String? postedAt;
+  final int? voidedBy;
+  final String? voidedAt;
+  final String voidReason;
+  final String createdAt;
+  const ConsignmentReceiptsData({
+    required this.id,
+    required this.organizationId,
+    required this.branchId,
+    required this.databaseId,
+    required this.warehouseId,
+    required this.supplierId,
+    required this.agreementId,
+    required this.currencyId,
+    required this.receiptNumber,
+    required this.status,
+    required this.requestKey,
+    required this.requestHash,
+    required this.receivedAt,
+    required this.notes,
+    required this.lineCount,
+    required this.createdBy,
+    this.postedBy,
+    this.postedAt,
+    this.voidedBy,
+    this.voidedAt,
+    required this.voidReason,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['organization_id'] = Variable<String>(organizationId);
+    map['branch_id'] = Variable<String>(branchId);
+    map['database_id'] = Variable<String>(databaseId);
+    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['receipt_number'] = Variable<String>(receiptNumber);
+    map['status'] = Variable<String>(status);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['received_at'] = Variable<String>(receivedAt);
+    map['notes'] = Variable<String>(notes);
+    map['line_count'] = Variable<int>(lineCount);
+    map['created_by'] = Variable<int>(createdBy);
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    if (!nullToAbsent || postedAt != null) {
+      map['posted_at'] = Variable<String>(postedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<int>(voidedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<String>(voidedAt);
+    }
+    map['void_reason'] = Variable<String>(voidReason);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ConsignmentReceiptsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentReceiptsData(
+      id: serializer.fromJson<String>(json['id']),
+      organizationId: serializer.fromJson<String>(json['organizationId']),
+      branchId: serializer.fromJson<String>(json['branchId']),
+      databaseId: serializer.fromJson<String>(json['databaseId']),
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      receiptNumber: serializer.fromJson<String>(json['receiptNumber']),
+      status: serializer.fromJson<String>(json['status']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      receivedAt: serializer.fromJson<String>(json['receivedAt']),
+      notes: serializer.fromJson<String>(json['notes']),
+      lineCount: serializer.fromJson<int>(json['lineCount']),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      postedAt: serializer.fromJson<String?>(json['postedAt']),
+      voidedBy: serializer.fromJson<int?>(json['voidedBy']),
+      voidedAt: serializer.fromJson<String?>(json['voidedAt']),
+      voidReason: serializer.fromJson<String>(json['voidReason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'organizationId': serializer.toJson<String>(organizationId),
+      'branchId': serializer.toJson<String>(branchId),
+      'databaseId': serializer.toJson<String>(databaseId),
+      'warehouseId': serializer.toJson<String>(warehouseId),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'receiptNumber': serializer.toJson<String>(receiptNumber),
+      'status': serializer.toJson<String>(status),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'receivedAt': serializer.toJson<String>(receivedAt),
+      'notes': serializer.toJson<String>(notes),
+      'lineCount': serializer.toJson<int>(lineCount),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'postedAt': serializer.toJson<String?>(postedAt),
+      'voidedBy': serializer.toJson<int?>(voidedBy),
+      'voidedAt': serializer.toJson<String?>(voidedAt),
+      'voidReason': serializer.toJson<String>(voidReason),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ConsignmentReceiptsData copyWith({
+    String? id,
+    String? organizationId,
+    String? branchId,
+    String? databaseId,
+    String? warehouseId,
+    int? supplierId,
+    String? agreementId,
+    int? currencyId,
+    String? receiptNumber,
+    String? status,
+    String? requestKey,
+    String? requestHash,
+    String? receivedAt,
+    String? notes,
+    int? lineCount,
+    int? createdBy,
+    Value<int?> postedBy = const Value.absent(),
+    Value<String?> postedAt = const Value.absent(),
+    Value<int?> voidedBy = const Value.absent(),
+    Value<String?> voidedAt = const Value.absent(),
+    String? voidReason,
+    String? createdAt,
+  }) => ConsignmentReceiptsData(
+    id: id ?? this.id,
+    organizationId: organizationId ?? this.organizationId,
+    branchId: branchId ?? this.branchId,
+    databaseId: databaseId ?? this.databaseId,
+    warehouseId: warehouseId ?? this.warehouseId,
+    supplierId: supplierId ?? this.supplierId,
+    agreementId: agreementId ?? this.agreementId,
+    currencyId: currencyId ?? this.currencyId,
+    receiptNumber: receiptNumber ?? this.receiptNumber,
+    status: status ?? this.status,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    receivedAt: receivedAt ?? this.receivedAt,
+    notes: notes ?? this.notes,
+    lineCount: lineCount ?? this.lineCount,
+    createdBy: createdBy ?? this.createdBy,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    postedAt: postedAt.present ? postedAt.value : this.postedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidReason: voidReason ?? this.voidReason,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentReceiptsData(')
+          ..write('id: $id, ')
+          ..write('organizationId: $organizationId, ')
+          ..write('branchId: $branchId, ')
+          ..write('databaseId: $databaseId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('receiptNumber: $receiptNumber, ')
+          ..write('status: $status, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('notes: $notes, ')
+          ..write('lineCount: $lineCount, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    receiptNumber,
+    status,
+    requestKey,
+    requestHash,
+    receivedAt,
+    notes,
+    lineCount,
+    createdBy,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentReceiptsData &&
+          other.id == this.id &&
+          other.organizationId == this.organizationId &&
+          other.branchId == this.branchId &&
+          other.databaseId == this.databaseId &&
+          other.warehouseId == this.warehouseId &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.currencyId == this.currencyId &&
+          other.receiptNumber == this.receiptNumber &&
+          other.status == this.status &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.receivedAt == this.receivedAt &&
+          other.notes == this.notes &&
+          other.lineCount == this.lineCount &&
+          other.createdBy == this.createdBy &&
+          other.postedBy == this.postedBy &&
+          other.postedAt == this.postedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidReason == this.voidReason &&
+          other.createdAt == this.createdAt);
+}
+
+class ConsignmentAgreementItems extends Table
+    with TableInfo<ConsignmentAgreementItems, ConsignmentAgreementItemsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentAgreementItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
+    'settlement_basis',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
+    'unit_cost_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
+    'supplier_share_bps',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
+    'include_line_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 1 CHECK (include_line_discount IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
+  );
+  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
+    'include_invoice_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 1 CHECK (include_invoice_discount IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
+  );
+  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
+    'include_sales_tax',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT 0 CHECK (include_sales_tax IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    agreementId,
+    productId,
+    variantId,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_agreement_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentAgreementItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentAgreementItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      ),
+      settlementBasis: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_basis'],
+      )!,
+      unitCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_cents'],
+      ),
+      supplierShareBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_share_bps'],
+      ),
+      includeLineDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_line_discount'],
+      )!,
+      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_invoice_discount'],
+      )!,
+      includeSalesTax: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_sales_tax'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentAgreementItems createAlias(String alias) {
+    return ConsignmentAgreementItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'CHECK(settlement_basis IN (\'fixed_unit_cost\', \'net_sales_percentage\'))',
+    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentAgreementItemsData extends DataClass
+    implements Insertable<ConsignmentAgreementItemsData> {
+  final String id;
+  final String agreementId;
+  final int productId;
+  final int? variantId;
+  final String settlementBasis;
+  final int? unitCostCents;
+  final int? supplierShareBps;
+  final int includeLineDiscount;
+  final int includeInvoiceDiscount;
+  final int includeSalesTax;
+  final String createdAt;
+  const ConsignmentAgreementItemsData({
+    required this.id,
+    required this.agreementId,
+    required this.productId,
+    this.variantId,
+    required this.settlementBasis,
+    this.unitCostCents,
+    this.supplierShareBps,
+    required this.includeLineDiscount,
+    required this.includeInvoiceDiscount,
+    required this.includeSalesTax,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['product_id'] = Variable<int>(productId);
+    if (!nullToAbsent || variantId != null) {
+      map['variant_id'] = Variable<int>(variantId);
+    }
+    map['settlement_basis'] = Variable<String>(settlementBasis);
+    if (!nullToAbsent || unitCostCents != null) {
+      map['unit_cost_cents'] = Variable<int>(unitCostCents);
+    }
+    if (!nullToAbsent || supplierShareBps != null) {
+      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
+    }
+    map['include_line_discount'] = Variable<int>(includeLineDiscount);
+    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
+    map['include_sales_tax'] = Variable<int>(includeSalesTax);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ConsignmentAgreementItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentAgreementItemsData(
+      id: serializer.fromJson<String>(json['id']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int?>(json['variantId']),
+      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
+      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
+      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
+      includeLineDiscount: serializer.fromJson<int>(
+        json['includeLineDiscount'],
+      ),
+      includeInvoiceDiscount: serializer.fromJson<int>(
+        json['includeInvoiceDiscount'],
+      ),
+      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int?>(variantId),
+      'settlementBasis': serializer.toJson<String>(settlementBasis),
+      'unitCostCents': serializer.toJson<int?>(unitCostCents),
+      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
+      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
+      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
+      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ConsignmentAgreementItemsData copyWith({
+    String? id,
+    String? agreementId,
+    int? productId,
+    Value<int?> variantId = const Value.absent(),
+    String? settlementBasis,
+    Value<int?> unitCostCents = const Value.absent(),
+    Value<int?> supplierShareBps = const Value.absent(),
+    int? includeLineDiscount,
+    int? includeInvoiceDiscount,
+    int? includeSalesTax,
+    String? createdAt,
+  }) => ConsignmentAgreementItemsData(
+    id: id ?? this.id,
+    agreementId: agreementId ?? this.agreementId,
+    productId: productId ?? this.productId,
+    variantId: variantId.present ? variantId.value : this.variantId,
+    settlementBasis: settlementBasis ?? this.settlementBasis,
+    unitCostCents: unitCostCents.present
+        ? unitCostCents.value
+        : this.unitCostCents,
+    supplierShareBps: supplierShareBps.present
+        ? supplierShareBps.value
+        : this.supplierShareBps,
+    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
+    includeInvoiceDiscount:
+        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
+    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentAgreementItemsData(')
+          ..write('id: $id, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('settlementBasis: $settlementBasis, ')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('supplierShareBps: $supplierShareBps, ')
+          ..write('includeLineDiscount: $includeLineDiscount, ')
+          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
+          ..write('includeSalesTax: $includeSalesTax, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    agreementId,
+    productId,
+    variantId,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentAgreementItemsData &&
+          other.id == this.id &&
+          other.agreementId == this.agreementId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.settlementBasis == this.settlementBasis &&
+          other.unitCostCents == this.unitCostCents &&
+          other.supplierShareBps == this.supplierShareBps &&
+          other.includeLineDiscount == this.includeLineDiscount &&
+          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
+          other.includeSalesTax == this.includeSalesTax &&
+          other.createdAt == this.createdAt);
+}
+
+class ConsignmentReceiptItems extends Table
+    with TableInfo<ConsignmentReceiptItems, ConsignmentReceiptItemsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentReceiptItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> receiptId = GeneratedColumn<String>(
+    'receipt_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_receipts(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementItemId = GeneratedColumn<String>(
+    'agreement_item_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreement_items(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
+    'settlement_basis',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
+    'unit_cost_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
+    'supplier_share_bps',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
+    'include_line_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_line_discount IN (0, 1))',
+  );
+  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
+    'include_invoice_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_invoice_discount IN (0, 1))',
+  );
+  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
+    'include_sales_tax',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_sales_tax IN (0, 1))',
+  );
+  late final GeneratedColumn<String> manufacturerLotNumber =
+      GeneratedColumn<String>(
+        'manufacturer_lot_number',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
+  late final GeneratedColumn<String> expiryDate = GeneratedColumn<String>(
+    'expiry_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    receiptId,
+    agreementItemId,
+    productId,
+    variantId,
+    quantity,
+    quantityScale,
+    measurementType,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    manufacturerLotNumber,
+    expiryDate,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_receipt_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentReceiptItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentReceiptItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      receiptId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_id'],
+      )!,
+      agreementItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_item_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      settlementBasis: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_basis'],
+      )!,
+      unitCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_cents'],
+      ),
+      supplierShareBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_share_bps'],
+      ),
+      includeLineDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_line_discount'],
+      )!,
+      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_invoice_discount'],
+      )!,
+      includeSalesTax: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_sales_tax'],
+      )!,
+      manufacturerLotNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_lot_number'],
+      ),
+      expiryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}expiry_date'],
+      ),
+    );
+  }
+
+  @override
+  ConsignmentReceiptItems createAlias(String alias) {
+    return ConsignmentReceiptItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
+    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
+    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
+    'CHECK(manufacturer_lot_number IS NULL OR length(trim(manufacturer_lot_number)) BETWEEN 1 AND 100)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentReceiptItemsData extends DataClass
+    implements Insertable<ConsignmentReceiptItemsData> {
+  final String id;
+  final String receiptId;
+  final String agreementItemId;
+  final int productId;
+  final int variantId;
+  final int quantity;
+  final int quantityScale;
+  final String measurementType;
+  final String settlementBasis;
+  final int? unitCostCents;
+  final int? supplierShareBps;
+  final int includeLineDiscount;
+  final int includeInvoiceDiscount;
+  final int includeSalesTax;
+  final String? manufacturerLotNumber;
+  final String? expiryDate;
+  const ConsignmentReceiptItemsData({
+    required this.id,
+    required this.receiptId,
+    required this.agreementItemId,
+    required this.productId,
+    required this.variantId,
+    required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.settlementBasis,
+    this.unitCostCents,
+    this.supplierShareBps,
+    required this.includeLineDiscount,
+    required this.includeInvoiceDiscount,
+    required this.includeSalesTax,
+    this.manufacturerLotNumber,
+    this.expiryDate,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['receipt_id'] = Variable<String>(receiptId);
+    map['agreement_item_id'] = Variable<String>(agreementItemId);
+    map['product_id'] = Variable<int>(productId);
+    map['variant_id'] = Variable<int>(variantId);
+    map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['settlement_basis'] = Variable<String>(settlementBasis);
+    if (!nullToAbsent || unitCostCents != null) {
+      map['unit_cost_cents'] = Variable<int>(unitCostCents);
+    }
+    if (!nullToAbsent || supplierShareBps != null) {
+      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
+    }
+    map['include_line_discount'] = Variable<int>(includeLineDiscount);
+    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
+    map['include_sales_tax'] = Variable<int>(includeSalesTax);
+    if (!nullToAbsent || manufacturerLotNumber != null) {
+      map['manufacturer_lot_number'] = Variable<String>(manufacturerLotNumber);
+    }
+    if (!nullToAbsent || expiryDate != null) {
+      map['expiry_date'] = Variable<String>(expiryDate);
+    }
+    return map;
+  }
+
+  factory ConsignmentReceiptItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentReceiptItemsData(
+      id: serializer.fromJson<String>(json['id']),
+      receiptId: serializer.fromJson<String>(json['receiptId']),
+      agreementItemId: serializer.fromJson<String>(json['agreementItemId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
+      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
+      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
+      includeLineDiscount: serializer.fromJson<int>(
+        json['includeLineDiscount'],
+      ),
+      includeInvoiceDiscount: serializer.fromJson<int>(
+        json['includeInvoiceDiscount'],
+      ),
+      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
+      manufacturerLotNumber: serializer.fromJson<String?>(
+        json['manufacturerLotNumber'],
+      ),
+      expiryDate: serializer.fromJson<String?>(json['expiryDate']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'receiptId': serializer.toJson<String>(receiptId),
+      'agreementItemId': serializer.toJson<String>(agreementItemId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int>(variantId),
+      'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'settlementBasis': serializer.toJson<String>(settlementBasis),
+      'unitCostCents': serializer.toJson<int?>(unitCostCents),
+      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
+      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
+      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
+      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
+      'manufacturerLotNumber': serializer.toJson<String?>(
+        manufacturerLotNumber,
+      ),
+      'expiryDate': serializer.toJson<String?>(expiryDate),
+    };
+  }
+
+  ConsignmentReceiptItemsData copyWith({
+    String? id,
+    String? receiptId,
+    String? agreementItemId,
+    int? productId,
+    int? variantId,
+    int? quantity,
+    int? quantityScale,
+    String? measurementType,
+    String? settlementBasis,
+    Value<int?> unitCostCents = const Value.absent(),
+    Value<int?> supplierShareBps = const Value.absent(),
+    int? includeLineDiscount,
+    int? includeInvoiceDiscount,
+    int? includeSalesTax,
+    Value<String?> manufacturerLotNumber = const Value.absent(),
+    Value<String?> expiryDate = const Value.absent(),
+  }) => ConsignmentReceiptItemsData(
+    id: id ?? this.id,
+    receiptId: receiptId ?? this.receiptId,
+    agreementItemId: agreementItemId ?? this.agreementItemId,
+    productId: productId ?? this.productId,
+    variantId: variantId ?? this.variantId,
+    quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
+    settlementBasis: settlementBasis ?? this.settlementBasis,
+    unitCostCents: unitCostCents.present
+        ? unitCostCents.value
+        : this.unitCostCents,
+    supplierShareBps: supplierShareBps.present
+        ? supplierShareBps.value
+        : this.supplierShareBps,
+    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
+    includeInvoiceDiscount:
+        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
+    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
+    manufacturerLotNumber: manufacturerLotNumber.present
+        ? manufacturerLotNumber.value
+        : this.manufacturerLotNumber,
+    expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentReceiptItemsData(')
+          ..write('id: $id, ')
+          ..write('receiptId: $receiptId, ')
+          ..write('agreementItemId: $agreementItemId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('settlementBasis: $settlementBasis, ')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('supplierShareBps: $supplierShareBps, ')
+          ..write('includeLineDiscount: $includeLineDiscount, ')
+          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
+          ..write('includeSalesTax: $includeSalesTax, ')
+          ..write('manufacturerLotNumber: $manufacturerLotNumber, ')
+          ..write('expiryDate: $expiryDate')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    receiptId,
+    agreementItemId,
+    productId,
+    variantId,
+    quantity,
+    quantityScale,
+    measurementType,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    manufacturerLotNumber,
+    expiryDate,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentReceiptItemsData &&
+          other.id == this.id &&
+          other.receiptId == this.receiptId &&
+          other.agreementItemId == this.agreementItemId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
+          other.settlementBasis == this.settlementBasis &&
+          other.unitCostCents == this.unitCostCents &&
+          other.supplierShareBps == this.supplierShareBps &&
+          other.includeLineDiscount == this.includeLineDiscount &&
+          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
+          other.includeSalesTax == this.includeSalesTax &&
+          other.manufacturerLotNumber == this.manufacturerLotNumber &&
+          other.expiryDate == this.expiryDate);
+}
+
+class ConsignmentInventoryLayers extends Table
+    with TableInfo<ConsignmentInventoryLayers, ConsignmentInventoryLayersData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentInventoryLayers(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> receiptItemId = GeneratedColumn<String>(
+    'receipt_item_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_receipt_items(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> originLayerId = GeneratedColumn<String>(
+    'origin_layer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES consignment_inventory_layers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> transferAllocationId =
+      GeneratedColumn<String>(
+        'transfer_allocation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES business_warehouses(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> batchId = GeneratedColumn<int>(
+    'batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> receivedQuantity = GeneratedColumn<int>(
+    'received_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> remainingQuantity = GeneratedColumn<int>(
+    'remaining_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
+    'settlement_basis',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
+    'unit_cost_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
+    'supplier_share_bps',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
+    'include_line_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_line_discount IN (0, 1))',
+  );
+  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
+    'include_invoice_discount',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_invoice_discount IN (0, 1))',
+  );
+  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
+    'include_sales_tax',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL CHECK (include_sales_tax IN (0, 1))',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'open\'',
+    defaultValue: const CustomExpression('\'open\''),
+  );
+  late final GeneratedColumn<String> receivedAt = GeneratedColumn<String>(
+    'received_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    receiptItemId,
+    originLayerId,
+    transferAllocationId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    productId,
+    variantId,
+    batchId,
+    receivedQuantity,
+    remainingQuantity,
+    quantityScale,
+    measurementType,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    status,
+    receivedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_inventory_layers';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentInventoryLayersData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentInventoryLayersData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      receiptItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_item_id'],
+      )!,
+      originLayerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin_layer_id'],
+      ),
+      transferAllocationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_allocation_id'],
+      ),
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      batchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_id'],
+      ),
+      receivedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}received_quantity'],
+      )!,
+      remainingQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remaining_quantity'],
+      )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      settlementBasis: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_basis'],
+      )!,
+      unitCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_cents'],
+      ),
+      supplierShareBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_share_bps'],
+      ),
+      includeLineDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_line_discount'],
+      )!,
+      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_invoice_discount'],
+      )!,
+      includeSalesTax: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}include_sales_tax'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      receivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}received_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentInventoryLayers createAlias(String alias) {
+    return ConsignmentInventoryLayers(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'CHECK(received_quantity > 0 AND received_quantity <= 9007199254740991)',
+    'CHECK(remaining_quantity >= 0 AND remaining_quantity <= received_quantity)',
+    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
+    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
+    'CHECK(status IN (\'open\', \'exhausted\', \'voided\'))',
+    'CHECK((remaining_quantity = 0 AND status IN (\'exhausted\', \'voided\'))OR(remaining_quantity > 0 AND status = \'open\'))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentInventoryLayersData extends DataClass
+    implements Insertable<ConsignmentInventoryLayersData> {
+  final String id;
+  final String receiptItemId;
+  final String? originLayerId;
+  final String? transferAllocationId;
+  final String warehouseId;
+  final int supplierId;
+  final String agreementId;
+  final int productId;
+  final int variantId;
+  final int? batchId;
+  final int receivedQuantity;
+  final int remainingQuantity;
+  final int quantityScale;
+  final String measurementType;
+  final String settlementBasis;
+  final int? unitCostCents;
+  final int? supplierShareBps;
+  final int includeLineDiscount;
+  final int includeInvoiceDiscount;
+  final int includeSalesTax;
+  final String status;
+  final String receivedAt;
+  final String updatedAt;
+  const ConsignmentInventoryLayersData({
+    required this.id,
+    required this.receiptItemId,
+    this.originLayerId,
+    this.transferAllocationId,
+    required this.warehouseId,
+    required this.supplierId,
+    required this.agreementId,
+    required this.productId,
+    required this.variantId,
+    this.batchId,
+    required this.receivedQuantity,
+    required this.remainingQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.settlementBasis,
+    this.unitCostCents,
+    this.supplierShareBps,
+    required this.includeLineDiscount,
+    required this.includeInvoiceDiscount,
+    required this.includeSalesTax,
+    required this.status,
+    required this.receivedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['receipt_item_id'] = Variable<String>(receiptItemId);
+    if (!nullToAbsent || originLayerId != null) {
+      map['origin_layer_id'] = Variable<String>(originLayerId);
+    }
+    if (!nullToAbsent || transferAllocationId != null) {
+      map['transfer_allocation_id'] = Variable<String>(transferAllocationId);
+    }
+    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['product_id'] = Variable<int>(productId);
+    map['variant_id'] = Variable<int>(variantId);
+    if (!nullToAbsent || batchId != null) {
+      map['batch_id'] = Variable<int>(batchId);
+    }
+    map['received_quantity'] = Variable<int>(receivedQuantity);
+    map['remaining_quantity'] = Variable<int>(remainingQuantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['settlement_basis'] = Variable<String>(settlementBasis);
+    if (!nullToAbsent || unitCostCents != null) {
+      map['unit_cost_cents'] = Variable<int>(unitCostCents);
+    }
+    if (!nullToAbsent || supplierShareBps != null) {
+      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
+    }
+    map['include_line_discount'] = Variable<int>(includeLineDiscount);
+    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
+    map['include_sales_tax'] = Variable<int>(includeSalesTax);
+    map['status'] = Variable<String>(status);
+    map['received_at'] = Variable<String>(receivedAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory ConsignmentInventoryLayersData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentInventoryLayersData(
+      id: serializer.fromJson<String>(json['id']),
+      receiptItemId: serializer.fromJson<String>(json['receiptItemId']),
+      originLayerId: serializer.fromJson<String?>(json['originLayerId']),
+      transferAllocationId: serializer.fromJson<String?>(
+        json['transferAllocationId'],
+      ),
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      batchId: serializer.fromJson<int?>(json['batchId']),
+      receivedQuantity: serializer.fromJson<int>(json['receivedQuantity']),
+      remainingQuantity: serializer.fromJson<int>(json['remainingQuantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
+      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
+      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
+      includeLineDiscount: serializer.fromJson<int>(
+        json['includeLineDiscount'],
+      ),
+      includeInvoiceDiscount: serializer.fromJson<int>(
+        json['includeInvoiceDiscount'],
+      ),
+      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
+      status: serializer.fromJson<String>(json['status']),
+      receivedAt: serializer.fromJson<String>(json['receivedAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'receiptItemId': serializer.toJson<String>(receiptItemId),
+      'originLayerId': serializer.toJson<String?>(originLayerId),
+      'transferAllocationId': serializer.toJson<String?>(transferAllocationId),
+      'warehouseId': serializer.toJson<String>(warehouseId),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int>(variantId),
+      'batchId': serializer.toJson<int?>(batchId),
+      'receivedQuantity': serializer.toJson<int>(receivedQuantity),
+      'remainingQuantity': serializer.toJson<int>(remainingQuantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'settlementBasis': serializer.toJson<String>(settlementBasis),
+      'unitCostCents': serializer.toJson<int?>(unitCostCents),
+      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
+      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
+      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
+      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
+      'status': serializer.toJson<String>(status),
+      'receivedAt': serializer.toJson<String>(receivedAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  ConsignmentInventoryLayersData copyWith({
+    String? id,
+    String? receiptItemId,
+    Value<String?> originLayerId = const Value.absent(),
+    Value<String?> transferAllocationId = const Value.absent(),
+    String? warehouseId,
+    int? supplierId,
+    String? agreementId,
+    int? productId,
+    int? variantId,
+    Value<int?> batchId = const Value.absent(),
+    int? receivedQuantity,
+    int? remainingQuantity,
+    int? quantityScale,
+    String? measurementType,
+    String? settlementBasis,
+    Value<int?> unitCostCents = const Value.absent(),
+    Value<int?> supplierShareBps = const Value.absent(),
+    int? includeLineDiscount,
+    int? includeInvoiceDiscount,
+    int? includeSalesTax,
+    String? status,
+    String? receivedAt,
+    String? updatedAt,
+  }) => ConsignmentInventoryLayersData(
+    id: id ?? this.id,
+    receiptItemId: receiptItemId ?? this.receiptItemId,
+    originLayerId: originLayerId.present
+        ? originLayerId.value
+        : this.originLayerId,
+    transferAllocationId: transferAllocationId.present
+        ? transferAllocationId.value
+        : this.transferAllocationId,
+    warehouseId: warehouseId ?? this.warehouseId,
+    supplierId: supplierId ?? this.supplierId,
+    agreementId: agreementId ?? this.agreementId,
+    productId: productId ?? this.productId,
+    variantId: variantId ?? this.variantId,
+    batchId: batchId.present ? batchId.value : this.batchId,
+    receivedQuantity: receivedQuantity ?? this.receivedQuantity,
+    remainingQuantity: remainingQuantity ?? this.remainingQuantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
+    settlementBasis: settlementBasis ?? this.settlementBasis,
+    unitCostCents: unitCostCents.present
+        ? unitCostCents.value
+        : this.unitCostCents,
+    supplierShareBps: supplierShareBps.present
+        ? supplierShareBps.value
+        : this.supplierShareBps,
+    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
+    includeInvoiceDiscount:
+        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
+    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
+    status: status ?? this.status,
+    receivedAt: receivedAt ?? this.receivedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentInventoryLayersData(')
+          ..write('id: $id, ')
+          ..write('receiptItemId: $receiptItemId, ')
+          ..write('originLayerId: $originLayerId, ')
+          ..write('transferAllocationId: $transferAllocationId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('batchId: $batchId, ')
+          ..write('receivedQuantity: $receivedQuantity, ')
+          ..write('remainingQuantity: $remainingQuantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('settlementBasis: $settlementBasis, ')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('supplierShareBps: $supplierShareBps, ')
+          ..write('includeLineDiscount: $includeLineDiscount, ')
+          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
+          ..write('includeSalesTax: $includeSalesTax, ')
+          ..write('status: $status, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    receiptItemId,
+    originLayerId,
+    transferAllocationId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    productId,
+    variantId,
+    batchId,
+    receivedQuantity,
+    remainingQuantity,
+    quantityScale,
+    measurementType,
+    settlementBasis,
+    unitCostCents,
+    supplierShareBps,
+    includeLineDiscount,
+    includeInvoiceDiscount,
+    includeSalesTax,
+    status,
+    receivedAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentInventoryLayersData &&
+          other.id == this.id &&
+          other.receiptItemId == this.receiptItemId &&
+          other.originLayerId == this.originLayerId &&
+          other.transferAllocationId == this.transferAllocationId &&
+          other.warehouseId == this.warehouseId &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.batchId == this.batchId &&
+          other.receivedQuantity == this.receivedQuantity &&
+          other.remainingQuantity == this.remainingQuantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
+          other.settlementBasis == this.settlementBasis &&
+          other.unitCostCents == this.unitCostCents &&
+          other.supplierShareBps == this.supplierShareBps &&
+          other.includeLineDiscount == this.includeLineDiscount &&
+          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
+          other.includeSalesTax == this.includeSalesTax &&
+          other.status == this.status &&
+          other.receivedAt == this.receivedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class WarehouseTransferAllocations extends Table
+    with
+        TableInfo<
+          WarehouseTransferAllocations,
+          WarehouseTransferAllocationsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferAllocations(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> dispatchId = GeneratedColumn<int>(
+    'dispatch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_dispatches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> lineId = GeneratedColumn<String>(
+    'line_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_lines(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> sequence = GeneratedColumn<int>(
+    'sequence',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> ownerType = GeneratedColumn<String>(
+    'owner_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
+    'unit_cost_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> valueCents = GeneratedColumn<int>(
+    'value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> sourceBatchId = GeneratedColumn<int>(
+    'source_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String>
+  sourceConsignmentLayerId = GeneratedColumn<String>(
+    'source_consignment_layer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES consignment_inventory_layers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> manufacturerLotNumber =
+      GeneratedColumn<String>(
+        'manufacturer_lot_number',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
+  late final GeneratedColumn<String> expiryDate = GeneratedColumn<String>(
+    'expiry_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    dispatchId,
+    lineId,
+    sequence,
+    ownerType,
+    quantity,
+    quantityScale,
+    measurementType,
+    unitCostCents,
+    valueCents,
+    sourceBatchId,
+    sourceConsignmentLayerId,
+    supplierId,
+    agreementId,
+    manufacturerLotNumber,
+    expiryDate,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_allocations';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {dispatchId, sequence},
+  ];
+  @override
+  WarehouseTransferAllocationsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferAllocationsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      dispatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dispatch_id'],
+      )!,
+      lineId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}line_id'],
+      )!,
+      sequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sequence'],
+      )!,
+      ownerType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_type'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      unitCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_cost_cents'],
+      )!,
+      valueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_cents'],
+      )!,
+      sourceBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_batch_id'],
+      ),
+      sourceConsignmentLayerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_consignment_layer_id'],
+      ),
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      ),
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      ),
+      manufacturerLotNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}manufacturer_lot_number'],
+      ),
+      expiryDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}expiry_date'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferAllocations createAlias(String alias) {
+    return WarehouseTransferAllocations(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'UNIQUE(dispatch_id, sequence)',
+    'CHECK(owner_type IN (\'owned\', \'consignment\'))',
+    'CHECK(sequence BETWEEN 1 AND 5000)',
+    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
+    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
+    'CHECK(unit_cost_cents >= 0 AND value_cents >= 0)',
+    'CHECK((owner_type = \'owned\' AND source_consignment_layer_id IS NULL AND supplier_id IS NULL AND agreement_id IS NULL)OR(owner_type = \'consignment\' AND source_consignment_layer_id IS NOT NULL AND supplier_id IS NOT NULL AND agreement_id IS NOT NULL AND value_cents = 0))',
+    'CHECK(manufacturer_lot_number IS NULL OR length(trim(manufacturer_lot_number)) BETWEEN 1 AND 100)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferAllocationsData extends DataClass
+    implements Insertable<WarehouseTransferAllocationsData> {
+  final String id;
+  final int dispatchId;
+  final String lineId;
+  final int sequence;
+  final String ownerType;
+  final int quantity;
+  final int quantityScale;
+  final String measurementType;
+  final int unitCostCents;
+  final int valueCents;
+  final int? sourceBatchId;
+  final String? sourceConsignmentLayerId;
+  final int? supplierId;
+  final String? agreementId;
+  final String? manufacturerLotNumber;
+  final String? expiryDate;
+  final String createdAt;
+  const WarehouseTransferAllocationsData({
+    required this.id,
+    required this.dispatchId,
+    required this.lineId,
+    required this.sequence,
+    required this.ownerType,
+    required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.unitCostCents,
+    required this.valueCents,
+    this.sourceBatchId,
+    this.sourceConsignmentLayerId,
+    this.supplierId,
+    this.agreementId,
+    this.manufacturerLotNumber,
+    this.expiryDate,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['dispatch_id'] = Variable<int>(dispatchId);
+    map['line_id'] = Variable<String>(lineId);
+    map['sequence'] = Variable<int>(sequence);
+    map['owner_type'] = Variable<String>(ownerType);
+    map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['unit_cost_cents'] = Variable<int>(unitCostCents);
+    map['value_cents'] = Variable<int>(valueCents);
+    if (!nullToAbsent || sourceBatchId != null) {
+      map['source_batch_id'] = Variable<int>(sourceBatchId);
+    }
+    if (!nullToAbsent || sourceConsignmentLayerId != null) {
+      map['source_consignment_layer_id'] = Variable<String>(
+        sourceConsignmentLayerId,
+      );
+    }
+    if (!nullToAbsent || supplierId != null) {
+      map['supplier_id'] = Variable<int>(supplierId);
+    }
+    if (!nullToAbsent || agreementId != null) {
+      map['agreement_id'] = Variable<String>(agreementId);
+    }
+    if (!nullToAbsent || manufacturerLotNumber != null) {
+      map['manufacturer_lot_number'] = Variable<String>(manufacturerLotNumber);
+    }
+    if (!nullToAbsent || expiryDate != null) {
+      map['expiry_date'] = Variable<String>(expiryDate);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferAllocationsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferAllocationsData(
+      id: serializer.fromJson<String>(json['id']),
+      dispatchId: serializer.fromJson<int>(json['dispatchId']),
+      lineId: serializer.fromJson<String>(json['lineId']),
+      sequence: serializer.fromJson<int>(json['sequence']),
+      ownerType: serializer.fromJson<String>(json['ownerType']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      unitCostCents: serializer.fromJson<int>(json['unitCostCents']),
+      valueCents: serializer.fromJson<int>(json['valueCents']),
+      sourceBatchId: serializer.fromJson<int?>(json['sourceBatchId']),
+      sourceConsignmentLayerId: serializer.fromJson<String?>(
+        json['sourceConsignmentLayerId'],
+      ),
+      supplierId: serializer.fromJson<int?>(json['supplierId']),
+      agreementId: serializer.fromJson<String?>(json['agreementId']),
+      manufacturerLotNumber: serializer.fromJson<String?>(
+        json['manufacturerLotNumber'],
+      ),
+      expiryDate: serializer.fromJson<String?>(json['expiryDate']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'dispatchId': serializer.toJson<int>(dispatchId),
+      'lineId': serializer.toJson<String>(lineId),
+      'sequence': serializer.toJson<int>(sequence),
+      'ownerType': serializer.toJson<String>(ownerType),
+      'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'unitCostCents': serializer.toJson<int>(unitCostCents),
+      'valueCents': serializer.toJson<int>(valueCents),
+      'sourceBatchId': serializer.toJson<int?>(sourceBatchId),
+      'sourceConsignmentLayerId': serializer.toJson<String?>(
+        sourceConsignmentLayerId,
+      ),
+      'supplierId': serializer.toJson<int?>(supplierId),
+      'agreementId': serializer.toJson<String?>(agreementId),
+      'manufacturerLotNumber': serializer.toJson<String?>(
+        manufacturerLotNumber,
+      ),
+      'expiryDate': serializer.toJson<String?>(expiryDate),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferAllocationsData copyWith({
+    String? id,
+    int? dispatchId,
+    String? lineId,
+    int? sequence,
+    String? ownerType,
+    int? quantity,
+    int? quantityScale,
+    String? measurementType,
+    int? unitCostCents,
+    int? valueCents,
+    Value<int?> sourceBatchId = const Value.absent(),
+    Value<String?> sourceConsignmentLayerId = const Value.absent(),
+    Value<int?> supplierId = const Value.absent(),
+    Value<String?> agreementId = const Value.absent(),
+    Value<String?> manufacturerLotNumber = const Value.absent(),
+    Value<String?> expiryDate = const Value.absent(),
+    String? createdAt,
+  }) => WarehouseTransferAllocationsData(
+    id: id ?? this.id,
+    dispatchId: dispatchId ?? this.dispatchId,
+    lineId: lineId ?? this.lineId,
+    sequence: sequence ?? this.sequence,
+    ownerType: ownerType ?? this.ownerType,
+    quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
+    unitCostCents: unitCostCents ?? this.unitCostCents,
+    valueCents: valueCents ?? this.valueCents,
+    sourceBatchId: sourceBatchId.present
+        ? sourceBatchId.value
+        : this.sourceBatchId,
+    sourceConsignmentLayerId: sourceConsignmentLayerId.present
+        ? sourceConsignmentLayerId.value
+        : this.sourceConsignmentLayerId,
+    supplierId: supplierId.present ? supplierId.value : this.supplierId,
+    agreementId: agreementId.present ? agreementId.value : this.agreementId,
+    manufacturerLotNumber: manufacturerLotNumber.present
+        ? manufacturerLotNumber.value
+        : this.manufacturerLotNumber,
+    expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferAllocationsData(')
+          ..write('id: $id, ')
+          ..write('dispatchId: $dispatchId, ')
+          ..write('lineId: $lineId, ')
+          ..write('sequence: $sequence, ')
+          ..write('ownerType: $ownerType, ')
+          ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('unitCostCents: $unitCostCents, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('sourceBatchId: $sourceBatchId, ')
+          ..write('sourceConsignmentLayerId: $sourceConsignmentLayerId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('manufacturerLotNumber: $manufacturerLotNumber, ')
+          ..write('expiryDate: $expiryDate, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    dispatchId,
+    lineId,
+    sequence,
+    ownerType,
+    quantity,
+    quantityScale,
+    measurementType,
+    unitCostCents,
+    valueCents,
+    sourceBatchId,
+    sourceConsignmentLayerId,
+    supplierId,
+    agreementId,
+    manufacturerLotNumber,
+    expiryDate,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferAllocationsData &&
+          other.id == this.id &&
+          other.dispatchId == this.dispatchId &&
+          other.lineId == this.lineId &&
+          other.sequence == this.sequence &&
+          other.ownerType == this.ownerType &&
+          other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
+          other.unitCostCents == this.unitCostCents &&
+          other.valueCents == this.valueCents &&
+          other.sourceBatchId == this.sourceBatchId &&
+          other.sourceConsignmentLayerId == this.sourceConsignmentLayerId &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.manufacturerLotNumber == this.manufacturerLotNumber &&
+          other.expiryDate == this.expiryDate &&
+          other.createdAt == this.createdAt);
+}
+
+class WarehouseTransferReceipts extends Table
+    with TableInfo<WarehouseTransferReceipts, WarehouseTransferReceiptsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferReceipts(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+    'transfer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> actorId = GeneratedColumn<int>(
+    'actor_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> itemCount = GeneratedColumn<int>(
+    'item_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> acceptedOwnedValueCents =
+      GeneratedColumn<int>(
+        'accepted_owned_value_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      );
+  late final GeneratedColumn<int> varianceOwnedValueCents =
+      GeneratedColumn<int>(
+        'variance_owned_value_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      );
+  late final GeneratedColumn<int> destinationInventoryDeltaCents =
+      GeneratedColumn<int>(
+        'destination_inventory_delta_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> sealed = GeneratedColumn<int>(
+    'sealed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (sealed IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> receivedAt = GeneratedColumn<String>(
+    'received_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    transferId,
+    requestKey,
+    requestHash,
+    actorId,
+    itemCount,
+    acceptedOwnedValueCents,
+    varianceOwnedValueCents,
+    destinationInventoryDeltaCents,
+    journalEntryId,
+    sealed,
+    notes,
+    receivedAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_receipts';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WarehouseTransferReceiptsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferReceiptsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      transferId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_id'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      actorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}actor_id'],
+      )!,
+      itemCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}item_count'],
+      )!,
+      acceptedOwnedValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accepted_owned_value_cents'],
+      )!,
+      varianceOwnedValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variance_owned_value_cents'],
+      )!,
+      destinationInventoryDeltaCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}destination_inventory_delta_cents'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      sealed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sealed'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      receivedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}received_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferReceipts createAlias(String alias) {
+    return WarehouseTransferReceipts(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK(item_count BETWEEN 1 AND 5000)',
+    'CHECK(accepted_owned_value_cents >= 0 AND variance_owned_value_cents >= 0 AND destination_inventory_delta_cents >= 0)',
+    'CHECK(length(notes) <= 500)',
+    'CHECK(sealed = 0 AND journal_entry_id IS NULL OR sealed = 1 AND accepted_owned_value_cents = 0 AND variance_owned_value_cents = 0 AND destination_inventory_delta_cents = 0 AND journal_entry_id IS NULL OR sealed = 1 AND accepted_owned_value_cents + variance_owned_value_cents > 0 AND journal_entry_id IS NOT NULL)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferReceiptsData extends DataClass
+    implements Insertable<WarehouseTransferReceiptsData> {
+  final int id;
+  final String transferId;
+  final String requestKey;
+  final String requestHash;
+  final int actorId;
+  final int itemCount;
+  final int acceptedOwnedValueCents;
+  final int varianceOwnedValueCents;
+  final int destinationInventoryDeltaCents;
+  final int? journalEntryId;
+  final int sealed;
+  final String notes;
+  final String receivedAt;
+  final String createdAt;
+  const WarehouseTransferReceiptsData({
+    required this.id,
+    required this.transferId,
+    required this.requestKey,
+    required this.requestHash,
+    required this.actorId,
+    required this.itemCount,
+    required this.acceptedOwnedValueCents,
+    required this.varianceOwnedValueCents,
+    required this.destinationInventoryDeltaCents,
+    this.journalEntryId,
+    required this.sealed,
+    required this.notes,
+    required this.receivedAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['transfer_id'] = Variable<String>(transferId);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['actor_id'] = Variable<int>(actorId);
+    map['item_count'] = Variable<int>(itemCount);
+    map['accepted_owned_value_cents'] = Variable<int>(acceptedOwnedValueCents);
+    map['variance_owned_value_cents'] = Variable<int>(varianceOwnedValueCents);
+    map['destination_inventory_delta_cents'] = Variable<int>(
+      destinationInventoryDeltaCents,
+    );
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    map['sealed'] = Variable<int>(sealed);
+    map['notes'] = Variable<String>(notes);
+    map['received_at'] = Variable<String>(receivedAt);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferReceiptsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferReceiptsData(
+      id: serializer.fromJson<int>(json['id']),
+      transferId: serializer.fromJson<String>(json['transferId']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      actorId: serializer.fromJson<int>(json['actorId']),
+      itemCount: serializer.fromJson<int>(json['itemCount']),
+      acceptedOwnedValueCents: serializer.fromJson<int>(
+        json['acceptedOwnedValueCents'],
+      ),
+      varianceOwnedValueCents: serializer.fromJson<int>(
+        json['varianceOwnedValueCents'],
+      ),
+      destinationInventoryDeltaCents: serializer.fromJson<int>(
+        json['destinationInventoryDeltaCents'],
+      ),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      sealed: serializer.fromJson<int>(json['sealed']),
+      notes: serializer.fromJson<String>(json['notes']),
+      receivedAt: serializer.fromJson<String>(json['receivedAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'transferId': serializer.toJson<String>(transferId),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'actorId': serializer.toJson<int>(actorId),
+      'itemCount': serializer.toJson<int>(itemCount),
+      'acceptedOwnedValueCents': serializer.toJson<int>(
+        acceptedOwnedValueCents,
+      ),
+      'varianceOwnedValueCents': serializer.toJson<int>(
+        varianceOwnedValueCents,
+      ),
+      'destinationInventoryDeltaCents': serializer.toJson<int>(
+        destinationInventoryDeltaCents,
+      ),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'sealed': serializer.toJson<int>(sealed),
+      'notes': serializer.toJson<String>(notes),
+      'receivedAt': serializer.toJson<String>(receivedAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferReceiptsData copyWith({
+    int? id,
+    String? transferId,
+    String? requestKey,
+    String? requestHash,
+    int? actorId,
+    int? itemCount,
+    int? acceptedOwnedValueCents,
+    int? varianceOwnedValueCents,
+    int? destinationInventoryDeltaCents,
+    Value<int?> journalEntryId = const Value.absent(),
+    int? sealed,
+    String? notes,
+    String? receivedAt,
+    String? createdAt,
+  }) => WarehouseTransferReceiptsData(
+    id: id ?? this.id,
+    transferId: transferId ?? this.transferId,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    actorId: actorId ?? this.actorId,
+    itemCount: itemCount ?? this.itemCount,
+    acceptedOwnedValueCents:
+        acceptedOwnedValueCents ?? this.acceptedOwnedValueCents,
+    varianceOwnedValueCents:
+        varianceOwnedValueCents ?? this.varianceOwnedValueCents,
+    destinationInventoryDeltaCents:
+        destinationInventoryDeltaCents ?? this.destinationInventoryDeltaCents,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    sealed: sealed ?? this.sealed,
+    notes: notes ?? this.notes,
+    receivedAt: receivedAt ?? this.receivedAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferReceiptsData(')
+          ..write('id: $id, ')
+          ..write('transferId: $transferId, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('actorId: $actorId, ')
+          ..write('itemCount: $itemCount, ')
+          ..write('acceptedOwnedValueCents: $acceptedOwnedValueCents, ')
+          ..write('varianceOwnedValueCents: $varianceOwnedValueCents, ')
+          ..write(
+            'destinationInventoryDeltaCents: $destinationInventoryDeltaCents, ',
+          )
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('sealed: $sealed, ')
+          ..write('notes: $notes, ')
+          ..write('receivedAt: $receivedAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    transferId,
+    requestKey,
+    requestHash,
+    actorId,
+    itemCount,
+    acceptedOwnedValueCents,
+    varianceOwnedValueCents,
+    destinationInventoryDeltaCents,
+    journalEntryId,
+    sealed,
+    notes,
+    receivedAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferReceiptsData &&
+          other.id == this.id &&
+          other.transferId == this.transferId &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.actorId == this.actorId &&
+          other.itemCount == this.itemCount &&
+          other.acceptedOwnedValueCents == this.acceptedOwnedValueCents &&
+          other.varianceOwnedValueCents == this.varianceOwnedValueCents &&
+          other.destinationInventoryDeltaCents ==
+              this.destinationInventoryDeltaCents &&
+          other.journalEntryId == this.journalEntryId &&
+          other.sealed == this.sealed &&
+          other.notes == this.notes &&
+          other.receivedAt == this.receivedAt &&
+          other.createdAt == this.createdAt);
+}
+
+class WarehouseTransferReceiptItems extends Table
+    with
+        TableInfo<
+          WarehouseTransferReceiptItems,
+          WarehouseTransferReceiptItemsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferReceiptItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> receiptId = GeneratedColumn<int>(
+    'receipt_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_receipts(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> allocationId = GeneratedColumn<String>(
+    'allocation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_allocations(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> acceptedQuantity = GeneratedColumn<int>(
+    'accepted_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> damagedQuantity = GeneratedColumn<int>(
+    'damaged_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> lostQuantity = GeneratedColumn<int>(
+    'lost_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> acceptedValueCents = GeneratedColumn<int>(
+    'accepted_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> varianceValueCents = GeneratedColumn<int>(
+    'variance_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> destinationBatchId = GeneratedColumn<int>(
+    'destination_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String>
+  destinationConsignmentLayerId = GeneratedColumn<String>(
+    'destination_consignment_layer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES consignment_inventory_layers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    receiptId,
+    allocationId,
+    acceptedQuantity,
+    damagedQuantity,
+    lostQuantity,
+    acceptedValueCents,
+    varianceValueCents,
+    destinationBatchId,
+    destinationConsignmentLayerId,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_receipt_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {receiptId, allocationId},
+  ];
+  @override
+  WarehouseTransferReceiptItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferReceiptItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      receiptId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}receipt_id'],
+      )!,
+      allocationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}allocation_id'],
+      )!,
+      acceptedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accepted_quantity'],
+      )!,
+      damagedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}damaged_quantity'],
+      )!,
+      lostQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lost_quantity'],
+      )!,
+      acceptedValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accepted_value_cents'],
+      )!,
+      varianceValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variance_value_cents'],
+      )!,
+      destinationBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}destination_batch_id'],
+      ),
+      destinationConsignmentLayerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}destination_consignment_layer_id'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferReceiptItems createAlias(String alias) {
+    return WarehouseTransferReceiptItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(receipt_id, allocation_id)',
+    'CHECK(accepted_quantity >= 0 AND damaged_quantity >= 0 AND lost_quantity >= 0)',
+    'CHECK(accepted_quantity + damaged_quantity + lost_quantity > 0)',
+    'CHECK(accepted_value_cents >= 0 AND variance_value_cents >= 0)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferReceiptItemsData extends DataClass
+    implements Insertable<WarehouseTransferReceiptItemsData> {
+  final int id;
+  final int receiptId;
+  final String allocationId;
+  final int acceptedQuantity;
+  final int damagedQuantity;
+  final int lostQuantity;
+  final int acceptedValueCents;
+  final int varianceValueCents;
+  final int? destinationBatchId;
+  final String? destinationConsignmentLayerId;
+  final String createdAt;
+  const WarehouseTransferReceiptItemsData({
+    required this.id,
+    required this.receiptId,
+    required this.allocationId,
+    required this.acceptedQuantity,
+    required this.damagedQuantity,
+    required this.lostQuantity,
+    required this.acceptedValueCents,
+    required this.varianceValueCents,
+    this.destinationBatchId,
+    this.destinationConsignmentLayerId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['receipt_id'] = Variable<int>(receiptId);
+    map['allocation_id'] = Variable<String>(allocationId);
+    map['accepted_quantity'] = Variable<int>(acceptedQuantity);
+    map['damaged_quantity'] = Variable<int>(damagedQuantity);
+    map['lost_quantity'] = Variable<int>(lostQuantity);
+    map['accepted_value_cents'] = Variable<int>(acceptedValueCents);
+    map['variance_value_cents'] = Variable<int>(varianceValueCents);
+    if (!nullToAbsent || destinationBatchId != null) {
+      map['destination_batch_id'] = Variable<int>(destinationBatchId);
+    }
+    if (!nullToAbsent || destinationConsignmentLayerId != null) {
+      map['destination_consignment_layer_id'] = Variable<String>(
+        destinationConsignmentLayerId,
+      );
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferReceiptItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferReceiptItemsData(
+      id: serializer.fromJson<int>(json['id']),
+      receiptId: serializer.fromJson<int>(json['receiptId']),
+      allocationId: serializer.fromJson<String>(json['allocationId']),
+      acceptedQuantity: serializer.fromJson<int>(json['acceptedQuantity']),
+      damagedQuantity: serializer.fromJson<int>(json['damagedQuantity']),
+      lostQuantity: serializer.fromJson<int>(json['lostQuantity']),
+      acceptedValueCents: serializer.fromJson<int>(json['acceptedValueCents']),
+      varianceValueCents: serializer.fromJson<int>(json['varianceValueCents']),
+      destinationBatchId: serializer.fromJson<int?>(json['destinationBatchId']),
+      destinationConsignmentLayerId: serializer.fromJson<String?>(
+        json['destinationConsignmentLayerId'],
+      ),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'receiptId': serializer.toJson<int>(receiptId),
+      'allocationId': serializer.toJson<String>(allocationId),
+      'acceptedQuantity': serializer.toJson<int>(acceptedQuantity),
+      'damagedQuantity': serializer.toJson<int>(damagedQuantity),
+      'lostQuantity': serializer.toJson<int>(lostQuantity),
+      'acceptedValueCents': serializer.toJson<int>(acceptedValueCents),
+      'varianceValueCents': serializer.toJson<int>(varianceValueCents),
+      'destinationBatchId': serializer.toJson<int?>(destinationBatchId),
+      'destinationConsignmentLayerId': serializer.toJson<String?>(
+        destinationConsignmentLayerId,
+      ),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferReceiptItemsData copyWith({
+    int? id,
+    int? receiptId,
+    String? allocationId,
+    int? acceptedQuantity,
+    int? damagedQuantity,
+    int? lostQuantity,
+    int? acceptedValueCents,
+    int? varianceValueCents,
+    Value<int?> destinationBatchId = const Value.absent(),
+    Value<String?> destinationConsignmentLayerId = const Value.absent(),
+    String? createdAt,
+  }) => WarehouseTransferReceiptItemsData(
+    id: id ?? this.id,
+    receiptId: receiptId ?? this.receiptId,
+    allocationId: allocationId ?? this.allocationId,
+    acceptedQuantity: acceptedQuantity ?? this.acceptedQuantity,
+    damagedQuantity: damagedQuantity ?? this.damagedQuantity,
+    lostQuantity: lostQuantity ?? this.lostQuantity,
+    acceptedValueCents: acceptedValueCents ?? this.acceptedValueCents,
+    varianceValueCents: varianceValueCents ?? this.varianceValueCents,
+    destinationBatchId: destinationBatchId.present
+        ? destinationBatchId.value
+        : this.destinationBatchId,
+    destinationConsignmentLayerId: destinationConsignmentLayerId.present
+        ? destinationConsignmentLayerId.value
+        : this.destinationConsignmentLayerId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferReceiptItemsData(')
+          ..write('id: $id, ')
+          ..write('receiptId: $receiptId, ')
+          ..write('allocationId: $allocationId, ')
+          ..write('acceptedQuantity: $acceptedQuantity, ')
+          ..write('damagedQuantity: $damagedQuantity, ')
+          ..write('lostQuantity: $lostQuantity, ')
+          ..write('acceptedValueCents: $acceptedValueCents, ')
+          ..write('varianceValueCents: $varianceValueCents, ')
+          ..write('destinationBatchId: $destinationBatchId, ')
+          ..write(
+            'destinationConsignmentLayerId: $destinationConsignmentLayerId, ',
+          )
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    receiptId,
+    allocationId,
+    acceptedQuantity,
+    damagedQuantity,
+    lostQuantity,
+    acceptedValueCents,
+    varianceValueCents,
+    destinationBatchId,
+    destinationConsignmentLayerId,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferReceiptItemsData &&
+          other.id == this.id &&
+          other.receiptId == this.receiptId &&
+          other.allocationId == this.allocationId &&
+          other.acceptedQuantity == this.acceptedQuantity &&
+          other.damagedQuantity == this.damagedQuantity &&
+          other.lostQuantity == this.lostQuantity &&
+          other.acceptedValueCents == this.acceptedValueCents &&
+          other.varianceValueCents == this.varianceValueCents &&
+          other.destinationBatchId == this.destinationBatchId &&
+          other.destinationConsignmentLayerId ==
+              this.destinationConsignmentLayerId &&
+          other.createdAt == this.createdAt);
+}
+
+class WarehouseTransferRecalls extends Table
+    with TableInfo<WarehouseTransferRecalls, WarehouseTransferRecallsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferRecalls(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+    'transfer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL UNIQUE REFERENCES warehouse_transfers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> actorId = GeneratedColumn<int>(
+    'actor_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> itemCount = GeneratedColumn<int>(
+    'item_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> ownedValueCents = GeneratedColumn<int>(
+    'owned_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> sealed = GeneratedColumn<int>(
+    'sealed',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (sealed IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> recalledAt = GeneratedColumn<String>(
+    'recalled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    transferId,
+    requestKey,
+    requestHash,
+    actorId,
+    itemCount,
+    ownedValueCents,
+    journalEntryId,
+    sealed,
+    reason,
+    recalledAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_recalls';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WarehouseTransferRecallsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferRecallsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      transferId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_id'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      actorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}actor_id'],
+      )!,
+      itemCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}item_count'],
+      )!,
+      ownedValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}owned_value_cents'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      sealed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sealed'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      recalledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recalled_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferRecalls createAlias(String alias) {
+    return WarehouseTransferRecalls(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK(item_count BETWEEN 1 AND 5000)',
+    'CHECK(owned_value_cents BETWEEN 0 AND 9007199254740991)',
+    'CHECK(length(trim(reason)) BETWEEN 1 AND 500)',
+    'CHECK(sealed = 0 AND journal_entry_id IS NULL OR sealed = 1 AND owned_value_cents = 0 AND journal_entry_id IS NULL OR sealed = 1 AND owned_value_cents > 0 AND journal_entry_id IS NOT NULL)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferRecallsData extends DataClass
+    implements Insertable<WarehouseTransferRecallsData> {
+  final int id;
+  final String transferId;
+  final String requestKey;
+  final String requestHash;
+  final int actorId;
+  final int itemCount;
+  final int ownedValueCents;
+  final int? journalEntryId;
+  final int sealed;
+  final String reason;
+  final String recalledAt;
+  final String createdAt;
+  const WarehouseTransferRecallsData({
+    required this.id,
+    required this.transferId,
+    required this.requestKey,
+    required this.requestHash,
+    required this.actorId,
+    required this.itemCount,
+    required this.ownedValueCents,
+    this.journalEntryId,
+    required this.sealed,
+    required this.reason,
+    required this.recalledAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['transfer_id'] = Variable<String>(transferId);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['actor_id'] = Variable<int>(actorId);
+    map['item_count'] = Variable<int>(itemCount);
+    map['owned_value_cents'] = Variable<int>(ownedValueCents);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    map['sealed'] = Variable<int>(sealed);
+    map['reason'] = Variable<String>(reason);
+    map['recalled_at'] = Variable<String>(recalledAt);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferRecallsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferRecallsData(
+      id: serializer.fromJson<int>(json['id']),
+      transferId: serializer.fromJson<String>(json['transferId']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      actorId: serializer.fromJson<int>(json['actorId']),
+      itemCount: serializer.fromJson<int>(json['itemCount']),
+      ownedValueCents: serializer.fromJson<int>(json['ownedValueCents']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      sealed: serializer.fromJson<int>(json['sealed']),
+      reason: serializer.fromJson<String>(json['reason']),
+      recalledAt: serializer.fromJson<String>(json['recalledAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'transferId': serializer.toJson<String>(transferId),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'actorId': serializer.toJson<int>(actorId),
+      'itemCount': serializer.toJson<int>(itemCount),
+      'ownedValueCents': serializer.toJson<int>(ownedValueCents),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'sealed': serializer.toJson<int>(sealed),
+      'reason': serializer.toJson<String>(reason),
+      'recalledAt': serializer.toJson<String>(recalledAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferRecallsData copyWith({
+    int? id,
+    String? transferId,
+    String? requestKey,
+    String? requestHash,
+    int? actorId,
+    int? itemCount,
+    int? ownedValueCents,
+    Value<int?> journalEntryId = const Value.absent(),
+    int? sealed,
+    String? reason,
+    String? recalledAt,
+    String? createdAt,
+  }) => WarehouseTransferRecallsData(
+    id: id ?? this.id,
+    transferId: transferId ?? this.transferId,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    actorId: actorId ?? this.actorId,
+    itemCount: itemCount ?? this.itemCount,
+    ownedValueCents: ownedValueCents ?? this.ownedValueCents,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    sealed: sealed ?? this.sealed,
+    reason: reason ?? this.reason,
+    recalledAt: recalledAt ?? this.recalledAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferRecallsData(')
+          ..write('id: $id, ')
+          ..write('transferId: $transferId, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('actorId: $actorId, ')
+          ..write('itemCount: $itemCount, ')
+          ..write('ownedValueCents: $ownedValueCents, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('sealed: $sealed, ')
+          ..write('reason: $reason, ')
+          ..write('recalledAt: $recalledAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    transferId,
+    requestKey,
+    requestHash,
+    actorId,
+    itemCount,
+    ownedValueCents,
+    journalEntryId,
+    sealed,
+    reason,
+    recalledAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferRecallsData &&
+          other.id == this.id &&
+          other.transferId == this.transferId &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.actorId == this.actorId &&
+          other.itemCount == this.itemCount &&
+          other.ownedValueCents == this.ownedValueCents &&
+          other.journalEntryId == this.journalEntryId &&
+          other.sealed == this.sealed &&
+          other.reason == this.reason &&
+          other.recalledAt == this.recalledAt &&
+          other.createdAt == this.createdAt);
+}
+
+class WarehouseTransferRecallItems extends Table
+    with
+        TableInfo<
+          WarehouseTransferRecallItems,
+          WarehouseTransferRecallItemsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferRecallItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> recallId = GeneratedColumn<int>(
+    'recall_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_recalls(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> allocationId = GeneratedColumn<String>(
+    'allocation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfer_allocations(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> valueCents = GeneratedColumn<int>(
+    'value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    recallId,
+    allocationId,
+    quantity,
+    valueCents,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_recall_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {recallId, allocationId},
+    {allocationId},
+  ];
+  @override
+  WarehouseTransferRecallItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferRecallItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      recallId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}recall_id'],
+      )!,
+      allocationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}allocation_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      valueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}value_cents'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferRecallItems createAlias(String alias) {
+    return WarehouseTransferRecallItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(recall_id, allocation_id)',
+    'UNIQUE(allocation_id)',
+    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
+    'CHECK(value_cents >= 0 AND value_cents <= 9007199254740991)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferRecallItemsData extends DataClass
+    implements Insertable<WarehouseTransferRecallItemsData> {
+  final int id;
+  final int recallId;
+  final String allocationId;
+  final int quantity;
+  final int valueCents;
+  final String createdAt;
+  const WarehouseTransferRecallItemsData({
+    required this.id,
+    required this.recallId,
+    required this.allocationId,
+    required this.quantity,
+    required this.valueCents,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['recall_id'] = Variable<int>(recallId);
+    map['allocation_id'] = Variable<String>(allocationId);
+    map['quantity'] = Variable<int>(quantity);
+    map['value_cents'] = Variable<int>(valueCents);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferRecallItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferRecallItemsData(
+      id: serializer.fromJson<int>(json['id']),
+      recallId: serializer.fromJson<int>(json['recallId']),
+      allocationId: serializer.fromJson<String>(json['allocationId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      valueCents: serializer.fromJson<int>(json['valueCents']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'recallId': serializer.toJson<int>(recallId),
+      'allocationId': serializer.toJson<String>(allocationId),
+      'quantity': serializer.toJson<int>(quantity),
+      'valueCents': serializer.toJson<int>(valueCents),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferRecallItemsData copyWith({
+    int? id,
+    int? recallId,
+    String? allocationId,
+    int? quantity,
+    int? valueCents,
+    String? createdAt,
+  }) => WarehouseTransferRecallItemsData(
+    id: id ?? this.id,
+    recallId: recallId ?? this.recallId,
+    allocationId: allocationId ?? this.allocationId,
+    quantity: quantity ?? this.quantity,
+    valueCents: valueCents ?? this.valueCents,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferRecallItemsData(')
+          ..write('id: $id, ')
+          ..write('recallId: $recallId, ')
+          ..write('allocationId: $allocationId, ')
+          ..write('quantity: $quantity, ')
+          ..write('valueCents: $valueCents, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, recallId, allocationId, quantity, valueCents, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferRecallItemsData &&
+          other.id == this.id &&
+          other.recallId == this.recallId &&
+          other.allocationId == this.allocationId &&
+          other.quantity == this.quantity &&
+          other.valueCents == this.valueCents &&
+          other.createdAt == this.createdAt);
+}
+
+class WarehouseTransferEvents extends Table
+    with TableInfo<WarehouseTransferEvents, WarehouseTransferEventsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  WarehouseTransferEvents(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> transferId = GeneratedColumn<String>(
+    'transfer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES warehouse_transfers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> actorId = GeneratedColumn<int>(
+    'actor_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    transferId,
+    kind,
+    requestKey,
+    requestHash,
+    actorId,
+    reason,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'warehouse_transfer_events';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {transferId, kind},
+  ];
+  @override
+  WarehouseTransferEventsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WarehouseTransferEventsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      transferId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      actorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}actor_id'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  WarehouseTransferEvents createAlias(String alias) {
+    return WarehouseTransferEvents(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'UNIQUE(transfer_id, kind)',
+    'CHECK(kind IN (\'created\', \'cancelled\', \'dispatched\', \'completed\'))',
+    'CHECK(length(reason) <= 500)',
+    'CHECK(kind != \'cancelled\' OR length(trim(reason)) > 0)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class WarehouseTransferEventsData extends DataClass
+    implements Insertable<WarehouseTransferEventsData> {
+  final String id;
+  final String transferId;
+  final String kind;
+  final String requestKey;
+  final String requestHash;
+  final int actorId;
+  final String reason;
+  final String createdAt;
+  const WarehouseTransferEventsData({
+    required this.id,
+    required this.transferId,
+    required this.kind,
+    required this.requestKey,
+    required this.requestHash,
+    required this.actorId,
+    required this.reason,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['transfer_id'] = Variable<String>(transferId);
+    map['kind'] = Variable<String>(kind);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['actor_id'] = Variable<int>(actorId);
+    map['reason'] = Variable<String>(reason);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory WarehouseTransferEventsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WarehouseTransferEventsData(
+      id: serializer.fromJson<String>(json['id']),
+      transferId: serializer.fromJson<String>(json['transferId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      actorId: serializer.fromJson<int>(json['actorId']),
+      reason: serializer.fromJson<String>(json['reason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'transferId': serializer.toJson<String>(transferId),
+      'kind': serializer.toJson<String>(kind),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'actorId': serializer.toJson<int>(actorId),
+      'reason': serializer.toJson<String>(reason),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  WarehouseTransferEventsData copyWith({
+    String? id,
+    String? transferId,
+    String? kind,
+    String? requestKey,
+    String? requestHash,
+    int? actorId,
+    String? reason,
+    String? createdAt,
+  }) => WarehouseTransferEventsData(
+    id: id ?? this.id,
+    transferId: transferId ?? this.transferId,
+    kind: kind ?? this.kind,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    actorId: actorId ?? this.actorId,
+    reason: reason ?? this.reason,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('WarehouseTransferEventsData(')
+          ..write('id: $id, ')
+          ..write('transferId: $transferId, ')
+          ..write('kind: $kind, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('actorId: $actorId, ')
+          ..write('reason: $reason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    transferId,
+    kind,
+    requestKey,
+    requestHash,
+    actorId,
+    reason,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WarehouseTransferEventsData &&
+          other.id == this.id &&
+          other.transferId == this.transferId &&
+          other.kind == this.kind &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.actorId == this.actorId &&
+          other.reason == this.reason &&
+          other.createdAt == this.createdAt);
+}
+
+class InventoryOriginStates extends Table
+    with TableInfo<InventoryOriginStates, InventoryOriginStatesData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  InventoryOriginStates(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_warehouses(id)',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES product_variants(id)',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> dirty = GeneratedColumn<int>(
+    'dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<String> layers = GeneratedColumn<String>(
+    'layers',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    warehouseId,
+    variantId,
+    quantity,
+    measurementType,
+    dirty,
+    layers,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'inventory_origin_states';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {warehouseId, variantId};
+  @override
+  InventoryOriginStatesData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InventoryOriginStatesData(
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      dirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dirty'],
+      )!,
+      layers: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layers'],
+      )!,
+    );
+  }
+
+  @override
+  InventoryOriginStates createAlias(String alias) {
+    return InventoryOriginStates(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(warehouse_id, variant_id)',
+    'CHECK(dirty IN (0, 1))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class InventoryOriginStatesData extends DataClass
+    implements Insertable<InventoryOriginStatesData> {
+  final String warehouseId;
+  final int variantId;
+  final int quantity;
+  final String measurementType;
+  final int dirty;
+  final String layers;
+  const InventoryOriginStatesData({
+    required this.warehouseId,
+    required this.variantId,
+    required this.quantity,
+    required this.measurementType,
+    required this.dirty,
+    required this.layers,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['variant_id'] = Variable<int>(variantId);
+    map['quantity'] = Variable<int>(quantity);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['dirty'] = Variable<int>(dirty);
+    map['layers'] = Variable<String>(layers);
+    return map;
+  }
+
+  factory InventoryOriginStatesData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InventoryOriginStatesData(
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      dirty: serializer.fromJson<int>(json['dirty']),
+      layers: serializer.fromJson<String>(json['layers']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'warehouseId': serializer.toJson<String>(warehouseId),
+      'variantId': serializer.toJson<int>(variantId),
+      'quantity': serializer.toJson<int>(quantity),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'dirty': serializer.toJson<int>(dirty),
+      'layers': serializer.toJson<String>(layers),
+    };
+  }
+
+  InventoryOriginStatesData copyWith({
+    String? warehouseId,
+    int? variantId,
+    int? quantity,
+    String? measurementType,
+    int? dirty,
+    String? layers,
+  }) => InventoryOriginStatesData(
+    warehouseId: warehouseId ?? this.warehouseId,
+    variantId: variantId ?? this.variantId,
+    quantity: quantity ?? this.quantity,
+    measurementType: measurementType ?? this.measurementType,
+    dirty: dirty ?? this.dirty,
+    layers: layers ?? this.layers,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('InventoryOriginStatesData(')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('variantId: $variantId, ')
+          ..write('quantity: $quantity, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('dirty: $dirty, ')
+          ..write('layers: $layers')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    warehouseId,
+    variantId,
+    quantity,
+    measurementType,
+    dirty,
+    layers,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InventoryOriginStatesData &&
+          other.warehouseId == this.warehouseId &&
+          other.variantId == this.variantId &&
+          other.quantity == this.quantity &&
+          other.measurementType == this.measurementType &&
+          other.dirty == this.dirty &&
+          other.layers == this.layers);
+}
+
+class InventoryOriginEvents extends Table
+    with TableInfo<InventoryOriginEvents, InventoryOriginEventsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  InventoryOriginEvents(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_warehouses(id)',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES product_variants(id)',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> eventKey = GeneratedColumn<String>(
+    'event_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> claimKey = GeneratedColumn<String>(
+    'claim_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> delta = GeneratedColumn<int>(
+    'delta',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> allocations = GeneratedColumn<String>(
+    'allocations',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT ((strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\')))',
+    defaultValue: const CustomExpression(
+      '(strftime(\'%Y-%m-%dT%H:%M:%fZ\', \'now\'))',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    warehouseId,
+    variantId,
+    productId,
+    measurementType,
+    eventKey,
+    claimKey,
+    delta,
+    allocations,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'inventory_origin_events';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {warehouseId, eventKey},
+  ];
+  @override
+  InventoryOriginEventsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return InventoryOriginEventsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      eventKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_key'],
+      )!,
+      claimKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}claim_key'],
+      ),
+      delta: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delta'],
+      )!,
+      allocations: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}allocations'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  InventoryOriginEvents createAlias(String alias) {
+    return InventoryOriginEvents(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(warehouse_id, event_key)',
+    'CHECK(delta != 0)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class InventoryOriginEventsData extends DataClass
+    implements Insertable<InventoryOriginEventsData> {
+  final int id;
+  final String warehouseId;
+  final int variantId;
+  final int productId;
+  final String measurementType;
+  final String eventKey;
+  final String? claimKey;
+  final int delta;
+  final String allocations;
+  final String createdAt;
+  const InventoryOriginEventsData({
+    required this.id,
+    required this.warehouseId,
+    required this.variantId,
+    required this.productId,
+    required this.measurementType,
+    required this.eventKey,
+    this.claimKey,
+    required this.delta,
+    required this.allocations,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['variant_id'] = Variable<int>(variantId);
+    map['product_id'] = Variable<int>(productId);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['event_key'] = Variable<String>(eventKey);
+    if (!nullToAbsent || claimKey != null) {
+      map['claim_key'] = Variable<String>(claimKey);
+    }
+    map['delta'] = Variable<int>(delta);
+    map['allocations'] = Variable<String>(allocations);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory InventoryOriginEventsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return InventoryOriginEventsData(
+      id: serializer.fromJson<int>(json['id']),
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      eventKey: serializer.fromJson<String>(json['eventKey']),
+      claimKey: serializer.fromJson<String?>(json['claimKey']),
+      delta: serializer.fromJson<int>(json['delta']),
+      allocations: serializer.fromJson<String>(json['allocations']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'warehouseId': serializer.toJson<String>(warehouseId),
+      'variantId': serializer.toJson<int>(variantId),
+      'productId': serializer.toJson<int>(productId),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'eventKey': serializer.toJson<String>(eventKey),
+      'claimKey': serializer.toJson<String?>(claimKey),
+      'delta': serializer.toJson<int>(delta),
+      'allocations': serializer.toJson<String>(allocations),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  InventoryOriginEventsData copyWith({
+    int? id,
+    String? warehouseId,
+    int? variantId,
+    int? productId,
+    String? measurementType,
+    String? eventKey,
+    Value<String?> claimKey = const Value.absent(),
+    int? delta,
+    String? allocations,
+    String? createdAt,
+  }) => InventoryOriginEventsData(
+    id: id ?? this.id,
+    warehouseId: warehouseId ?? this.warehouseId,
+    variantId: variantId ?? this.variantId,
+    productId: productId ?? this.productId,
+    measurementType: measurementType ?? this.measurementType,
+    eventKey: eventKey ?? this.eventKey,
+    claimKey: claimKey.present ? claimKey.value : this.claimKey,
+    delta: delta ?? this.delta,
+    allocations: allocations ?? this.allocations,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('InventoryOriginEventsData(')
+          ..write('id: $id, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('variantId: $variantId, ')
+          ..write('productId: $productId, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('eventKey: $eventKey, ')
+          ..write('claimKey: $claimKey, ')
+          ..write('delta: $delta, ')
+          ..write('allocations: $allocations, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    warehouseId,
+    variantId,
+    productId,
+    measurementType,
+    eventKey,
+    claimKey,
+    delta,
+    allocations,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is InventoryOriginEventsData &&
+          other.id == this.id &&
+          other.warehouseId == this.warehouseId &&
+          other.variantId == this.variantId &&
+          other.productId == this.productId &&
+          other.measurementType == this.measurementType &&
+          other.eventKey == this.eventKey &&
+          other.claimKey == this.claimKey &&
+          other.delta == this.delta &&
+          other.allocations == this.allocations &&
+          other.createdAt == this.createdAt);
+}
+
+class AppSettings extends Table with TableInfo<AppSettings, AppSettingsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  AppSettings(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    key,
+    value,
+    description,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'app_settings';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AppSettingsData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AppSettingsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  AppSettings createAlias(String alias) {
+    return AppSettings(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class AppSettingsData extends DataClass implements Insertable<AppSettingsData> {
+  final int id;
+  final String key;
+  final String value;
+  final String? description;
+  final String createdAt;
+  final String updatedAt;
+  const AppSettingsData({
+    required this.id,
+    required this.key,
+    required this.value,
+    this.description,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory AppSettingsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AppSettingsData(
+      id: serializer.fromJson<int>(json['id']),
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+      description: serializer.fromJson<String?>(json['description']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+      'description': serializer.toJson<String?>(description),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  AppSettingsData copyWith({
+    int? id,
+    String? key,
+    String? value,
+    Value<String?> description = const Value.absent(),
+    String? createdAt,
+    String? updatedAt,
+  }) => AppSettingsData(
+    id: id ?? this.id,
+    key: key ?? this.key,
+    value: value ?? this.value,
+    description: description.present ? description.value : this.description,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('AppSettingsData(')
+          ..write('id: $id, ')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('description: $description, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, key, value, description, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AppSettingsData &&
+          other.id == this.id &&
+          other.key == this.key &&
+          other.value == this.value &&
+          other.description == this.description &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class StoreLogos extends Table with TableInfo<StoreLogos, StoreLogosData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  StoreLogos(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> logoPath = GeneratedColumn<String>(
+    'logo_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, logoPath, isActive, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'store_logos';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StoreLogosData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoreLogosData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      logoPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}logo_path'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  StoreLogos createAlias(String alias) {
+    return StoreLogos(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class StoreLogosData extends DataClass implements Insertable<StoreLogosData> {
+  final int id;
+  final String logoPath;
+  final int isActive;
+  final String createdAt;
+  const StoreLogosData({
+    required this.id,
+    required this.logoPath,
+    required this.isActive,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['logo_path'] = Variable<String>(logoPath);
+    map['is_active'] = Variable<int>(isActive);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory StoreLogosData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoreLogosData(
+      id: serializer.fromJson<int>(json['id']),
+      logoPath: serializer.fromJson<String>(json['logoPath']),
+      isActive: serializer.fromJson<int>(json['isActive']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'logoPath': serializer.toJson<String>(logoPath),
+      'isActive': serializer.toJson<int>(isActive),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  StoreLogosData copyWith({
+    int? id,
+    String? logoPath,
+    int? isActive,
+    String? createdAt,
+  }) => StoreLogosData(
+    id: id ?? this.id,
+    logoPath: logoPath ?? this.logoPath,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('StoreLogosData(')
+          ..write('id: $id, ')
+          ..write('logoPath: $logoPath, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, logoPath, isActive, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoreLogosData &&
+          other.id == this.id &&
+          other.logoPath == this.logoPath &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt);
+}
+
+class ExpenseCategories extends Table
+    with TableInfo<ExpenseCategories, ExpenseCategoriesData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ExpenseCategories(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> isActive = GeneratedColumn<int>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    description,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'expense_categories';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ExpenseCategoriesData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ExpenseCategoriesData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  ExpenseCategories createAlias(String alias) {
+    return ExpenseCategories(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ExpenseCategoriesData extends DataClass
+    implements Insertable<ExpenseCategoriesData> {
+  final int id;
+  final String name;
+  final String? description;
+  final int isActive;
+  final String createdAt;
+  final String updatedAt;
+  const ExpenseCategoriesData({
+    required this.id,
+    required this.name,
+    this.description,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['is_active'] = Variable<int>(isActive);
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory ExpenseCategoriesData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ExpenseCategoriesData(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String?>(json['description']),
+      isActive: serializer.fromJson<int>(json['isActive']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String?>(description),
+      'isActive': serializer.toJson<int>(isActive),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  ExpenseCategoriesData copyWith({
+    int? id,
+    String? name,
+    Value<String?> description = const Value.absent(),
+    int? isActive,
+    String? createdAt,
+    String? updatedAt,
+  }) => ExpenseCategoriesData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description.present ? description.value : this.description,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ExpenseCategoriesData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, description, isActive, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ExpenseCategoriesData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ProductPriceHistories extends Table
+    with TableInfo<ProductPriceHistories, ProductPriceHistoriesData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ProductPriceHistories(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_variants(id)ON DELETE CASCADE',
+  );
+  late final GeneratedColumn<int> oldCostCents = GeneratedColumn<int>(
+    'old_cost_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> newCostCents = GeneratedColumn<int>(
+    'new_cost_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> oldPriceCents = GeneratedColumn<int>(
+    'old_price_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> newPriceCents = GeneratedColumn<int>(
+    'new_price_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> oldWholesalePriceCents = GeneratedColumn<int>(
+    'old_wholesale_price_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> newWholesalePriceCents = GeneratedColumn<int>(
+    'new_wholesale_price_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> userId = GeneratedColumn<int>(
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)ON DELETE SET NULL',
+  );
+  late final GeneratedColumn<String> changeReason = GeneratedColumn<String>(
+    'change_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    productId,
+    variantId,
+    oldCostCents,
+    newCostCents,
+    oldPriceCents,
+    newPriceCents,
+    oldWholesalePriceCents,
+    newWholesalePriceCents,
+    userId,
+    changeReason,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_price_histories';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductPriceHistoriesData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductPriceHistoriesData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      ),
+      oldCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}old_cost_cents'],
+      )!,
+      newCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}new_cost_cents'],
+      )!,
+      oldPriceCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}old_price_cents'],
+      )!,
+      newPriceCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}new_price_cents'],
+      )!,
+      oldWholesalePriceCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}old_wholesale_price_cents'],
+      ),
+      newWholesalePriceCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}new_wholesale_price_cents'],
+      ),
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}user_id'],
+      ),
+      changeReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}change_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ProductPriceHistories createAlias(String alias) {
+    return ProductPriceHistories(attachedDatabase, alias);
+  }
+
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ProductPriceHistoriesData extends DataClass
+    implements Insertable<ProductPriceHistoriesData> {
+  final int id;
+  final int productId;
+  final int? variantId;
+  final int oldCostCents;
+  final int newCostCents;
+  final int oldPriceCents;
+  final int newPriceCents;
+  final int? oldWholesalePriceCents;
+  final int? newWholesalePriceCents;
+  final int? userId;
+  final String? changeReason;
+  final String createdAt;
+  const ProductPriceHistoriesData({
+    required this.id,
+    required this.productId,
+    this.variantId,
+    required this.oldCostCents,
+    required this.newCostCents,
+    required this.oldPriceCents,
+    required this.newPriceCents,
+    this.oldWholesalePriceCents,
+    this.newWholesalePriceCents,
+    this.userId,
+    this.changeReason,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['product_id'] = Variable<int>(productId);
+    if (!nullToAbsent || variantId != null) {
+      map['variant_id'] = Variable<int>(variantId);
+    }
+    map['old_cost_cents'] = Variable<int>(oldCostCents);
+    map['new_cost_cents'] = Variable<int>(newCostCents);
+    map['old_price_cents'] = Variable<int>(oldPriceCents);
+    map['new_price_cents'] = Variable<int>(newPriceCents);
+    if (!nullToAbsent || oldWholesalePriceCents != null) {
+      map['old_wholesale_price_cents'] = Variable<int>(oldWholesalePriceCents);
+    }
+    if (!nullToAbsent || newWholesalePriceCents != null) {
+      map['new_wholesale_price_cents'] = Variable<int>(newWholesalePriceCents);
+    }
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<int>(userId);
+    }
+    if (!nullToAbsent || changeReason != null) {
+      map['change_reason'] = Variable<String>(changeReason);
+    }
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ProductPriceHistoriesData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductPriceHistoriesData(
+      id: serializer.fromJson<int>(json['id']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int?>(json['variantId']),
+      oldCostCents: serializer.fromJson<int>(json['oldCostCents']),
+      newCostCents: serializer.fromJson<int>(json['newCostCents']),
+      oldPriceCents: serializer.fromJson<int>(json['oldPriceCents']),
+      newPriceCents: serializer.fromJson<int>(json['newPriceCents']),
+      oldWholesalePriceCents: serializer.fromJson<int?>(
+        json['oldWholesalePriceCents'],
+      ),
+      newWholesalePriceCents: serializer.fromJson<int?>(
+        json['newWholesalePriceCents'],
+      ),
+      userId: serializer.fromJson<int?>(json['userId']),
+      changeReason: serializer.fromJson<String?>(json['changeReason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int?>(variantId),
+      'oldCostCents': serializer.toJson<int>(oldCostCents),
+      'newCostCents': serializer.toJson<int>(newCostCents),
+      'oldPriceCents': serializer.toJson<int>(oldPriceCents),
+      'newPriceCents': serializer.toJson<int>(newPriceCents),
+      'oldWholesalePriceCents': serializer.toJson<int?>(oldWholesalePriceCents),
+      'newWholesalePriceCents': serializer.toJson<int?>(newWholesalePriceCents),
+      'userId': serializer.toJson<int?>(userId),
+      'changeReason': serializer.toJson<String?>(changeReason),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ProductPriceHistoriesData copyWith({
+    int? id,
+    int? productId,
+    Value<int?> variantId = const Value.absent(),
+    int? oldCostCents,
+    int? newCostCents,
+    int? oldPriceCents,
+    int? newPriceCents,
+    Value<int?> oldWholesalePriceCents = const Value.absent(),
+    Value<int?> newWholesalePriceCents = const Value.absent(),
+    Value<int?> userId = const Value.absent(),
+    Value<String?> changeReason = const Value.absent(),
+    String? createdAt,
+  }) => ProductPriceHistoriesData(
+    id: id ?? this.id,
+    productId: productId ?? this.productId,
+    variantId: variantId.present ? variantId.value : this.variantId,
+    oldCostCents: oldCostCents ?? this.oldCostCents,
+    newCostCents: newCostCents ?? this.newCostCents,
+    oldPriceCents: oldPriceCents ?? this.oldPriceCents,
+    newPriceCents: newPriceCents ?? this.newPriceCents,
+    oldWholesalePriceCents: oldWholesalePriceCents.present
+        ? oldWholesalePriceCents.value
+        : this.oldWholesalePriceCents,
+    newWholesalePriceCents: newWholesalePriceCents.present
+        ? newWholesalePriceCents.value
+        : this.newWholesalePriceCents,
+    userId: userId.present ? userId.value : this.userId,
+    changeReason: changeReason.present ? changeReason.value : this.changeReason,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ProductPriceHistoriesData(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('oldCostCents: $oldCostCents, ')
+          ..write('newCostCents: $newCostCents, ')
+          ..write('oldPriceCents: $oldPriceCents, ')
+          ..write('newPriceCents: $newPriceCents, ')
+          ..write('oldWholesalePriceCents: $oldWholesalePriceCents, ')
+          ..write('newWholesalePriceCents: $newWholesalePriceCents, ')
+          ..write('userId: $userId, ')
+          ..write('changeReason: $changeReason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    productId,
+    variantId,
+    oldCostCents,
+    newCostCents,
+    oldPriceCents,
+    newPriceCents,
+    oldWholesalePriceCents,
+    newWholesalePriceCents,
+    userId,
+    changeReason,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductPriceHistoriesData &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.oldCostCents == this.oldCostCents &&
+          other.newCostCents == this.newCostCents &&
+          other.oldPriceCents == this.oldPriceCents &&
+          other.newPriceCents == this.newPriceCents &&
+          other.oldWholesalePriceCents == this.oldWholesalePriceCents &&
+          other.newWholesalePriceCents == this.newWholesalePriceCents &&
+          other.userId == this.userId &&
+          other.changeReason == this.changeReason &&
+          other.createdAt == this.createdAt);
 }
 
 class LoyaltyTiers extends Table
@@ -12639,6 +18754,24 @@ class SaleItems extends Table with TableInfo<SaleItems, SaleItemsData> {
     $customConstraints:
         'NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
   );
+  late final GeneratedColumn<int> supplierIdentityId = GeneratedColumn<int>(
+    'supplier_identity_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES supplier_product_identities(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> consignmentLayerId =
+      GeneratedColumn<String>(
+        'consignment_layer_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
   late final GeneratedColumn<int> employeeId = GeneratedColumn<int>(
     'employee_id',
     aliasedName,
@@ -12783,6 +18916,8 @@ class SaleItems extends Table with TableInfo<SaleItems, SaleItemsData> {
     saleId,
     productId,
     variantId,
+    supplierIdentityId,
+    consignmentLayerId,
     employeeId,
     quantity,
     quantityScale,
@@ -12826,6 +18961,14 @@ class SaleItems extends Table with TableInfo<SaleItems, SaleItemsData> {
       variantId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}variant_id'],
+      ),
+      supplierIdentityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_identity_id'],
+      ),
+      consignmentLayerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}consignment_layer_id'],
       ),
       employeeId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -12908,6 +19051,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
   final int saleId;
   final int productId;
   final int? variantId;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
   final int? employeeId;
   final int quantity;
   final int quantityScale;
@@ -12929,6 +19074,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     required this.saleId,
     required this.productId,
     this.variantId,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
     this.employeeId,
     required this.quantity,
     required this.quantityScale,
@@ -12954,6 +19101,12 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     map['product_id'] = Variable<int>(productId);
     if (!nullToAbsent || variantId != null) {
       map['variant_id'] = Variable<int>(variantId);
+    }
+    if (!nullToAbsent || supplierIdentityId != null) {
+      map['supplier_identity_id'] = Variable<int>(supplierIdentityId);
+    }
+    if (!nullToAbsent || consignmentLayerId != null) {
+      map['consignment_layer_id'] = Variable<String>(consignmentLayerId);
     }
     if (!nullToAbsent || employeeId != null) {
       map['employee_id'] = Variable<int>(employeeId);
@@ -13000,6 +19153,10 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
       saleId: serializer.fromJson<int>(json['saleId']),
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int?>(json['variantId']),
+      supplierIdentityId: serializer.fromJson<int?>(json['supplierIdentityId']),
+      consignmentLayerId: serializer.fromJson<String?>(
+        json['consignmentLayerId'],
+      ),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
       quantityScale: serializer.fromJson<int>(json['quantityScale']),
@@ -13034,6 +19191,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
       'saleId': serializer.toJson<int>(saleId),
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int?>(variantId),
+      'supplierIdentityId': serializer.toJson<int?>(supplierIdentityId),
+      'consignmentLayerId': serializer.toJson<String?>(consignmentLayerId),
       'employeeId': serializer.toJson<int?>(employeeId),
       'quantity': serializer.toJson<int>(quantity),
       'quantityScale': serializer.toJson<int>(quantityScale),
@@ -13064,6 +19223,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     int? saleId,
     int? productId,
     Value<int?> variantId = const Value.absent(),
+    Value<int?> supplierIdentityId = const Value.absent(),
+    Value<String?> consignmentLayerId = const Value.absent(),
     Value<int?> employeeId = const Value.absent(),
     int? quantity,
     int? quantityScale,
@@ -13085,6 +19246,12 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     saleId: saleId ?? this.saleId,
     productId: productId ?? this.productId,
     variantId: variantId.present ? variantId.value : this.variantId,
+    supplierIdentityId: supplierIdentityId.present
+        ? supplierIdentityId.value
+        : this.supplierIdentityId,
+    consignmentLayerId: consignmentLayerId.present
+        ? consignmentLayerId.value
+        : this.consignmentLayerId,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
     quantity: quantity ?? this.quantity,
     quantityScale: quantityScale ?? this.quantityScale,
@@ -13115,6 +19282,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
           ..write('saleId: $saleId, ')
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
+          ..write('supplierIdentityId: $supplierIdentityId, ')
+          ..write('consignmentLayerId: $consignmentLayerId, ')
           ..write('employeeId: $employeeId, ')
           ..write('quantity: $quantity, ')
           ..write('quantityScale: $quantityScale, ')
@@ -13136,11 +19305,13 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     saleId,
     productId,
     variantId,
+    supplierIdentityId,
+    consignmentLayerId,
     employeeId,
     quantity,
     quantityScale,
@@ -13157,7 +19328,7 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     qtyReturnedLinked,
     qtyReturnedAdjustment,
     createdAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -13166,6 +19337,8 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
           other.saleId == this.saleId &&
           other.productId == this.productId &&
           other.variantId == this.variantId &&
+          other.supplierIdentityId == this.supplierIdentityId &&
+          other.consignmentLayerId == this.consignmentLayerId &&
           other.employeeId == this.employeeId &&
           other.quantity == this.quantity &&
           other.quantityScale == this.quantityScale &&
@@ -19504,6 +25677,48 @@ class SaleReturnAdjustmentItems extends Table
         requiredDuringInsert: false,
         $customConstraints: 'NULL',
       );
+  late final GeneratedColumn<int> supplierIdentityId = GeneratedColumn<int>(
+    'supplier_identity_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES supplier_product_identities(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> sourceResolution = GeneratedColumn<String>(
+    'source_resolution',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> sourceResolutionReason =
+      GeneratedColumn<String>(
+        'source_resolution_reason',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
+  late final GeneratedColumn<int> sourceResolvedBy = GeneratedColumn<int>(
+    'source_resolved_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> sourceResolvedAt = GeneratedColumn<String>(
+    'source_resolved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
   late final GeneratedColumn<int> taxCents = GeneratedColumn<int>(
     'tax_cents',
     aliasedName,
@@ -19596,6 +25811,11 @@ class SaleReturnAdjustmentItems extends Table
     itemDiscountAtPostCents,
     invoiceDiscountAtPostCents,
     consignmentLayerId,
+    supplierIdentityId,
+    sourceResolution,
+    sourceResolutionReason,
+    sourceResolvedBy,
+    sourceResolvedAt,
     taxCents,
     totalCents,
     reason,
@@ -19676,6 +25896,26 @@ class SaleReturnAdjustmentItems extends Table
         DriftSqlType.string,
         data['${effectivePrefix}consignment_layer_id'],
       ),
+      supplierIdentityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_identity_id'],
+      ),
+      sourceResolution: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_resolution'],
+      ),
+      sourceResolutionReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_resolution_reason'],
+      ),
+      sourceResolvedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_resolved_by'],
+      ),
+      sourceResolvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_resolved_at'],
+      ),
       taxCents: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}tax_cents'],
@@ -19740,6 +25980,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
   final int? itemDiscountAtPostCents;
   final int? invoiceDiscountAtPostCents;
   final String? consignmentLayerId;
+  final int? supplierIdentityId;
+  final String? sourceResolution;
+  final String? sourceResolutionReason;
+  final int? sourceResolvedBy;
+  final String? sourceResolvedAt;
   final int taxCents;
   final int totalCents;
   final String? reason;
@@ -19764,6 +26009,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
     this.itemDiscountAtPostCents,
     this.invoiceDiscountAtPostCents,
     this.consignmentLayerId,
+    this.supplierIdentityId,
+    this.sourceResolution,
+    this.sourceResolutionReason,
+    this.sourceResolvedBy,
+    this.sourceResolvedAt,
     required this.taxCents,
     required this.totalCents,
     this.reason,
@@ -19804,6 +26054,23 @@ class SaleReturnAdjustmentItemsData extends DataClass
     }
     if (!nullToAbsent || consignmentLayerId != null) {
       map['consignment_layer_id'] = Variable<String>(consignmentLayerId);
+    }
+    if (!nullToAbsent || supplierIdentityId != null) {
+      map['supplier_identity_id'] = Variable<int>(supplierIdentityId);
+    }
+    if (!nullToAbsent || sourceResolution != null) {
+      map['source_resolution'] = Variable<String>(sourceResolution);
+    }
+    if (!nullToAbsent || sourceResolutionReason != null) {
+      map['source_resolution_reason'] = Variable<String>(
+        sourceResolutionReason,
+      );
+    }
+    if (!nullToAbsent || sourceResolvedBy != null) {
+      map['source_resolved_by'] = Variable<int>(sourceResolvedBy);
+    }
+    if (!nullToAbsent || sourceResolvedAt != null) {
+      map['source_resolved_at'] = Variable<String>(sourceResolvedAt);
     }
     map['tax_cents'] = Variable<int>(taxCents);
     map['total_cents'] = Variable<int>(totalCents);
@@ -19855,6 +26122,13 @@ class SaleReturnAdjustmentItemsData extends DataClass
       consignmentLayerId: serializer.fromJson<String?>(
         json['consignmentLayerId'],
       ),
+      supplierIdentityId: serializer.fromJson<int?>(json['supplierIdentityId']),
+      sourceResolution: serializer.fromJson<String?>(json['sourceResolution']),
+      sourceResolutionReason: serializer.fromJson<String?>(
+        json['sourceResolutionReason'],
+      ),
+      sourceResolvedBy: serializer.fromJson<int?>(json['sourceResolvedBy']),
+      sourceResolvedAt: serializer.fromJson<String?>(json['sourceResolvedAt']),
       taxCents: serializer.fromJson<int>(json['taxCents']),
       totalCents: serializer.fromJson<int>(json['totalCents']),
       reason: serializer.fromJson<String?>(json['reason']),
@@ -19892,6 +26166,13 @@ class SaleReturnAdjustmentItemsData extends DataClass
         invoiceDiscountAtPostCents,
       ),
       'consignmentLayerId': serializer.toJson<String?>(consignmentLayerId),
+      'supplierIdentityId': serializer.toJson<int?>(supplierIdentityId),
+      'sourceResolution': serializer.toJson<String?>(sourceResolution),
+      'sourceResolutionReason': serializer.toJson<String?>(
+        sourceResolutionReason,
+      ),
+      'sourceResolvedBy': serializer.toJson<int?>(sourceResolvedBy),
+      'sourceResolvedAt': serializer.toJson<String?>(sourceResolvedAt),
       'taxCents': serializer.toJson<int>(taxCents),
       'totalCents': serializer.toJson<int>(totalCents),
       'reason': serializer.toJson<String?>(reason),
@@ -19921,6 +26202,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
     Value<int?> itemDiscountAtPostCents = const Value.absent(),
     Value<int?> invoiceDiscountAtPostCents = const Value.absent(),
     Value<String?> consignmentLayerId = const Value.absent(),
+    Value<int?> supplierIdentityId = const Value.absent(),
+    Value<String?> sourceResolution = const Value.absent(),
+    Value<String?> sourceResolutionReason = const Value.absent(),
+    Value<int?> sourceResolvedBy = const Value.absent(),
+    Value<String?> sourceResolvedAt = const Value.absent(),
     int? taxCents,
     int? totalCents,
     Value<String?> reason = const Value.absent(),
@@ -19953,6 +26239,21 @@ class SaleReturnAdjustmentItemsData extends DataClass
     consignmentLayerId: consignmentLayerId.present
         ? consignmentLayerId.value
         : this.consignmentLayerId,
+    supplierIdentityId: supplierIdentityId.present
+        ? supplierIdentityId.value
+        : this.supplierIdentityId,
+    sourceResolution: sourceResolution.present
+        ? sourceResolution.value
+        : this.sourceResolution,
+    sourceResolutionReason: sourceResolutionReason.present
+        ? sourceResolutionReason.value
+        : this.sourceResolutionReason,
+    sourceResolvedBy: sourceResolvedBy.present
+        ? sourceResolvedBy.value
+        : this.sourceResolvedBy,
+    sourceResolvedAt: sourceResolvedAt.present
+        ? sourceResolvedAt.value
+        : this.sourceResolvedAt,
     taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
     reason: reason.present ? reason.value : this.reason,
@@ -19988,6 +26289,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
           ..write('itemDiscountAtPostCents: $itemDiscountAtPostCents, ')
           ..write('invoiceDiscountAtPostCents: $invoiceDiscountAtPostCents, ')
           ..write('consignmentLayerId: $consignmentLayerId, ')
+          ..write('supplierIdentityId: $supplierIdentityId, ')
+          ..write('sourceResolution: $sourceResolution, ')
+          ..write('sourceResolutionReason: $sourceResolutionReason, ')
+          ..write('sourceResolvedBy: $sourceResolvedBy, ')
+          ..write('sourceResolvedAt: $sourceResolvedAt, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('reason: $reason, ')
@@ -20017,6 +26323,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
     itemDiscountAtPostCents,
     invoiceDiscountAtPostCents,
     consignmentLayerId,
+    supplierIdentityId,
+    sourceResolution,
+    sourceResolutionReason,
+    sourceResolvedBy,
+    sourceResolvedAt,
     taxCents,
     totalCents,
     reason,
@@ -20045,6 +26356,11 @@ class SaleReturnAdjustmentItemsData extends DataClass
           other.itemDiscountAtPostCents == this.itemDiscountAtPostCents &&
           other.invoiceDiscountAtPostCents == this.invoiceDiscountAtPostCents &&
           other.consignmentLayerId == this.consignmentLayerId &&
+          other.supplierIdentityId == this.supplierIdentityId &&
+          other.sourceResolution == this.sourceResolution &&
+          other.sourceResolutionReason == this.sourceResolutionReason &&
+          other.sourceResolvedBy == this.sourceResolvedBy &&
+          other.sourceResolvedAt == this.sourceResolvedAt &&
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.reason == this.reason &&
@@ -20167,6 +26483,15 @@ class BatchConsumptions extends Table
     $customConstraints:
         'NULL REFERENCES sale_return_adjustment_items(id)ON DELETE RESTRICT',
   );
+  late final GeneratedColumn<String> transferAllocationId =
+      GeneratedColumn<String>(
+        'transfer_allocation_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
   late final GeneratedColumn<String> notes = GeneratedColumn<String>(
     'notes',
     aliasedName,
@@ -20198,6 +26523,7 @@ class BatchConsumptions extends Table
     inventoryAdjustmentId,
     purchaseReturnAdjustmentItemId,
     saleReturnAdjustmentItemId,
+    transferAllocationId,
     notes,
     createdAt,
   ];
@@ -20260,6 +26586,10 @@ class BatchConsumptions extends Table
         DriftSqlType.int,
         data['${effectivePrefix}sale_return_adjustment_item_id'],
       ),
+      transferAllocationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_allocation_id'],
+      ),
       notes: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
@@ -20294,6 +26624,7 @@ class BatchConsumptionsData extends DataClass
   final int? inventoryAdjustmentId;
   final int? purchaseReturnAdjustmentItemId;
   final int? saleReturnAdjustmentItemId;
+  final String? transferAllocationId;
   final String? notes;
   final String createdAt;
   const BatchConsumptionsData({
@@ -20309,6 +26640,7 @@ class BatchConsumptionsData extends DataClass
     this.inventoryAdjustmentId,
     this.purchaseReturnAdjustmentItemId,
     this.saleReturnAdjustmentItemId,
+    this.transferAllocationId,
     this.notes,
     required this.createdAt,
   });
@@ -20343,6 +26675,9 @@ class BatchConsumptionsData extends DataClass
         saleReturnAdjustmentItemId,
       );
     }
+    if (!nullToAbsent || transferAllocationId != null) {
+      map['transfer_allocation_id'] = Variable<String>(transferAllocationId);
+    }
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
@@ -20376,6 +26711,9 @@ class BatchConsumptionsData extends DataClass
       saleReturnAdjustmentItemId: serializer.fromJson<int?>(
         json['saleReturnAdjustmentItemId'],
       ),
+      transferAllocationId: serializer.fromJson<String?>(
+        json['transferAllocationId'],
+      ),
       notes: serializer.fromJson<String?>(json['notes']),
       createdAt: serializer.fromJson<String>(json['createdAt']),
     );
@@ -20400,6 +26738,7 @@ class BatchConsumptionsData extends DataClass
       'saleReturnAdjustmentItemId': serializer.toJson<int?>(
         saleReturnAdjustmentItemId,
       ),
+      'transferAllocationId': serializer.toJson<String?>(transferAllocationId),
       'notes': serializer.toJson<String?>(notes),
       'createdAt': serializer.toJson<String>(createdAt),
     };
@@ -20418,6 +26757,7 @@ class BatchConsumptionsData extends DataClass
     Value<int?> inventoryAdjustmentId = const Value.absent(),
     Value<int?> purchaseReturnAdjustmentItemId = const Value.absent(),
     Value<int?> saleReturnAdjustmentItemId = const Value.absent(),
+    Value<String?> transferAllocationId = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     String? createdAt,
   }) => BatchConsumptionsData(
@@ -20443,6 +26783,9 @@ class BatchConsumptionsData extends DataClass
     saleReturnAdjustmentItemId: saleReturnAdjustmentItemId.present
         ? saleReturnAdjustmentItemId.value
         : this.saleReturnAdjustmentItemId,
+    transferAllocationId: transferAllocationId.present
+        ? transferAllocationId.value
+        : this.transferAllocationId,
     notes: notes.present ? notes.value : this.notes,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -20463,6 +26806,7 @@ class BatchConsumptionsData extends DataClass
             'purchaseReturnAdjustmentItemId: $purchaseReturnAdjustmentItemId, ',
           )
           ..write('saleReturnAdjustmentItemId: $saleReturnAdjustmentItemId, ')
+          ..write('transferAllocationId: $transferAllocationId, ')
           ..write('notes: $notes, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -20483,6 +26827,7 @@ class BatchConsumptionsData extends DataClass
     inventoryAdjustmentId,
     purchaseReturnAdjustmentItemId,
     saleReturnAdjustmentItemId,
+    transferAllocationId,
     notes,
     createdAt,
   );
@@ -20503,6 +26848,7 @@ class BatchConsumptionsData extends DataClass
           other.purchaseReturnAdjustmentItemId ==
               this.purchaseReturnAdjustmentItemId &&
           other.saleReturnAdjustmentItemId == this.saleReturnAdjustmentItemId &&
+          other.transferAllocationId == this.transferAllocationId &&
           other.notes == this.notes &&
           other.createdAt == this.createdAt);
 }
@@ -25891,2681 +32237,6 @@ class LoyaltySettingsData extends DataClass
           other.updatedAt == this.updatedAt);
 }
 
-class ConsignmentAgreements extends Table
-    with TableInfo<ConsignmentAgreements, ConsignmentAgreementsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ConsignmentAgreements(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> agreementKey = GeneratedColumn<String>(
-    'agreement_key',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
-    'revision',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 1',
-    defaultValue: const CustomExpression('1'),
-  );
-  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
-    'organization_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
-  );
-  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
-    'branch_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
-    'database_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
-  );
-  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
-    'supplier_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
-    'currency_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> agreementNumber = GeneratedColumn<String>(
-    'agreement_number',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
-    defaultValue: const CustomExpression('\'draft\''),
-  );
-  late final GeneratedColumn<String> effectiveFrom = GeneratedColumn<String>(
-    'effective_from',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> effectiveTo = GeneratedColumn<String>(
-    'effective_to',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> settlementFrequency =
-      GeneratedColumn<String>(
-        'settlement_frequency',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        $customConstraints: 'NOT NULL DEFAULT \'monthly\'',
-        defaultValue: const CustomExpression('\'monthly\''),
-      );
-  late final GeneratedColumn<int> paymentTermsDays = GeneratedColumn<int>(
-    'payment_terms_days',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'\'',
-    defaultValue: const CustomExpression('\'\''),
-  );
-  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-    'created_by',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<int> activatedBy = GeneratedColumn<int>(
-    'activated_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> activatedAt = GeneratedColumn<String>(
-    'activated_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> endedBy = GeneratedColumn<int>(
-    'ended_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> endedAt = GeneratedColumn<String>(
-    'ended_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    agreementKey,
-    revision,
-    organizationId,
-    branchId,
-    databaseId,
-    supplierId,
-    currencyId,
-    agreementNumber,
-    status,
-    effectiveFrom,
-    effectiveTo,
-    settlementFrequency,
-    paymentTermsDays,
-    notes,
-    createdBy,
-    activatedBy,
-    activatedAt,
-    endedBy,
-    endedAt,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'consignment_agreements';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  List<Set<GeneratedColumn>> get uniqueKeys => [
-    {agreementKey, revision},
-    {branchId, agreementNumber, revision},
-  ];
-  @override
-  ConsignmentAgreementsData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ConsignmentAgreementsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      agreementKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_key'],
-      )!,
-      revision: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}revision'],
-      )!,
-      organizationId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}organization_id'],
-      )!,
-      branchId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}branch_id'],
-      )!,
-      databaseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}database_id'],
-      )!,
-      supplierId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_id'],
-      )!,
-      currencyId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}currency_id'],
-      )!,
-      agreementNumber: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_number'],
-      )!,
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      effectiveFrom: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}effective_from'],
-      )!,
-      effectiveTo: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}effective_to'],
-      ),
-      settlementFrequency: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}settlement_frequency'],
-      )!,
-      paymentTermsDays: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}payment_terms_days'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
-      createdBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_by'],
-      )!,
-      activatedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}activated_by'],
-      ),
-      activatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}activated_at'],
-      ),
-      endedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}ended_by'],
-      ),
-      endedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}ended_at'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  ConsignmentAgreements createAlias(String alias) {
-    return ConsignmentAgreements(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'UNIQUE(agreement_key, revision)',
-    'UNIQUE(branch_id, agreement_number, revision)',
-    'FOREIGN KEY(branch_id, organization_id)REFERENCES business_branches(id, organization_id)ON DELETE RESTRICT',
-    'CHECK(status IN (\'draft\', \'active\', \'superseded\', \'closed\'))',
-    'CHECK(settlement_frequency IN (\'immediate\', \'daily\', \'weekly\', \'monthly\', \'manual\'))',
-    'CHECK(revision >= 1 AND revision <= 9007199254740991)',
-    'CHECK(payment_terms_days BETWEEN 0 AND 3650)',
-    'CHECK(length(notes) <= 2000)',
-    'CHECK(effective_to IS NULL OR effective_to >= effective_from)',
-    'CHECK((status = \'draft\' AND activated_by IS NULL AND activated_at IS NULL)OR(status != \'draft\' AND activated_by IS NOT NULL AND activated_at IS NOT NULL))',
-    'CHECK((status IN (\'draft\', \'active\') AND ended_by IS NULL AND ended_at IS NULL)OR(status IN (\'superseded\', \'closed\') AND ended_by IS NOT NULL AND ended_at IS NOT NULL))',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ConsignmentAgreementsData extends DataClass
-    implements Insertable<ConsignmentAgreementsData> {
-  final String id;
-  final String agreementKey;
-  final int revision;
-  final String organizationId;
-  final String branchId;
-  final String databaseId;
-  final int supplierId;
-  final int currencyId;
-  final String agreementNumber;
-  final String status;
-  final String effectiveFrom;
-  final String? effectiveTo;
-  final String settlementFrequency;
-  final int paymentTermsDays;
-  final String notes;
-  final int createdBy;
-  final int? activatedBy;
-  final String? activatedAt;
-  final int? endedBy;
-  final String? endedAt;
-  final String createdAt;
-  final String updatedAt;
-  const ConsignmentAgreementsData({
-    required this.id,
-    required this.agreementKey,
-    required this.revision,
-    required this.organizationId,
-    required this.branchId,
-    required this.databaseId,
-    required this.supplierId,
-    required this.currencyId,
-    required this.agreementNumber,
-    required this.status,
-    required this.effectiveFrom,
-    this.effectiveTo,
-    required this.settlementFrequency,
-    required this.paymentTermsDays,
-    required this.notes,
-    required this.createdBy,
-    this.activatedBy,
-    this.activatedAt,
-    this.endedBy,
-    this.endedAt,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['agreement_key'] = Variable<String>(agreementKey);
-    map['revision'] = Variable<int>(revision);
-    map['organization_id'] = Variable<String>(organizationId);
-    map['branch_id'] = Variable<String>(branchId);
-    map['database_id'] = Variable<String>(databaseId);
-    map['supplier_id'] = Variable<int>(supplierId);
-    map['currency_id'] = Variable<int>(currencyId);
-    map['agreement_number'] = Variable<String>(agreementNumber);
-    map['status'] = Variable<String>(status);
-    map['effective_from'] = Variable<String>(effectiveFrom);
-    if (!nullToAbsent || effectiveTo != null) {
-      map['effective_to'] = Variable<String>(effectiveTo);
-    }
-    map['settlement_frequency'] = Variable<String>(settlementFrequency);
-    map['payment_terms_days'] = Variable<int>(paymentTermsDays);
-    map['notes'] = Variable<String>(notes);
-    map['created_by'] = Variable<int>(createdBy);
-    if (!nullToAbsent || activatedBy != null) {
-      map['activated_by'] = Variable<int>(activatedBy);
-    }
-    if (!nullToAbsent || activatedAt != null) {
-      map['activated_at'] = Variable<String>(activatedAt);
-    }
-    if (!nullToAbsent || endedBy != null) {
-      map['ended_by'] = Variable<int>(endedBy);
-    }
-    if (!nullToAbsent || endedAt != null) {
-      map['ended_at'] = Variable<String>(endedAt);
-    }
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory ConsignmentAgreementsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ConsignmentAgreementsData(
-      id: serializer.fromJson<String>(json['id']),
-      agreementKey: serializer.fromJson<String>(json['agreementKey']),
-      revision: serializer.fromJson<int>(json['revision']),
-      organizationId: serializer.fromJson<String>(json['organizationId']),
-      branchId: serializer.fromJson<String>(json['branchId']),
-      databaseId: serializer.fromJson<String>(json['databaseId']),
-      supplierId: serializer.fromJson<int>(json['supplierId']),
-      currencyId: serializer.fromJson<int>(json['currencyId']),
-      agreementNumber: serializer.fromJson<String>(json['agreementNumber']),
-      status: serializer.fromJson<String>(json['status']),
-      effectiveFrom: serializer.fromJson<String>(json['effectiveFrom']),
-      effectiveTo: serializer.fromJson<String?>(json['effectiveTo']),
-      settlementFrequency: serializer.fromJson<String>(
-        json['settlementFrequency'],
-      ),
-      paymentTermsDays: serializer.fromJson<int>(json['paymentTermsDays']),
-      notes: serializer.fromJson<String>(json['notes']),
-      createdBy: serializer.fromJson<int>(json['createdBy']),
-      activatedBy: serializer.fromJson<int?>(json['activatedBy']),
-      activatedAt: serializer.fromJson<String?>(json['activatedAt']),
-      endedBy: serializer.fromJson<int?>(json['endedBy']),
-      endedAt: serializer.fromJson<String?>(json['endedAt']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'agreementKey': serializer.toJson<String>(agreementKey),
-      'revision': serializer.toJson<int>(revision),
-      'organizationId': serializer.toJson<String>(organizationId),
-      'branchId': serializer.toJson<String>(branchId),
-      'databaseId': serializer.toJson<String>(databaseId),
-      'supplierId': serializer.toJson<int>(supplierId),
-      'currencyId': serializer.toJson<int>(currencyId),
-      'agreementNumber': serializer.toJson<String>(agreementNumber),
-      'status': serializer.toJson<String>(status),
-      'effectiveFrom': serializer.toJson<String>(effectiveFrom),
-      'effectiveTo': serializer.toJson<String?>(effectiveTo),
-      'settlementFrequency': serializer.toJson<String>(settlementFrequency),
-      'paymentTermsDays': serializer.toJson<int>(paymentTermsDays),
-      'notes': serializer.toJson<String>(notes),
-      'createdBy': serializer.toJson<int>(createdBy),
-      'activatedBy': serializer.toJson<int?>(activatedBy),
-      'activatedAt': serializer.toJson<String?>(activatedAt),
-      'endedBy': serializer.toJson<int?>(endedBy),
-      'endedAt': serializer.toJson<String?>(endedAt),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  ConsignmentAgreementsData copyWith({
-    String? id,
-    String? agreementKey,
-    int? revision,
-    String? organizationId,
-    String? branchId,
-    String? databaseId,
-    int? supplierId,
-    int? currencyId,
-    String? agreementNumber,
-    String? status,
-    String? effectiveFrom,
-    Value<String?> effectiveTo = const Value.absent(),
-    String? settlementFrequency,
-    int? paymentTermsDays,
-    String? notes,
-    int? createdBy,
-    Value<int?> activatedBy = const Value.absent(),
-    Value<String?> activatedAt = const Value.absent(),
-    Value<int?> endedBy = const Value.absent(),
-    Value<String?> endedAt = const Value.absent(),
-    String? createdAt,
-    String? updatedAt,
-  }) => ConsignmentAgreementsData(
-    id: id ?? this.id,
-    agreementKey: agreementKey ?? this.agreementKey,
-    revision: revision ?? this.revision,
-    organizationId: organizationId ?? this.organizationId,
-    branchId: branchId ?? this.branchId,
-    databaseId: databaseId ?? this.databaseId,
-    supplierId: supplierId ?? this.supplierId,
-    currencyId: currencyId ?? this.currencyId,
-    agreementNumber: agreementNumber ?? this.agreementNumber,
-    status: status ?? this.status,
-    effectiveFrom: effectiveFrom ?? this.effectiveFrom,
-    effectiveTo: effectiveTo.present ? effectiveTo.value : this.effectiveTo,
-    settlementFrequency: settlementFrequency ?? this.settlementFrequency,
-    paymentTermsDays: paymentTermsDays ?? this.paymentTermsDays,
-    notes: notes ?? this.notes,
-    createdBy: createdBy ?? this.createdBy,
-    activatedBy: activatedBy.present ? activatedBy.value : this.activatedBy,
-    activatedAt: activatedAt.present ? activatedAt.value : this.activatedAt,
-    endedBy: endedBy.present ? endedBy.value : this.endedBy,
-    endedAt: endedAt.present ? endedAt.value : this.endedAt,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ConsignmentAgreementsData(')
-          ..write('id: $id, ')
-          ..write('agreementKey: $agreementKey, ')
-          ..write('revision: $revision, ')
-          ..write('organizationId: $organizationId, ')
-          ..write('branchId: $branchId, ')
-          ..write('databaseId: $databaseId, ')
-          ..write('supplierId: $supplierId, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('agreementNumber: $agreementNumber, ')
-          ..write('status: $status, ')
-          ..write('effectiveFrom: $effectiveFrom, ')
-          ..write('effectiveTo: $effectiveTo, ')
-          ..write('settlementFrequency: $settlementFrequency, ')
-          ..write('paymentTermsDays: $paymentTermsDays, ')
-          ..write('notes: $notes, ')
-          ..write('createdBy: $createdBy, ')
-          ..write('activatedBy: $activatedBy, ')
-          ..write('activatedAt: $activatedAt, ')
-          ..write('endedBy: $endedBy, ')
-          ..write('endedAt: $endedAt, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hashAll([
-    id,
-    agreementKey,
-    revision,
-    organizationId,
-    branchId,
-    databaseId,
-    supplierId,
-    currencyId,
-    agreementNumber,
-    status,
-    effectiveFrom,
-    effectiveTo,
-    settlementFrequency,
-    paymentTermsDays,
-    notes,
-    createdBy,
-    activatedBy,
-    activatedAt,
-    endedBy,
-    endedAt,
-    createdAt,
-    updatedAt,
-  ]);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ConsignmentAgreementsData &&
-          other.id == this.id &&
-          other.agreementKey == this.agreementKey &&
-          other.revision == this.revision &&
-          other.organizationId == this.organizationId &&
-          other.branchId == this.branchId &&
-          other.databaseId == this.databaseId &&
-          other.supplierId == this.supplierId &&
-          other.currencyId == this.currencyId &&
-          other.agreementNumber == this.agreementNumber &&
-          other.status == this.status &&
-          other.effectiveFrom == this.effectiveFrom &&
-          other.effectiveTo == this.effectiveTo &&
-          other.settlementFrequency == this.settlementFrequency &&
-          other.paymentTermsDays == this.paymentTermsDays &&
-          other.notes == this.notes &&
-          other.createdBy == this.createdBy &&
-          other.activatedBy == this.activatedBy &&
-          other.activatedAt == this.activatedAt &&
-          other.endedBy == this.endedBy &&
-          other.endedAt == this.endedAt &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class ConsignmentAgreementItems extends Table
-    with TableInfo<ConsignmentAgreementItems, ConsignmentAgreementItemsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ConsignmentAgreementItems(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
-    'agreement_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
-    'product_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
-    'settlement_basis',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
-    'unit_cost_cents',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
-    'supplier_share_bps',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
-    'include_line_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT 1 CHECK (include_line_discount IN (0, 1))',
-    defaultValue: const CustomExpression('1'),
-  );
-  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
-    'include_invoice_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT 1 CHECK (include_invoice_discount IN (0, 1))',
-    defaultValue: const CustomExpression('1'),
-  );
-  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
-    'include_sales_tax',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NOT NULL DEFAULT 0 CHECK (include_sales_tax IN (0, 1))',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    agreementId,
-    productId,
-    variantId,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'consignment_agreement_items';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ConsignmentAgreementItemsData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ConsignmentAgreementItemsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      agreementId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_id'],
-      )!,
-      productId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}product_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      ),
-      settlementBasis: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}settlement_basis'],
-      )!,
-      unitCostCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}unit_cost_cents'],
-      ),
-      supplierShareBps: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_share_bps'],
-      ),
-      includeLineDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_line_discount'],
-      )!,
-      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_invoice_discount'],
-      )!,
-      includeSalesTax: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_sales_tax'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  ConsignmentAgreementItems createAlias(String alias) {
-    return ConsignmentAgreementItems(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'CHECK(settlement_basis IN (\'fixed_unit_cost\', \'net_sales_percentage\'))',
-    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ConsignmentAgreementItemsData extends DataClass
-    implements Insertable<ConsignmentAgreementItemsData> {
-  final String id;
-  final String agreementId;
-  final int productId;
-  final int? variantId;
-  final String settlementBasis;
-  final int? unitCostCents;
-  final int? supplierShareBps;
-  final int includeLineDiscount;
-  final int includeInvoiceDiscount;
-  final int includeSalesTax;
-  final String createdAt;
-  const ConsignmentAgreementItemsData({
-    required this.id,
-    required this.agreementId,
-    required this.productId,
-    this.variantId,
-    required this.settlementBasis,
-    this.unitCostCents,
-    this.supplierShareBps,
-    required this.includeLineDiscount,
-    required this.includeInvoiceDiscount,
-    required this.includeSalesTax,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['agreement_id'] = Variable<String>(agreementId);
-    map['product_id'] = Variable<int>(productId);
-    if (!nullToAbsent || variantId != null) {
-      map['variant_id'] = Variable<int>(variantId);
-    }
-    map['settlement_basis'] = Variable<String>(settlementBasis);
-    if (!nullToAbsent || unitCostCents != null) {
-      map['unit_cost_cents'] = Variable<int>(unitCostCents);
-    }
-    if (!nullToAbsent || supplierShareBps != null) {
-      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
-    }
-    map['include_line_discount'] = Variable<int>(includeLineDiscount);
-    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
-    map['include_sales_tax'] = Variable<int>(includeSalesTax);
-    map['created_at'] = Variable<String>(createdAt);
-    return map;
-  }
-
-  factory ConsignmentAgreementItemsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ConsignmentAgreementItemsData(
-      id: serializer.fromJson<String>(json['id']),
-      agreementId: serializer.fromJson<String>(json['agreementId']),
-      productId: serializer.fromJson<int>(json['productId']),
-      variantId: serializer.fromJson<int?>(json['variantId']),
-      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
-      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
-      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
-      includeLineDiscount: serializer.fromJson<int>(
-        json['includeLineDiscount'],
-      ),
-      includeInvoiceDiscount: serializer.fromJson<int>(
-        json['includeInvoiceDiscount'],
-      ),
-      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'agreementId': serializer.toJson<String>(agreementId),
-      'productId': serializer.toJson<int>(productId),
-      'variantId': serializer.toJson<int?>(variantId),
-      'settlementBasis': serializer.toJson<String>(settlementBasis),
-      'unitCostCents': serializer.toJson<int?>(unitCostCents),
-      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
-      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
-      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
-      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
-      'createdAt': serializer.toJson<String>(createdAt),
-    };
-  }
-
-  ConsignmentAgreementItemsData copyWith({
-    String? id,
-    String? agreementId,
-    int? productId,
-    Value<int?> variantId = const Value.absent(),
-    String? settlementBasis,
-    Value<int?> unitCostCents = const Value.absent(),
-    Value<int?> supplierShareBps = const Value.absent(),
-    int? includeLineDiscount,
-    int? includeInvoiceDiscount,
-    int? includeSalesTax,
-    String? createdAt,
-  }) => ConsignmentAgreementItemsData(
-    id: id ?? this.id,
-    agreementId: agreementId ?? this.agreementId,
-    productId: productId ?? this.productId,
-    variantId: variantId.present ? variantId.value : this.variantId,
-    settlementBasis: settlementBasis ?? this.settlementBasis,
-    unitCostCents: unitCostCents.present
-        ? unitCostCents.value
-        : this.unitCostCents,
-    supplierShareBps: supplierShareBps.present
-        ? supplierShareBps.value
-        : this.supplierShareBps,
-    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
-    includeInvoiceDiscount:
-        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
-    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ConsignmentAgreementItemsData(')
-          ..write('id: $id, ')
-          ..write('agreementId: $agreementId, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('settlementBasis: $settlementBasis, ')
-          ..write('unitCostCents: $unitCostCents, ')
-          ..write('supplierShareBps: $supplierShareBps, ')
-          ..write('includeLineDiscount: $includeLineDiscount, ')
-          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
-          ..write('includeSalesTax: $includeSalesTax, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    agreementId,
-    productId,
-    variantId,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    createdAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ConsignmentAgreementItemsData &&
-          other.id == this.id &&
-          other.agreementId == this.agreementId &&
-          other.productId == this.productId &&
-          other.variantId == this.variantId &&
-          other.settlementBasis == this.settlementBasis &&
-          other.unitCostCents == this.unitCostCents &&
-          other.supplierShareBps == this.supplierShareBps &&
-          other.includeLineDiscount == this.includeLineDiscount &&
-          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
-          other.includeSalesTax == this.includeSalesTax &&
-          other.createdAt == this.createdAt);
-}
-
-class ConsignmentReceipts extends Table
-    with TableInfo<ConsignmentReceipts, ConsignmentReceiptsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ConsignmentReceipts(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
-    'organization_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
-  );
-  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
-    'branch_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
-    'database_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
-  );
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
-    'supplier_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
-    'agreement_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
-    'currency_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> receiptNumber = GeneratedColumn<String>(
-    'receipt_number',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
-    defaultValue: const CustomExpression('\'draft\''),
-  );
-  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
-    'request_key',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL UNIQUE',
-  );
-  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
-    'request_hash',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> receivedAt = GeneratedColumn<String>(
-    'received_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
-    'notes',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'\'',
-    defaultValue: const CustomExpression('\'\''),
-  );
-  late final GeneratedColumn<int> lineCount = GeneratedColumn<int>(
-    'line_count',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-    'created_by',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
-    'posted_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
-    'posted_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> voidedBy = GeneratedColumn<int>(
-    'voided_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> voidedAt = GeneratedColumn<String>(
-    'voided_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
-    'void_reason',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'\'',
-    defaultValue: const CustomExpression('\'\''),
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    organizationId,
-    branchId,
-    databaseId,
-    warehouseId,
-    supplierId,
-    agreementId,
-    currencyId,
-    receiptNumber,
-    status,
-    requestKey,
-    requestHash,
-    receivedAt,
-    notes,
-    lineCount,
-    createdBy,
-    postedBy,
-    postedAt,
-    voidedBy,
-    voidedAt,
-    voidReason,
-    createdAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'consignment_receipts';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  List<Set<GeneratedColumn>> get uniqueKeys => [
-    {branchId, receiptNumber},
-  ];
-  @override
-  ConsignmentReceiptsData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ConsignmentReceiptsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      organizationId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}organization_id'],
-      )!,
-      branchId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}branch_id'],
-      )!,
-      databaseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}database_id'],
-      )!,
-      warehouseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
-      )!,
-      supplierId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_id'],
-      )!,
-      agreementId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_id'],
-      )!,
-      currencyId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}currency_id'],
-      )!,
-      receiptNumber: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}receipt_number'],
-      )!,
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      requestKey: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}request_key'],
-      )!,
-      requestHash: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}request_hash'],
-      )!,
-      receivedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}received_at'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
-      lineCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}line_count'],
-      )!,
-      createdBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_by'],
-      )!,
-      postedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}posted_by'],
-      ),
-      postedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}posted_at'],
-      ),
-      voidedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}voided_by'],
-      ),
-      voidedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}voided_at'],
-      ),
-      voidReason: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}void_reason'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-    );
-  }
-
-  @override
-  ConsignmentReceipts createAlias(String alias) {
-    return ConsignmentReceipts(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'UNIQUE(branch_id, receipt_number)',
-    'FOREIGN KEY(warehouse_id, branch_id, organization_id)REFERENCES business_warehouses(id, branch_id, organization_id)ON DELETE RESTRICT',
-    'CHECK(status IN (\'draft\', \'posted\', \'voided\'))',
-    'CHECK(line_count BETWEEN 1 AND 500)',
-    'CHECK(length(notes) <= 2000)',
-    'CHECK(length(void_reason) <= 500)',
-    'CHECK((status = \'draft\' AND posted_by IS NULL AND posted_at IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0)OR(status = \'posted\' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0)OR(status = \'voided\' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NOT NULL AND voided_at IS NOT NULL AND length(trim(void_reason)) > 0))',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ConsignmentReceiptsData extends DataClass
-    implements Insertable<ConsignmentReceiptsData> {
-  final String id;
-  final String organizationId;
-  final String branchId;
-  final String databaseId;
-  final String warehouseId;
-  final int supplierId;
-  final String agreementId;
-  final int currencyId;
-  final String receiptNumber;
-  final String status;
-  final String requestKey;
-  final String requestHash;
-  final String receivedAt;
-  final String notes;
-  final int lineCount;
-  final int createdBy;
-  final int? postedBy;
-  final String? postedAt;
-  final int? voidedBy;
-  final String? voidedAt;
-  final String voidReason;
-  final String createdAt;
-  const ConsignmentReceiptsData({
-    required this.id,
-    required this.organizationId,
-    required this.branchId,
-    required this.databaseId,
-    required this.warehouseId,
-    required this.supplierId,
-    required this.agreementId,
-    required this.currencyId,
-    required this.receiptNumber,
-    required this.status,
-    required this.requestKey,
-    required this.requestHash,
-    required this.receivedAt,
-    required this.notes,
-    required this.lineCount,
-    required this.createdBy,
-    this.postedBy,
-    this.postedAt,
-    this.voidedBy,
-    this.voidedAt,
-    required this.voidReason,
-    required this.createdAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['organization_id'] = Variable<String>(organizationId);
-    map['branch_id'] = Variable<String>(branchId);
-    map['database_id'] = Variable<String>(databaseId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
-    map['supplier_id'] = Variable<int>(supplierId);
-    map['agreement_id'] = Variable<String>(agreementId);
-    map['currency_id'] = Variable<int>(currencyId);
-    map['receipt_number'] = Variable<String>(receiptNumber);
-    map['status'] = Variable<String>(status);
-    map['request_key'] = Variable<String>(requestKey);
-    map['request_hash'] = Variable<String>(requestHash);
-    map['received_at'] = Variable<String>(receivedAt);
-    map['notes'] = Variable<String>(notes);
-    map['line_count'] = Variable<int>(lineCount);
-    map['created_by'] = Variable<int>(createdBy);
-    if (!nullToAbsent || postedBy != null) {
-      map['posted_by'] = Variable<int>(postedBy);
-    }
-    if (!nullToAbsent || postedAt != null) {
-      map['posted_at'] = Variable<String>(postedAt);
-    }
-    if (!nullToAbsent || voidedBy != null) {
-      map['voided_by'] = Variable<int>(voidedBy);
-    }
-    if (!nullToAbsent || voidedAt != null) {
-      map['voided_at'] = Variable<String>(voidedAt);
-    }
-    map['void_reason'] = Variable<String>(voidReason);
-    map['created_at'] = Variable<String>(createdAt);
-    return map;
-  }
-
-  factory ConsignmentReceiptsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ConsignmentReceiptsData(
-      id: serializer.fromJson<String>(json['id']),
-      organizationId: serializer.fromJson<String>(json['organizationId']),
-      branchId: serializer.fromJson<String>(json['branchId']),
-      databaseId: serializer.fromJson<String>(json['databaseId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
-      supplierId: serializer.fromJson<int>(json['supplierId']),
-      agreementId: serializer.fromJson<String>(json['agreementId']),
-      currencyId: serializer.fromJson<int>(json['currencyId']),
-      receiptNumber: serializer.fromJson<String>(json['receiptNumber']),
-      status: serializer.fromJson<String>(json['status']),
-      requestKey: serializer.fromJson<String>(json['requestKey']),
-      requestHash: serializer.fromJson<String>(json['requestHash']),
-      receivedAt: serializer.fromJson<String>(json['receivedAt']),
-      notes: serializer.fromJson<String>(json['notes']),
-      lineCount: serializer.fromJson<int>(json['lineCount']),
-      createdBy: serializer.fromJson<int>(json['createdBy']),
-      postedBy: serializer.fromJson<int?>(json['postedBy']),
-      postedAt: serializer.fromJson<String?>(json['postedAt']),
-      voidedBy: serializer.fromJson<int?>(json['voidedBy']),
-      voidedAt: serializer.fromJson<String?>(json['voidedAt']),
-      voidReason: serializer.fromJson<String>(json['voidReason']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'organizationId': serializer.toJson<String>(organizationId),
-      'branchId': serializer.toJson<String>(branchId),
-      'databaseId': serializer.toJson<String>(databaseId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
-      'supplierId': serializer.toJson<int>(supplierId),
-      'agreementId': serializer.toJson<String>(agreementId),
-      'currencyId': serializer.toJson<int>(currencyId),
-      'receiptNumber': serializer.toJson<String>(receiptNumber),
-      'status': serializer.toJson<String>(status),
-      'requestKey': serializer.toJson<String>(requestKey),
-      'requestHash': serializer.toJson<String>(requestHash),
-      'receivedAt': serializer.toJson<String>(receivedAt),
-      'notes': serializer.toJson<String>(notes),
-      'lineCount': serializer.toJson<int>(lineCount),
-      'createdBy': serializer.toJson<int>(createdBy),
-      'postedBy': serializer.toJson<int?>(postedBy),
-      'postedAt': serializer.toJson<String?>(postedAt),
-      'voidedBy': serializer.toJson<int?>(voidedBy),
-      'voidedAt': serializer.toJson<String?>(voidedAt),
-      'voidReason': serializer.toJson<String>(voidReason),
-      'createdAt': serializer.toJson<String>(createdAt),
-    };
-  }
-
-  ConsignmentReceiptsData copyWith({
-    String? id,
-    String? organizationId,
-    String? branchId,
-    String? databaseId,
-    String? warehouseId,
-    int? supplierId,
-    String? agreementId,
-    int? currencyId,
-    String? receiptNumber,
-    String? status,
-    String? requestKey,
-    String? requestHash,
-    String? receivedAt,
-    String? notes,
-    int? lineCount,
-    int? createdBy,
-    Value<int?> postedBy = const Value.absent(),
-    Value<String?> postedAt = const Value.absent(),
-    Value<int?> voidedBy = const Value.absent(),
-    Value<String?> voidedAt = const Value.absent(),
-    String? voidReason,
-    String? createdAt,
-  }) => ConsignmentReceiptsData(
-    id: id ?? this.id,
-    organizationId: organizationId ?? this.organizationId,
-    branchId: branchId ?? this.branchId,
-    databaseId: databaseId ?? this.databaseId,
-    warehouseId: warehouseId ?? this.warehouseId,
-    supplierId: supplierId ?? this.supplierId,
-    agreementId: agreementId ?? this.agreementId,
-    currencyId: currencyId ?? this.currencyId,
-    receiptNumber: receiptNumber ?? this.receiptNumber,
-    status: status ?? this.status,
-    requestKey: requestKey ?? this.requestKey,
-    requestHash: requestHash ?? this.requestHash,
-    receivedAt: receivedAt ?? this.receivedAt,
-    notes: notes ?? this.notes,
-    lineCount: lineCount ?? this.lineCount,
-    createdBy: createdBy ?? this.createdBy,
-    postedBy: postedBy.present ? postedBy.value : this.postedBy,
-    postedAt: postedAt.present ? postedAt.value : this.postedAt,
-    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
-    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
-    voidReason: voidReason ?? this.voidReason,
-    createdAt: createdAt ?? this.createdAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ConsignmentReceiptsData(')
-          ..write('id: $id, ')
-          ..write('organizationId: $organizationId, ')
-          ..write('branchId: $branchId, ')
-          ..write('databaseId: $databaseId, ')
-          ..write('warehouseId: $warehouseId, ')
-          ..write('supplierId: $supplierId, ')
-          ..write('agreementId: $agreementId, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('receiptNumber: $receiptNumber, ')
-          ..write('status: $status, ')
-          ..write('requestKey: $requestKey, ')
-          ..write('requestHash: $requestHash, ')
-          ..write('receivedAt: $receivedAt, ')
-          ..write('notes: $notes, ')
-          ..write('lineCount: $lineCount, ')
-          ..write('createdBy: $createdBy, ')
-          ..write('postedBy: $postedBy, ')
-          ..write('postedAt: $postedAt, ')
-          ..write('voidedBy: $voidedBy, ')
-          ..write('voidedAt: $voidedAt, ')
-          ..write('voidReason: $voidReason, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hashAll([
-    id,
-    organizationId,
-    branchId,
-    databaseId,
-    warehouseId,
-    supplierId,
-    agreementId,
-    currencyId,
-    receiptNumber,
-    status,
-    requestKey,
-    requestHash,
-    receivedAt,
-    notes,
-    lineCount,
-    createdBy,
-    postedBy,
-    postedAt,
-    voidedBy,
-    voidedAt,
-    voidReason,
-    createdAt,
-  ]);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ConsignmentReceiptsData &&
-          other.id == this.id &&
-          other.organizationId == this.organizationId &&
-          other.branchId == this.branchId &&
-          other.databaseId == this.databaseId &&
-          other.warehouseId == this.warehouseId &&
-          other.supplierId == this.supplierId &&
-          other.agreementId == this.agreementId &&
-          other.currencyId == this.currencyId &&
-          other.receiptNumber == this.receiptNumber &&
-          other.status == this.status &&
-          other.requestKey == this.requestKey &&
-          other.requestHash == this.requestHash &&
-          other.receivedAt == this.receivedAt &&
-          other.notes == this.notes &&
-          other.lineCount == this.lineCount &&
-          other.createdBy == this.createdBy &&
-          other.postedBy == this.postedBy &&
-          other.postedAt == this.postedAt &&
-          other.voidedBy == this.voidedBy &&
-          other.voidedAt == this.voidedAt &&
-          other.voidReason == this.voidReason &&
-          other.createdAt == this.createdAt);
-}
-
-class ConsignmentReceiptItems extends Table
-    with TableInfo<ConsignmentReceiptItems, ConsignmentReceiptItemsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ConsignmentReceiptItems(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> receiptId = GeneratedColumn<String>(
-    'receipt_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES consignment_receipts(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> agreementItemId = GeneratedColumn<String>(
-    'agreement_item_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES consignment_agreement_items(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
-    'product_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
-    'quantity',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
-    'quantity_scale',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
-    'measurement_type',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
-    'settlement_basis',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
-    'unit_cost_cents',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
-    'supplier_share_bps',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
-    'include_line_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_line_discount IN (0, 1))',
-  );
-  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
-    'include_invoice_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_invoice_discount IN (0, 1))',
-  );
-  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
-    'include_sales_tax',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_sales_tax IN (0, 1))',
-  );
-  late final GeneratedColumn<String> manufacturerLotNumber =
-      GeneratedColumn<String>(
-        'manufacturer_lot_number',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        $customConstraints: 'NULL',
-      );
-  late final GeneratedColumn<String> expiryDate = GeneratedColumn<String>(
-    'expiry_date',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    receiptId,
-    agreementItemId,
-    productId,
-    variantId,
-    quantity,
-    quantityScale,
-    measurementType,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    manufacturerLotNumber,
-    expiryDate,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'consignment_receipt_items';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ConsignmentReceiptItemsData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ConsignmentReceiptItemsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      receiptId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}receipt_id'],
-      )!,
-      agreementItemId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_item_id'],
-      )!,
-      productId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}product_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      )!,
-      quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}quantity'],
-      )!,
-      quantityScale: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}quantity_scale'],
-      )!,
-      measurementType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}measurement_type'],
-      )!,
-      settlementBasis: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}settlement_basis'],
-      )!,
-      unitCostCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}unit_cost_cents'],
-      ),
-      supplierShareBps: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_share_bps'],
-      ),
-      includeLineDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_line_discount'],
-      )!,
-      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_invoice_discount'],
-      )!,
-      includeSalesTax: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_sales_tax'],
-      )!,
-      manufacturerLotNumber: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}manufacturer_lot_number'],
-      ),
-      expiryDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}expiry_date'],
-      ),
-    );
-  }
-
-  @override
-  ConsignmentReceiptItems createAlias(String alias) {
-    return ConsignmentReceiptItems(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
-    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
-    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
-    'CHECK(manufacturer_lot_number IS NULL OR length(trim(manufacturer_lot_number)) BETWEEN 1 AND 100)',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ConsignmentReceiptItemsData extends DataClass
-    implements Insertable<ConsignmentReceiptItemsData> {
-  final String id;
-  final String receiptId;
-  final String agreementItemId;
-  final int productId;
-  final int variantId;
-  final int quantity;
-  final int quantityScale;
-  final String measurementType;
-  final String settlementBasis;
-  final int? unitCostCents;
-  final int? supplierShareBps;
-  final int includeLineDiscount;
-  final int includeInvoiceDiscount;
-  final int includeSalesTax;
-  final String? manufacturerLotNumber;
-  final String? expiryDate;
-  const ConsignmentReceiptItemsData({
-    required this.id,
-    required this.receiptId,
-    required this.agreementItemId,
-    required this.productId,
-    required this.variantId,
-    required this.quantity,
-    required this.quantityScale,
-    required this.measurementType,
-    required this.settlementBasis,
-    this.unitCostCents,
-    this.supplierShareBps,
-    required this.includeLineDiscount,
-    required this.includeInvoiceDiscount,
-    required this.includeSalesTax,
-    this.manufacturerLotNumber,
-    this.expiryDate,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['receipt_id'] = Variable<String>(receiptId);
-    map['agreement_item_id'] = Variable<String>(agreementItemId);
-    map['product_id'] = Variable<int>(productId);
-    map['variant_id'] = Variable<int>(variantId);
-    map['quantity'] = Variable<int>(quantity);
-    map['quantity_scale'] = Variable<int>(quantityScale);
-    map['measurement_type'] = Variable<String>(measurementType);
-    map['settlement_basis'] = Variable<String>(settlementBasis);
-    if (!nullToAbsent || unitCostCents != null) {
-      map['unit_cost_cents'] = Variable<int>(unitCostCents);
-    }
-    if (!nullToAbsent || supplierShareBps != null) {
-      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
-    }
-    map['include_line_discount'] = Variable<int>(includeLineDiscount);
-    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
-    map['include_sales_tax'] = Variable<int>(includeSalesTax);
-    if (!nullToAbsent || manufacturerLotNumber != null) {
-      map['manufacturer_lot_number'] = Variable<String>(manufacturerLotNumber);
-    }
-    if (!nullToAbsent || expiryDate != null) {
-      map['expiry_date'] = Variable<String>(expiryDate);
-    }
-    return map;
-  }
-
-  factory ConsignmentReceiptItemsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ConsignmentReceiptItemsData(
-      id: serializer.fromJson<String>(json['id']),
-      receiptId: serializer.fromJson<String>(json['receiptId']),
-      agreementItemId: serializer.fromJson<String>(json['agreementItemId']),
-      productId: serializer.fromJson<int>(json['productId']),
-      variantId: serializer.fromJson<int>(json['variantId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
-      quantityScale: serializer.fromJson<int>(json['quantityScale']),
-      measurementType: serializer.fromJson<String>(json['measurementType']),
-      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
-      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
-      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
-      includeLineDiscount: serializer.fromJson<int>(
-        json['includeLineDiscount'],
-      ),
-      includeInvoiceDiscount: serializer.fromJson<int>(
-        json['includeInvoiceDiscount'],
-      ),
-      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
-      manufacturerLotNumber: serializer.fromJson<String?>(
-        json['manufacturerLotNumber'],
-      ),
-      expiryDate: serializer.fromJson<String?>(json['expiryDate']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'receiptId': serializer.toJson<String>(receiptId),
-      'agreementItemId': serializer.toJson<String>(agreementItemId),
-      'productId': serializer.toJson<int>(productId),
-      'variantId': serializer.toJson<int>(variantId),
-      'quantity': serializer.toJson<int>(quantity),
-      'quantityScale': serializer.toJson<int>(quantityScale),
-      'measurementType': serializer.toJson<String>(measurementType),
-      'settlementBasis': serializer.toJson<String>(settlementBasis),
-      'unitCostCents': serializer.toJson<int?>(unitCostCents),
-      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
-      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
-      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
-      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
-      'manufacturerLotNumber': serializer.toJson<String?>(
-        manufacturerLotNumber,
-      ),
-      'expiryDate': serializer.toJson<String?>(expiryDate),
-    };
-  }
-
-  ConsignmentReceiptItemsData copyWith({
-    String? id,
-    String? receiptId,
-    String? agreementItemId,
-    int? productId,
-    int? variantId,
-    int? quantity,
-    int? quantityScale,
-    String? measurementType,
-    String? settlementBasis,
-    Value<int?> unitCostCents = const Value.absent(),
-    Value<int?> supplierShareBps = const Value.absent(),
-    int? includeLineDiscount,
-    int? includeInvoiceDiscount,
-    int? includeSalesTax,
-    Value<String?> manufacturerLotNumber = const Value.absent(),
-    Value<String?> expiryDate = const Value.absent(),
-  }) => ConsignmentReceiptItemsData(
-    id: id ?? this.id,
-    receiptId: receiptId ?? this.receiptId,
-    agreementItemId: agreementItemId ?? this.agreementItemId,
-    productId: productId ?? this.productId,
-    variantId: variantId ?? this.variantId,
-    quantity: quantity ?? this.quantity,
-    quantityScale: quantityScale ?? this.quantityScale,
-    measurementType: measurementType ?? this.measurementType,
-    settlementBasis: settlementBasis ?? this.settlementBasis,
-    unitCostCents: unitCostCents.present
-        ? unitCostCents.value
-        : this.unitCostCents,
-    supplierShareBps: supplierShareBps.present
-        ? supplierShareBps.value
-        : this.supplierShareBps,
-    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
-    includeInvoiceDiscount:
-        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
-    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
-    manufacturerLotNumber: manufacturerLotNumber.present
-        ? manufacturerLotNumber.value
-        : this.manufacturerLotNumber,
-    expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ConsignmentReceiptItemsData(')
-          ..write('id: $id, ')
-          ..write('receiptId: $receiptId, ')
-          ..write('agreementItemId: $agreementItemId, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('quantity: $quantity, ')
-          ..write('quantityScale: $quantityScale, ')
-          ..write('measurementType: $measurementType, ')
-          ..write('settlementBasis: $settlementBasis, ')
-          ..write('unitCostCents: $unitCostCents, ')
-          ..write('supplierShareBps: $supplierShareBps, ')
-          ..write('includeLineDiscount: $includeLineDiscount, ')
-          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
-          ..write('includeSalesTax: $includeSalesTax, ')
-          ..write('manufacturerLotNumber: $manufacturerLotNumber, ')
-          ..write('expiryDate: $expiryDate')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    receiptId,
-    agreementItemId,
-    productId,
-    variantId,
-    quantity,
-    quantityScale,
-    measurementType,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    manufacturerLotNumber,
-    expiryDate,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ConsignmentReceiptItemsData &&
-          other.id == this.id &&
-          other.receiptId == this.receiptId &&
-          other.agreementItemId == this.agreementItemId &&
-          other.productId == this.productId &&
-          other.variantId == this.variantId &&
-          other.quantity == this.quantity &&
-          other.quantityScale == this.quantityScale &&
-          other.measurementType == this.measurementType &&
-          other.settlementBasis == this.settlementBasis &&
-          other.unitCostCents == this.unitCostCents &&
-          other.supplierShareBps == this.supplierShareBps &&
-          other.includeLineDiscount == this.includeLineDiscount &&
-          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
-          other.includeSalesTax == this.includeSalesTax &&
-          other.manufacturerLotNumber == this.manufacturerLotNumber &&
-          other.expiryDate == this.expiryDate);
-}
-
-class ConsignmentInventoryLayers extends Table
-    with TableInfo<ConsignmentInventoryLayers, ConsignmentInventoryLayersData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  ConsignmentInventoryLayers(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> receiptItemId = GeneratedColumn<String>(
-    'receipt_item_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL UNIQUE REFERENCES consignment_receipt_items(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
-    'warehouse_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES business_warehouses(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
-    'supplier_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
-    'agreement_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
-    'product_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
-    'variant_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints:
-        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> batchId = GeneratedColumn<int>(
-    'batch_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<int> receivedQuantity = GeneratedColumn<int>(
-    'received_quantity',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> remainingQuantity = GeneratedColumn<int>(
-    'remaining_quantity',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
-    'quantity_scale',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
-    'measurement_type',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> settlementBasis = GeneratedColumn<String>(
-    'settlement_basis',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> unitCostCents = GeneratedColumn<int>(
-    'unit_cost_cents',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> supplierShareBps = GeneratedColumn<int>(
-    'supplier_share_bps',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> includeLineDiscount = GeneratedColumn<int>(
-    'include_line_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_line_discount IN (0, 1))',
-  );
-  late final GeneratedColumn<int> includeInvoiceDiscount = GeneratedColumn<int>(
-    'include_invoice_discount',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_invoice_discount IN (0, 1))',
-  );
-  late final GeneratedColumn<int> includeSalesTax = GeneratedColumn<int>(
-    'include_sales_tax',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL CHECK (include_sales_tax IN (0, 1))',
-  );
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'open\'',
-    defaultValue: const CustomExpression('\'open\''),
-  );
-  late final GeneratedColumn<String> receivedAt = GeneratedColumn<String>(
-    'received_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    receiptItemId,
-    warehouseId,
-    supplierId,
-    agreementId,
-    productId,
-    variantId,
-    batchId,
-    receivedQuantity,
-    remainingQuantity,
-    quantityScale,
-    measurementType,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    status,
-    receivedAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'consignment_inventory_layers';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  ConsignmentInventoryLayersData map(
-    Map<String, dynamic> data, {
-    String? tablePrefix,
-  }) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ConsignmentInventoryLayersData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      receiptItemId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}receipt_item_id'],
-      )!,
-      warehouseId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}warehouse_id'],
-      )!,
-      supplierId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_id'],
-      )!,
-      agreementId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}agreement_id'],
-      )!,
-      productId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}product_id'],
-      )!,
-      variantId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}variant_id'],
-      )!,
-      batchId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}batch_id'],
-      ),
-      receivedQuantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}received_quantity'],
-      )!,
-      remainingQuantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}remaining_quantity'],
-      )!,
-      quantityScale: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}quantity_scale'],
-      )!,
-      measurementType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}measurement_type'],
-      )!,
-      settlementBasis: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}settlement_basis'],
-      )!,
-      unitCostCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}unit_cost_cents'],
-      ),
-      supplierShareBps: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}supplier_share_bps'],
-      ),
-      includeLineDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_line_discount'],
-      )!,
-      includeInvoiceDiscount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_invoice_discount'],
-      )!,
-      includeSalesTax: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}include_sales_tax'],
-      )!,
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      receivedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}received_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  ConsignmentInventoryLayers createAlias(String alias) {
-    return ConsignmentInventoryLayers(attachedDatabase, alias);
-  }
-
-  @override
-  List<String> get customConstraints => const [
-    'PRIMARY KEY(id)',
-    'CHECK(received_quantity > 0 AND received_quantity <= 9007199254740991)',
-    'CHECK(remaining_quantity >= 0 AND remaining_quantity <= received_quantity)',
-    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
-    'CHECK((settlement_basis = \'fixed_unit_cost\' AND unit_cost_cents IS NOT NULL AND unit_cost_cents >= 0 AND unit_cost_cents <= 9007199254740991 AND supplier_share_bps IS NULL)OR(settlement_basis = \'net_sales_percentage\' AND unit_cost_cents IS NULL AND supplier_share_bps BETWEEN 0 AND 10000))',
-    'CHECK(status IN (\'open\', \'exhausted\', \'voided\'))',
-    'CHECK((remaining_quantity = 0 AND status IN (\'exhausted\', \'voided\'))OR(remaining_quantity > 0 AND status = \'open\'))',
-  ];
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class ConsignmentInventoryLayersData extends DataClass
-    implements Insertable<ConsignmentInventoryLayersData> {
-  final String id;
-  final String receiptItemId;
-  final String warehouseId;
-  final int supplierId;
-  final String agreementId;
-  final int productId;
-  final int variantId;
-  final int? batchId;
-  final int receivedQuantity;
-  final int remainingQuantity;
-  final int quantityScale;
-  final String measurementType;
-  final String settlementBasis;
-  final int? unitCostCents;
-  final int? supplierShareBps;
-  final int includeLineDiscount;
-  final int includeInvoiceDiscount;
-  final int includeSalesTax;
-  final String status;
-  final String receivedAt;
-  final String updatedAt;
-  const ConsignmentInventoryLayersData({
-    required this.id,
-    required this.receiptItemId,
-    required this.warehouseId,
-    required this.supplierId,
-    required this.agreementId,
-    required this.productId,
-    required this.variantId,
-    this.batchId,
-    required this.receivedQuantity,
-    required this.remainingQuantity,
-    required this.quantityScale,
-    required this.measurementType,
-    required this.settlementBasis,
-    this.unitCostCents,
-    this.supplierShareBps,
-    required this.includeLineDiscount,
-    required this.includeInvoiceDiscount,
-    required this.includeSalesTax,
-    required this.status,
-    required this.receivedAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['receipt_item_id'] = Variable<String>(receiptItemId);
-    map['warehouse_id'] = Variable<String>(warehouseId);
-    map['supplier_id'] = Variable<int>(supplierId);
-    map['agreement_id'] = Variable<String>(agreementId);
-    map['product_id'] = Variable<int>(productId);
-    map['variant_id'] = Variable<int>(variantId);
-    if (!nullToAbsent || batchId != null) {
-      map['batch_id'] = Variable<int>(batchId);
-    }
-    map['received_quantity'] = Variable<int>(receivedQuantity);
-    map['remaining_quantity'] = Variable<int>(remainingQuantity);
-    map['quantity_scale'] = Variable<int>(quantityScale);
-    map['measurement_type'] = Variable<String>(measurementType);
-    map['settlement_basis'] = Variable<String>(settlementBasis);
-    if (!nullToAbsent || unitCostCents != null) {
-      map['unit_cost_cents'] = Variable<int>(unitCostCents);
-    }
-    if (!nullToAbsent || supplierShareBps != null) {
-      map['supplier_share_bps'] = Variable<int>(supplierShareBps);
-    }
-    map['include_line_discount'] = Variable<int>(includeLineDiscount);
-    map['include_invoice_discount'] = Variable<int>(includeInvoiceDiscount);
-    map['include_sales_tax'] = Variable<int>(includeSalesTax);
-    map['status'] = Variable<String>(status);
-    map['received_at'] = Variable<String>(receivedAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory ConsignmentInventoryLayersData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ConsignmentInventoryLayersData(
-      id: serializer.fromJson<String>(json['id']),
-      receiptItemId: serializer.fromJson<String>(json['receiptItemId']),
-      warehouseId: serializer.fromJson<String>(json['warehouseId']),
-      supplierId: serializer.fromJson<int>(json['supplierId']),
-      agreementId: serializer.fromJson<String>(json['agreementId']),
-      productId: serializer.fromJson<int>(json['productId']),
-      variantId: serializer.fromJson<int>(json['variantId']),
-      batchId: serializer.fromJson<int?>(json['batchId']),
-      receivedQuantity: serializer.fromJson<int>(json['receivedQuantity']),
-      remainingQuantity: serializer.fromJson<int>(json['remainingQuantity']),
-      quantityScale: serializer.fromJson<int>(json['quantityScale']),
-      measurementType: serializer.fromJson<String>(json['measurementType']),
-      settlementBasis: serializer.fromJson<String>(json['settlementBasis']),
-      unitCostCents: serializer.fromJson<int?>(json['unitCostCents']),
-      supplierShareBps: serializer.fromJson<int?>(json['supplierShareBps']),
-      includeLineDiscount: serializer.fromJson<int>(
-        json['includeLineDiscount'],
-      ),
-      includeInvoiceDiscount: serializer.fromJson<int>(
-        json['includeInvoiceDiscount'],
-      ),
-      includeSalesTax: serializer.fromJson<int>(json['includeSalesTax']),
-      status: serializer.fromJson<String>(json['status']),
-      receivedAt: serializer.fromJson<String>(json['receivedAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'receiptItemId': serializer.toJson<String>(receiptItemId),
-      'warehouseId': serializer.toJson<String>(warehouseId),
-      'supplierId': serializer.toJson<int>(supplierId),
-      'agreementId': serializer.toJson<String>(agreementId),
-      'productId': serializer.toJson<int>(productId),
-      'variantId': serializer.toJson<int>(variantId),
-      'batchId': serializer.toJson<int?>(batchId),
-      'receivedQuantity': serializer.toJson<int>(receivedQuantity),
-      'remainingQuantity': serializer.toJson<int>(remainingQuantity),
-      'quantityScale': serializer.toJson<int>(quantityScale),
-      'measurementType': serializer.toJson<String>(measurementType),
-      'settlementBasis': serializer.toJson<String>(settlementBasis),
-      'unitCostCents': serializer.toJson<int?>(unitCostCents),
-      'supplierShareBps': serializer.toJson<int?>(supplierShareBps),
-      'includeLineDiscount': serializer.toJson<int>(includeLineDiscount),
-      'includeInvoiceDiscount': serializer.toJson<int>(includeInvoiceDiscount),
-      'includeSalesTax': serializer.toJson<int>(includeSalesTax),
-      'status': serializer.toJson<String>(status),
-      'receivedAt': serializer.toJson<String>(receivedAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  ConsignmentInventoryLayersData copyWith({
-    String? id,
-    String? receiptItemId,
-    String? warehouseId,
-    int? supplierId,
-    String? agreementId,
-    int? productId,
-    int? variantId,
-    Value<int?> batchId = const Value.absent(),
-    int? receivedQuantity,
-    int? remainingQuantity,
-    int? quantityScale,
-    String? measurementType,
-    String? settlementBasis,
-    Value<int?> unitCostCents = const Value.absent(),
-    Value<int?> supplierShareBps = const Value.absent(),
-    int? includeLineDiscount,
-    int? includeInvoiceDiscount,
-    int? includeSalesTax,
-    String? status,
-    String? receivedAt,
-    String? updatedAt,
-  }) => ConsignmentInventoryLayersData(
-    id: id ?? this.id,
-    receiptItemId: receiptItemId ?? this.receiptItemId,
-    warehouseId: warehouseId ?? this.warehouseId,
-    supplierId: supplierId ?? this.supplierId,
-    agreementId: agreementId ?? this.agreementId,
-    productId: productId ?? this.productId,
-    variantId: variantId ?? this.variantId,
-    batchId: batchId.present ? batchId.value : this.batchId,
-    receivedQuantity: receivedQuantity ?? this.receivedQuantity,
-    remainingQuantity: remainingQuantity ?? this.remainingQuantity,
-    quantityScale: quantityScale ?? this.quantityScale,
-    measurementType: measurementType ?? this.measurementType,
-    settlementBasis: settlementBasis ?? this.settlementBasis,
-    unitCostCents: unitCostCents.present
-        ? unitCostCents.value
-        : this.unitCostCents,
-    supplierShareBps: supplierShareBps.present
-        ? supplierShareBps.value
-        : this.supplierShareBps,
-    includeLineDiscount: includeLineDiscount ?? this.includeLineDiscount,
-    includeInvoiceDiscount:
-        includeInvoiceDiscount ?? this.includeInvoiceDiscount,
-    includeSalesTax: includeSalesTax ?? this.includeSalesTax,
-    status: status ?? this.status,
-    receivedAt: receivedAt ?? this.receivedAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('ConsignmentInventoryLayersData(')
-          ..write('id: $id, ')
-          ..write('receiptItemId: $receiptItemId, ')
-          ..write('warehouseId: $warehouseId, ')
-          ..write('supplierId: $supplierId, ')
-          ..write('agreementId: $agreementId, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('batchId: $batchId, ')
-          ..write('receivedQuantity: $receivedQuantity, ')
-          ..write('remainingQuantity: $remainingQuantity, ')
-          ..write('quantityScale: $quantityScale, ')
-          ..write('measurementType: $measurementType, ')
-          ..write('settlementBasis: $settlementBasis, ')
-          ..write('unitCostCents: $unitCostCents, ')
-          ..write('supplierShareBps: $supplierShareBps, ')
-          ..write('includeLineDiscount: $includeLineDiscount, ')
-          ..write('includeInvoiceDiscount: $includeInvoiceDiscount, ')
-          ..write('includeSalesTax: $includeSalesTax, ')
-          ..write('status: $status, ')
-          ..write('receivedAt: $receivedAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hashAll([
-    id,
-    receiptItemId,
-    warehouseId,
-    supplierId,
-    agreementId,
-    productId,
-    variantId,
-    batchId,
-    receivedQuantity,
-    remainingQuantity,
-    quantityScale,
-    measurementType,
-    settlementBasis,
-    unitCostCents,
-    supplierShareBps,
-    includeLineDiscount,
-    includeInvoiceDiscount,
-    includeSalesTax,
-    status,
-    receivedAt,
-    updatedAt,
-  ]);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is ConsignmentInventoryLayersData &&
-          other.id == this.id &&
-          other.receiptItemId == this.receiptItemId &&
-          other.warehouseId == this.warehouseId &&
-          other.supplierId == this.supplierId &&
-          other.agreementId == this.agreementId &&
-          other.productId == this.productId &&
-          other.variantId == this.variantId &&
-          other.batchId == this.batchId &&
-          other.receivedQuantity == this.receivedQuantity &&
-          other.remainingQuantity == this.remainingQuantity &&
-          other.quantityScale == this.quantityScale &&
-          other.measurementType == this.measurementType &&
-          other.settlementBasis == this.settlementBasis &&
-          other.unitCostCents == this.unitCostCents &&
-          other.supplierShareBps == this.supplierShareBps &&
-          other.includeLineDiscount == this.includeLineDiscount &&
-          other.includeInvoiceDiscount == this.includeInvoiceDiscount &&
-          other.includeSalesTax == this.includeSalesTax &&
-          other.status == this.status &&
-          other.receivedAt == this.receivedAt &&
-          other.updatedAt == this.updatedAt);
-}
-
 class ConsignmentReceiptEvents extends Table
     with TableInfo<ConsignmentReceiptEvents, ConsignmentReceiptEventsData> {
   @override
@@ -29617,815 +33288,6 @@ class ConsignmentSaleAllocationsData extends DataClass
           other.updatedAt == this.updatedAt);
 }
 
-class AccountingPeriods extends Table
-    with TableInfo<AccountingPeriods, AccountingPeriodsData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  AccountingPeriods(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> periodName = GeneratedColumn<String>(
-    'period_name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> startDate = GeneratedColumn<String>(
-    'start_date',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> endDate = GeneratedColumn<String>(
-    'end_date',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<int> isClosed = GeneratedColumn<int>(
-    'is_closed',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (is_closed IN (0, 1))',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<String> closedAt = GeneratedColumn<String>(
-    'closed_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> closedBy = GeneratedColumn<int>(
-    'closed_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    periodName,
-    startDate,
-    endDate,
-    isClosed,
-    closedAt,
-    closedBy,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'accounting_periods';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  AccountingPeriodsData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return AccountingPeriodsData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      periodName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}period_name'],
-      )!,
-      startDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}start_date'],
-      )!,
-      endDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}end_date'],
-      )!,
-      isClosed: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}is_closed'],
-      )!,
-      closedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}closed_at'],
-      ),
-      closedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}closed_by'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  AccountingPeriods createAlias(String alias) {
-    return AccountingPeriods(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class AccountingPeriodsData extends DataClass
-    implements Insertable<AccountingPeriodsData> {
-  final int id;
-  final String periodName;
-  final String startDate;
-  final String endDate;
-  final int isClosed;
-  final String? closedAt;
-  final int? closedBy;
-  final String createdAt;
-  final String updatedAt;
-  const AccountingPeriodsData({
-    required this.id,
-    required this.periodName,
-    required this.startDate,
-    required this.endDate,
-    required this.isClosed,
-    this.closedAt,
-    this.closedBy,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['period_name'] = Variable<String>(periodName);
-    map['start_date'] = Variable<String>(startDate);
-    map['end_date'] = Variable<String>(endDate);
-    map['is_closed'] = Variable<int>(isClosed);
-    if (!nullToAbsent || closedAt != null) {
-      map['closed_at'] = Variable<String>(closedAt);
-    }
-    if (!nullToAbsent || closedBy != null) {
-      map['closed_by'] = Variable<int>(closedBy);
-    }
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory AccountingPeriodsData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return AccountingPeriodsData(
-      id: serializer.fromJson<int>(json['id']),
-      periodName: serializer.fromJson<String>(json['periodName']),
-      startDate: serializer.fromJson<String>(json['startDate']),
-      endDate: serializer.fromJson<String>(json['endDate']),
-      isClosed: serializer.fromJson<int>(json['isClosed']),
-      closedAt: serializer.fromJson<String?>(json['closedAt']),
-      closedBy: serializer.fromJson<int?>(json['closedBy']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'periodName': serializer.toJson<String>(periodName),
-      'startDate': serializer.toJson<String>(startDate),
-      'endDate': serializer.toJson<String>(endDate),
-      'isClosed': serializer.toJson<int>(isClosed),
-      'closedAt': serializer.toJson<String?>(closedAt),
-      'closedBy': serializer.toJson<int?>(closedBy),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  AccountingPeriodsData copyWith({
-    int? id,
-    String? periodName,
-    String? startDate,
-    String? endDate,
-    int? isClosed,
-    Value<String?> closedAt = const Value.absent(),
-    Value<int?> closedBy = const Value.absent(),
-    String? createdAt,
-    String? updatedAt,
-  }) => AccountingPeriodsData(
-    id: id ?? this.id,
-    periodName: periodName ?? this.periodName,
-    startDate: startDate ?? this.startDate,
-    endDate: endDate ?? this.endDate,
-    isClosed: isClosed ?? this.isClosed,
-    closedAt: closedAt.present ? closedAt.value : this.closedAt,
-    closedBy: closedBy.present ? closedBy.value : this.closedBy,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('AccountingPeriodsData(')
-          ..write('id: $id, ')
-          ..write('periodName: $periodName, ')
-          ..write('startDate: $startDate, ')
-          ..write('endDate: $endDate, ')
-          ..write('isClosed: $isClosed, ')
-          ..write('closedAt: $closedAt, ')
-          ..write('closedBy: $closedBy, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    periodName,
-    startDate,
-    endDate,
-    isClosed,
-    closedAt,
-    closedBy,
-    createdAt,
-    updatedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is AccountingPeriodsData &&
-          other.id == this.id &&
-          other.periodName == this.periodName &&
-          other.startDate == this.startDate &&
-          other.endDate == this.endDate &&
-          other.isClosed == this.isClosed &&
-          other.closedAt == this.closedAt &&
-          other.closedBy == this.closedBy &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
-class JournalEntries extends Table
-    with TableInfo<JournalEntries, JournalEntriesData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  JournalEntries(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> id = GeneratedColumn<int>(
-    'id',
-    aliasedName,
-    false,
-    hasAutoIncrement: true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
-  );
-  late final GeneratedColumn<String> entryNumber = GeneratedColumn<String>(
-    'entry_number',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL UNIQUE',
-  );
-  late final GeneratedColumn<String> description = GeneratedColumn<String>(
-    'description',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    $customConstraints: 'NOT NULL',
-  );
-  late final GeneratedColumn<String> entryDate = GeneratedColumn<String>(
-    'entry_date',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<int> accountingPeriodId = GeneratedColumn<int>(
-    'accounting_period_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints:
-        'NULL REFERENCES accounting_periods(id)ON DELETE RESTRICT',
-  );
-  late final GeneratedColumn<String> status = GeneratedColumn<String>(
-    'status',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
-    defaultValue: const CustomExpression('\'draft\''),
-  );
-  late final GeneratedColumn<String> entryType = GeneratedColumn<String>(
-    'entry_type',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT \'manual\'',
-    defaultValue: const CustomExpression('\'manual\''),
-  );
-  late final GeneratedColumn<String> sourceTable = GeneratedColumn<String>(
-    'source_table',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> sourceId = GeneratedColumn<int>(
-    'source_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<int> reversedEntryId = GeneratedColumn<int>(
-    'reversed_entry_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES journal_entries(id)',
-  );
-  late final GeneratedColumn<int> isReversed = GeneratedColumn<int>(
-    'is_reversed',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (is_reversed IN (0, 1))',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<int> totalDebitCents = GeneratedColumn<int>(
-    'total_debit_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<int> totalCreditCents = GeneratedColumn<int>(
-    'total_credit_cents',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT 0',
-    defaultValue: const CustomExpression('0'),
-  );
-  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
-    'created_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
-    'posted_by',
-    aliasedName,
-    true,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL REFERENCES users(id)',
-  );
-  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
-    'posted_at',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NULL',
-  );
-  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
-    'updated_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
-    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    entryNumber,
-    description,
-    entryDate,
-    accountingPeriodId,
-    status,
-    entryType,
-    sourceTable,
-    sourceId,
-    reversedEntryId,
-    isReversed,
-    totalDebitCents,
-    totalCreditCents,
-    createdBy,
-    postedBy,
-    postedAt,
-    createdAt,
-    updatedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'journal_entries';
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  JournalEntriesData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return JournalEntriesData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      entryNumber: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}entry_number'],
-      )!,
-      description: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}description'],
-      )!,
-      entryDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}entry_date'],
-      )!,
-      accountingPeriodId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}accounting_period_id'],
-      ),
-      status: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}status'],
-      )!,
-      entryType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}entry_type'],
-      )!,
-      sourceTable: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}source_table'],
-      ),
-      sourceId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}source_id'],
-      ),
-      reversedEntryId: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}reversed_entry_id'],
-      ),
-      isReversed: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}is_reversed'],
-      )!,
-      totalDebitCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}total_debit_cents'],
-      )!,
-      totalCreditCents: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}total_credit_cents'],
-      )!,
-      createdBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}created_by'],
-      ),
-      postedBy: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}posted_by'],
-      ),
-      postedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}posted_at'],
-      ),
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}updated_at'],
-      )!,
-    );
-  }
-
-  @override
-  JournalEntries createAlias(String alias) {
-    return JournalEntries(attachedDatabase, alias);
-  }
-
-  @override
-  bool get dontWriteConstraints => true;
-}
-
-class JournalEntriesData extends DataClass
-    implements Insertable<JournalEntriesData> {
-  final int id;
-  final String entryNumber;
-  final String description;
-  final String entryDate;
-  final int? accountingPeriodId;
-  final String status;
-  final String entryType;
-  final String? sourceTable;
-  final int? sourceId;
-  final int? reversedEntryId;
-  final int isReversed;
-  final int totalDebitCents;
-  final int totalCreditCents;
-  final int? createdBy;
-  final int? postedBy;
-  final String? postedAt;
-  final String createdAt;
-  final String updatedAt;
-  const JournalEntriesData({
-    required this.id,
-    required this.entryNumber,
-    required this.description,
-    required this.entryDate,
-    this.accountingPeriodId,
-    required this.status,
-    required this.entryType,
-    this.sourceTable,
-    this.sourceId,
-    this.reversedEntryId,
-    required this.isReversed,
-    required this.totalDebitCents,
-    required this.totalCreditCents,
-    this.createdBy,
-    this.postedBy,
-    this.postedAt,
-    required this.createdAt,
-    required this.updatedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<int>(id);
-    map['entry_number'] = Variable<String>(entryNumber);
-    map['description'] = Variable<String>(description);
-    map['entry_date'] = Variable<String>(entryDate);
-    if (!nullToAbsent || accountingPeriodId != null) {
-      map['accounting_period_id'] = Variable<int>(accountingPeriodId);
-    }
-    map['status'] = Variable<String>(status);
-    map['entry_type'] = Variable<String>(entryType);
-    if (!nullToAbsent || sourceTable != null) {
-      map['source_table'] = Variable<String>(sourceTable);
-    }
-    if (!nullToAbsent || sourceId != null) {
-      map['source_id'] = Variable<int>(sourceId);
-    }
-    if (!nullToAbsent || reversedEntryId != null) {
-      map['reversed_entry_id'] = Variable<int>(reversedEntryId);
-    }
-    map['is_reversed'] = Variable<int>(isReversed);
-    map['total_debit_cents'] = Variable<int>(totalDebitCents);
-    map['total_credit_cents'] = Variable<int>(totalCreditCents);
-    if (!nullToAbsent || createdBy != null) {
-      map['created_by'] = Variable<int>(createdBy);
-    }
-    if (!nullToAbsent || postedBy != null) {
-      map['posted_by'] = Variable<int>(postedBy);
-    }
-    if (!nullToAbsent || postedAt != null) {
-      map['posted_at'] = Variable<String>(postedAt);
-    }
-    map['created_at'] = Variable<String>(createdAt);
-    map['updated_at'] = Variable<String>(updatedAt);
-    return map;
-  }
-
-  factory JournalEntriesData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return JournalEntriesData(
-      id: serializer.fromJson<int>(json['id']),
-      entryNumber: serializer.fromJson<String>(json['entryNumber']),
-      description: serializer.fromJson<String>(json['description']),
-      entryDate: serializer.fromJson<String>(json['entryDate']),
-      accountingPeriodId: serializer.fromJson<int?>(json['accountingPeriodId']),
-      status: serializer.fromJson<String>(json['status']),
-      entryType: serializer.fromJson<String>(json['entryType']),
-      sourceTable: serializer.fromJson<String?>(json['sourceTable']),
-      sourceId: serializer.fromJson<int?>(json['sourceId']),
-      reversedEntryId: serializer.fromJson<int?>(json['reversedEntryId']),
-      isReversed: serializer.fromJson<int>(json['isReversed']),
-      totalDebitCents: serializer.fromJson<int>(json['totalDebitCents']),
-      totalCreditCents: serializer.fromJson<int>(json['totalCreditCents']),
-      createdBy: serializer.fromJson<int?>(json['createdBy']),
-      postedBy: serializer.fromJson<int?>(json['postedBy']),
-      postedAt: serializer.fromJson<String?>(json['postedAt']),
-      createdAt: serializer.fromJson<String>(json['createdAt']),
-      updatedAt: serializer.fromJson<String>(json['updatedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<int>(id),
-      'entryNumber': serializer.toJson<String>(entryNumber),
-      'description': serializer.toJson<String>(description),
-      'entryDate': serializer.toJson<String>(entryDate),
-      'accountingPeriodId': serializer.toJson<int?>(accountingPeriodId),
-      'status': serializer.toJson<String>(status),
-      'entryType': serializer.toJson<String>(entryType),
-      'sourceTable': serializer.toJson<String?>(sourceTable),
-      'sourceId': serializer.toJson<int?>(sourceId),
-      'reversedEntryId': serializer.toJson<int?>(reversedEntryId),
-      'isReversed': serializer.toJson<int>(isReversed),
-      'totalDebitCents': serializer.toJson<int>(totalDebitCents),
-      'totalCreditCents': serializer.toJson<int>(totalCreditCents),
-      'createdBy': serializer.toJson<int?>(createdBy),
-      'postedBy': serializer.toJson<int?>(postedBy),
-      'postedAt': serializer.toJson<String?>(postedAt),
-      'createdAt': serializer.toJson<String>(createdAt),
-      'updatedAt': serializer.toJson<String>(updatedAt),
-    };
-  }
-
-  JournalEntriesData copyWith({
-    int? id,
-    String? entryNumber,
-    String? description,
-    String? entryDate,
-    Value<int?> accountingPeriodId = const Value.absent(),
-    String? status,
-    String? entryType,
-    Value<String?> sourceTable = const Value.absent(),
-    Value<int?> sourceId = const Value.absent(),
-    Value<int?> reversedEntryId = const Value.absent(),
-    int? isReversed,
-    int? totalDebitCents,
-    int? totalCreditCents,
-    Value<int?> createdBy = const Value.absent(),
-    Value<int?> postedBy = const Value.absent(),
-    Value<String?> postedAt = const Value.absent(),
-    String? createdAt,
-    String? updatedAt,
-  }) => JournalEntriesData(
-    id: id ?? this.id,
-    entryNumber: entryNumber ?? this.entryNumber,
-    description: description ?? this.description,
-    entryDate: entryDate ?? this.entryDate,
-    accountingPeriodId: accountingPeriodId.present
-        ? accountingPeriodId.value
-        : this.accountingPeriodId,
-    status: status ?? this.status,
-    entryType: entryType ?? this.entryType,
-    sourceTable: sourceTable.present ? sourceTable.value : this.sourceTable,
-    sourceId: sourceId.present ? sourceId.value : this.sourceId,
-    reversedEntryId: reversedEntryId.present
-        ? reversedEntryId.value
-        : this.reversedEntryId,
-    isReversed: isReversed ?? this.isReversed,
-    totalDebitCents: totalDebitCents ?? this.totalDebitCents,
-    totalCreditCents: totalCreditCents ?? this.totalCreditCents,
-    createdBy: createdBy.present ? createdBy.value : this.createdBy,
-    postedBy: postedBy.present ? postedBy.value : this.postedBy,
-    postedAt: postedAt.present ? postedAt.value : this.postedAt,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt,
-  );
-  @override
-  String toString() {
-    return (StringBuffer('JournalEntriesData(')
-          ..write('id: $id, ')
-          ..write('entryNumber: $entryNumber, ')
-          ..write('description: $description, ')
-          ..write('entryDate: $entryDate, ')
-          ..write('accountingPeriodId: $accountingPeriodId, ')
-          ..write('status: $status, ')
-          ..write('entryType: $entryType, ')
-          ..write('sourceTable: $sourceTable, ')
-          ..write('sourceId: $sourceId, ')
-          ..write('reversedEntryId: $reversedEntryId, ')
-          ..write('isReversed: $isReversed, ')
-          ..write('totalDebitCents: $totalDebitCents, ')
-          ..write('totalCreditCents: $totalCreditCents, ')
-          ..write('createdBy: $createdBy, ')
-          ..write('postedBy: $postedBy, ')
-          ..write('postedAt: $postedAt, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    entryNumber,
-    description,
-    entryDate,
-    accountingPeriodId,
-    status,
-    entryType,
-    sourceTable,
-    sourceId,
-    reversedEntryId,
-    isReversed,
-    totalDebitCents,
-    totalCreditCents,
-    createdBy,
-    postedBy,
-    postedAt,
-    createdAt,
-    updatedAt,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is JournalEntriesData &&
-          other.id == this.id &&
-          other.entryNumber == this.entryNumber &&
-          other.description == this.description &&
-          other.entryDate == this.entryDate &&
-          other.accountingPeriodId == this.accountingPeriodId &&
-          other.status == this.status &&
-          other.entryType == this.entryType &&
-          other.sourceTable == this.sourceTable &&
-          other.sourceId == this.sourceId &&
-          other.reversedEntryId == this.reversedEntryId &&
-          other.isReversed == this.isReversed &&
-          other.totalDebitCents == this.totalDebitCents &&
-          other.totalCreditCents == this.totalCreditCents &&
-          other.createdBy == this.createdBy &&
-          other.postedBy == this.postedBy &&
-          other.postedAt == this.postedAt &&
-          other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
-}
-
 class ConsignmentObligationEvents extends Table
     with
         TableInfo<
@@ -30502,6 +33364,15 @@ class ConsignmentObligationEvents extends Table
     type: DriftSqlType.int,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> restoresStock = GeneratedColumn<int>(
+    'restores_stock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (restores_stock IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
   );
   late final GeneratedColumn<String> sourceTable = GeneratedColumn<String>(
     'source_table',
@@ -30580,6 +33451,7 @@ class ConsignmentObligationEvents extends Table
     kind,
     signedQuantity,
     signedAmountCents,
+    restoresStock,
     sourceTable,
     sourceId,
     sourceItemId,
@@ -30638,6 +33510,10 @@ class ConsignmentObligationEvents extends Table
       signedAmountCents: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}signed_amount_cents'],
+      )!,
+      restoresStock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}restores_stock'],
       )!,
       sourceTable: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -30703,6 +33579,7 @@ class ConsignmentObligationEventsData extends DataClass
   final String kind;
   final int signedQuantity;
   final int signedAmountCents;
+  final int restoresStock;
   final String sourceTable;
   final int sourceId;
   final int sourceItemId;
@@ -30720,6 +33597,7 @@ class ConsignmentObligationEventsData extends DataClass
     required this.kind,
     required this.signedQuantity,
     required this.signedAmountCents,
+    required this.restoresStock,
     required this.sourceTable,
     required this.sourceId,
     required this.sourceItemId,
@@ -30740,6 +33618,7 @@ class ConsignmentObligationEventsData extends DataClass
     map['kind'] = Variable<String>(kind);
     map['signed_quantity'] = Variable<int>(signedQuantity);
     map['signed_amount_cents'] = Variable<int>(signedAmountCents);
+    map['restores_stock'] = Variable<int>(restoresStock);
     map['source_table'] = Variable<String>(sourceTable);
     map['source_id'] = Variable<int>(sourceId);
     map['source_item_id'] = Variable<int>(sourceItemId);
@@ -30767,6 +33646,7 @@ class ConsignmentObligationEventsData extends DataClass
       kind: serializer.fromJson<String>(json['kind']),
       signedQuantity: serializer.fromJson<int>(json['signedQuantity']),
       signedAmountCents: serializer.fromJson<int>(json['signedAmountCents']),
+      restoresStock: serializer.fromJson<int>(json['restoresStock']),
       sourceTable: serializer.fromJson<String>(json['sourceTable']),
       sourceId: serializer.fromJson<int>(json['sourceId']),
       sourceItemId: serializer.fromJson<int>(json['sourceItemId']),
@@ -30789,6 +33669,7 @@ class ConsignmentObligationEventsData extends DataClass
       'kind': serializer.toJson<String>(kind),
       'signedQuantity': serializer.toJson<int>(signedQuantity),
       'signedAmountCents': serializer.toJson<int>(signedAmountCents),
+      'restoresStock': serializer.toJson<int>(restoresStock),
       'sourceTable': serializer.toJson<String>(sourceTable),
       'sourceId': serializer.toJson<int>(sourceId),
       'sourceItemId': serializer.toJson<int>(sourceItemId),
@@ -30809,6 +33690,7 @@ class ConsignmentObligationEventsData extends DataClass
     String? kind,
     int? signedQuantity,
     int? signedAmountCents,
+    int? restoresStock,
     String? sourceTable,
     int? sourceId,
     int? sourceItemId,
@@ -30826,6 +33708,7 @@ class ConsignmentObligationEventsData extends DataClass
     kind: kind ?? this.kind,
     signedQuantity: signedQuantity ?? this.signedQuantity,
     signedAmountCents: signedAmountCents ?? this.signedAmountCents,
+    restoresStock: restoresStock ?? this.restoresStock,
     sourceTable: sourceTable ?? this.sourceTable,
     sourceId: sourceId ?? this.sourceId,
     sourceItemId: sourceItemId ?? this.sourceItemId,
@@ -30848,6 +33731,7 @@ class ConsignmentObligationEventsData extends DataClass
           ..write('kind: $kind, ')
           ..write('signedQuantity: $signedQuantity, ')
           ..write('signedAmountCents: $signedAmountCents, ')
+          ..write('restoresStock: $restoresStock, ')
           ..write('sourceTable: $sourceTable, ')
           ..write('sourceId: $sourceId, ')
           ..write('sourceItemId: $sourceItemId, ')
@@ -30870,6 +33754,7 @@ class ConsignmentObligationEventsData extends DataClass
     kind,
     signedQuantity,
     signedAmountCents,
+    restoresStock,
     sourceTable,
     sourceId,
     sourceItemId,
@@ -30891,6 +33776,7 @@ class ConsignmentObligationEventsData extends DataClass
           other.kind == this.kind &&
           other.signedQuantity == this.signedQuantity &&
           other.signedAmountCents == this.signedAmountCents &&
+          other.restoresStock == this.restoresStock &&
           other.sourceTable == this.sourceTable &&
           other.sourceId == this.sourceId &&
           other.sourceItemId == this.sourceItemId &&
@@ -30978,6 +33864,15 @@ class ConsignmentAdjustmentReturnEvents extends Table
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
+  late final GeneratedColumn<int> restoresStock = GeneratedColumn<int>(
+    'restores_stock',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 1 CHECK (restores_stock IN (0, 1))',
+    defaultValue: const CustomExpression('1'),
+  );
   late final GeneratedColumn<int> returnId = GeneratedColumn<int>(
     'return_id',
     aliasedName,
@@ -31049,6 +33944,7 @@ class ConsignmentAdjustmentReturnEvents extends Table
     kind,
     signedQuantity,
     signedAmountCents,
+    restoresStock,
     returnId,
     returnItemId,
     requestKey,
@@ -31106,6 +34002,10 @@ class ConsignmentAdjustmentReturnEvents extends Table
       signedAmountCents: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}signed_amount_cents'],
+      )!,
+      restoresStock: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}restores_stock'],
       )!,
       returnId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
@@ -31166,6 +34066,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
   final String kind;
   final int signedQuantity;
   final int signedAmountCents;
+  final int restoresStock;
   final int returnId;
   final int returnItemId;
   final String requestKey;
@@ -31182,6 +34083,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
     required this.kind,
     required this.signedQuantity,
     required this.signedAmountCents,
+    required this.restoresStock,
     required this.returnId,
     required this.returnItemId,
     required this.requestKey,
@@ -31201,6 +34103,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
     map['kind'] = Variable<String>(kind);
     map['signed_quantity'] = Variable<int>(signedQuantity);
     map['signed_amount_cents'] = Variable<int>(signedAmountCents);
+    map['restores_stock'] = Variable<int>(restoresStock);
     map['return_id'] = Variable<int>(returnId);
     map['return_item_id'] = Variable<int>(returnItemId);
     map['request_key'] = Variable<String>(requestKey);
@@ -31227,6 +34130,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
       kind: serializer.fromJson<String>(json['kind']),
       signedQuantity: serializer.fromJson<int>(json['signedQuantity']),
       signedAmountCents: serializer.fromJson<int>(json['signedAmountCents']),
+      restoresStock: serializer.fromJson<int>(json['restoresStock']),
       returnId: serializer.fromJson<int>(json['returnId']),
       returnItemId: serializer.fromJson<int>(json['returnItemId']),
       requestKey: serializer.fromJson<String>(json['requestKey']),
@@ -31248,6 +34152,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
       'kind': serializer.toJson<String>(kind),
       'signedQuantity': serializer.toJson<int>(signedQuantity),
       'signedAmountCents': serializer.toJson<int>(signedAmountCents),
+      'restoresStock': serializer.toJson<int>(restoresStock),
       'returnId': serializer.toJson<int>(returnId),
       'returnItemId': serializer.toJson<int>(returnItemId),
       'requestKey': serializer.toJson<String>(requestKey),
@@ -31267,6 +34172,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
     String? kind,
     int? signedQuantity,
     int? signedAmountCents,
+    int? restoresStock,
     int? returnId,
     int? returnItemId,
     String? requestKey,
@@ -31283,6 +34189,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
     kind: kind ?? this.kind,
     signedQuantity: signedQuantity ?? this.signedQuantity,
     signedAmountCents: signedAmountCents ?? this.signedAmountCents,
+    restoresStock: restoresStock ?? this.restoresStock,
     returnId: returnId ?? this.returnId,
     returnItemId: returnItemId ?? this.returnItemId,
     requestKey: requestKey ?? this.requestKey,
@@ -31304,6 +34211,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
           ..write('kind: $kind, ')
           ..write('signedQuantity: $signedQuantity, ')
           ..write('signedAmountCents: $signedAmountCents, ')
+          ..write('restoresStock: $restoresStock, ')
           ..write('returnId: $returnId, ')
           ..write('returnItemId: $returnItemId, ')
           ..write('requestKey: $requestKey, ')
@@ -31325,6 +34233,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
     kind,
     signedQuantity,
     signedAmountCents,
+    restoresStock,
     returnId,
     returnItemId,
     requestKey,
@@ -31345,6 +34254,7 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
           other.kind == this.kind &&
           other.signedQuantity == this.signedQuantity &&
           other.signedAmountCents == this.signedAmountCents &&
+          other.restoresStock == this.restoresStock &&
           other.returnId == this.returnId &&
           other.returnItemId == this.returnItemId &&
           other.requestKey == this.requestKey &&
@@ -31354,30 +34264,225 @@ class ConsignmentAdjustmentReturnEventsData extends DataClass
           other.createdAt == this.createdAt);
 }
 
-class SupplierProductCodeLocks extends Table
-    with TableInfo<SupplierProductCodeLocks, SupplierProductCodeLocksData> {
+class ConsignmentCustodyDocuments extends Table
+    with
+        TableInfo<
+          ConsignmentCustodyDocuments,
+          ConsignmentCustodyDocumentsData
+        > {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  SupplierProductCodeLocks(this.attachedDatabase, [this._alias]);
-  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
-    'supplier_id',
+  ConsignmentCustodyDocuments(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
     aliasedName,
     false,
+    hasAutoIncrement: true,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
   );
-  late final GeneratedColumn<String> productCode = GeneratedColumn<String>(
-    'product_code',
+  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
+    'organization_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
+  );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: true,
     $customConstraints: 'NOT NULL',
   );
-  late final GeneratedColumn<String> lockedAt = GeneratedColumn<String>(
-    'locked_at',
+  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
+    'database_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
+  );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES business_warehouses(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> documentNumber = GeneratedColumn<String>(
+    'document_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> documentType = GeneratedColumn<String>(
+    'document_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> responsibility = GeneratedColumn<String>(
+    'responsibility',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
+    defaultValue: const CustomExpression('\'draft\''),
+  );
+  late final GeneratedColumn<String> occurredAt = GeneratedColumn<String>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> lineCount = GeneratedColumn<int>(
+    'line_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
+    'posted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> voidedBy = GeneratedColumn<int>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> voidedAt = GeneratedColumn<String>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -31386,115 +34491,1325 @@ class SupplierProductCodeLocks extends Table
     defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
   );
   @override
-  List<GeneratedColumn> get $columns => [supplierId, productCode, lockedAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    documentNumber,
+    documentType,
+    responsibility,
+    status,
+    occurredAt,
+    reason,
+    notes,
+    lineCount,
+    requestKey,
+    requestHash,
+    createdBy,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+    updatedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'supplier_product_code_locks';
+  static const String $name = 'consignment_custody_documents';
   @override
-  Set<GeneratedColumn> get $primaryKey => {supplierId};
+  Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  SupplierProductCodeLocksData map(
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {branchId, documentNumber},
+  ];
+  @override
+  ConsignmentCustodyDocumentsData map(
     Map<String, dynamic> data, {
     String? tablePrefix,
   }) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return SupplierProductCodeLocksData(
+    return ConsignmentCustodyDocumentsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      organizationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_id'],
+      )!,
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      databaseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}database_id'],
+      )!,
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
       supplierId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}supplier_id'],
       )!,
-      productCode: attachedDatabase.typeMapping.read(
+      agreementId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}product_code'],
+        data['${effectivePrefix}agreement_id'],
       )!,
-      lockedAt: attachedDatabase.typeMapping.read(
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      documentNumber: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}locked_at'],
+        data['${effectivePrefix}document_number'],
+      )!,
+      documentType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_type'],
+      )!,
+      responsibility: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}responsibility'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      lineCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}line_count'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      postedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}posted_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
       )!,
     );
   }
 
   @override
-  SupplierProductCodeLocks createAlias(String alias) {
-    return SupplierProductCodeLocks(attachedDatabase, alias);
+  ConsignmentCustodyDocuments createAlias(String alias) {
+    return ConsignmentCustodyDocuments(attachedDatabase, alias);
   }
 
   @override
-  List<String> get customConstraints => const ['PRIMARY KEY(supplier_id)'];
+  List<String> get customConstraints => const [
+    'UNIQUE(branch_id, document_number)',
+    'FOREIGN KEY(branch_id, organization_id)REFERENCES business_branches(id, organization_id)ON DELETE RESTRICT',
+    'CHECK(document_type IN (\'supplier_return\', \'loss\', \'damage\'))',
+    'CHECK(responsibility IN (\'supplier\', \'company\'))',
+    'CHECK(document_type != \'supplier_return\' OR responsibility = \'supplier\')',
+    'CHECK(status IN (\'draft\', \'posted\', \'voided\'))',
+    'CHECK(line_count BETWEEN 1 AND 500)',
+    'CHECK(length(trim(reason)) BETWEEN 1 AND 500)',
+    'CHECK(length(notes) <= 2000 AND length(void_reason) <= 500)',
+  ];
   @override
   bool get dontWriteConstraints => true;
 }
 
-class SupplierProductCodeLocksData extends DataClass
-    implements Insertable<SupplierProductCodeLocksData> {
+class ConsignmentCustodyDocumentsData extends DataClass
+    implements Insertable<ConsignmentCustodyDocumentsData> {
+  final int id;
+  final String organizationId;
+  final String branchId;
+  final String databaseId;
+  final String warehouseId;
   final int supplierId;
-  final String productCode;
-  final String lockedAt;
-  const SupplierProductCodeLocksData({
+  final String agreementId;
+  final int currencyId;
+  final String documentNumber;
+  final String documentType;
+  final String responsibility;
+  final String status;
+  final String occurredAt;
+  final String reason;
+  final String notes;
+  final int lineCount;
+  final String requestKey;
+  final String requestHash;
+  final int createdBy;
+  final int? postedBy;
+  final String? postedAt;
+  final int? voidedBy;
+  final String? voidedAt;
+  final String voidReason;
+  final String createdAt;
+  final String updatedAt;
+  const ConsignmentCustodyDocumentsData({
+    required this.id,
+    required this.organizationId,
+    required this.branchId,
+    required this.databaseId,
+    required this.warehouseId,
     required this.supplierId,
-    required this.productCode,
-    required this.lockedAt,
+    required this.agreementId,
+    required this.currencyId,
+    required this.documentNumber,
+    required this.documentType,
+    required this.responsibility,
+    required this.status,
+    required this.occurredAt,
+    required this.reason,
+    required this.notes,
+    required this.lineCount,
+    required this.requestKey,
+    required this.requestHash,
+    required this.createdBy,
+    this.postedBy,
+    this.postedAt,
+    this.voidedBy,
+    this.voidedAt,
+    required this.voidReason,
+    required this.createdAt,
+    required this.updatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['organization_id'] = Variable<String>(organizationId);
+    map['branch_id'] = Variable<String>(branchId);
+    map['database_id'] = Variable<String>(databaseId);
+    map['warehouse_id'] = Variable<String>(warehouseId);
     map['supplier_id'] = Variable<int>(supplierId);
-    map['product_code'] = Variable<String>(productCode);
-    map['locked_at'] = Variable<String>(lockedAt);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['document_number'] = Variable<String>(documentNumber);
+    map['document_type'] = Variable<String>(documentType);
+    map['responsibility'] = Variable<String>(responsibility);
+    map['status'] = Variable<String>(status);
+    map['occurred_at'] = Variable<String>(occurredAt);
+    map['reason'] = Variable<String>(reason);
+    map['notes'] = Variable<String>(notes);
+    map['line_count'] = Variable<int>(lineCount);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['created_by'] = Variable<int>(createdBy);
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    if (!nullToAbsent || postedAt != null) {
+      map['posted_at'] = Variable<String>(postedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<int>(voidedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<String>(voidedAt);
+    }
+    map['void_reason'] = Variable<String>(voidReason);
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
     return map;
   }
 
-  factory SupplierProductCodeLocksData.fromJson(
+  factory ConsignmentCustodyDocumentsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return SupplierProductCodeLocksData(
+    return ConsignmentCustodyDocumentsData(
+      id: serializer.fromJson<int>(json['id']),
+      organizationId: serializer.fromJson<String>(json['organizationId']),
+      branchId: serializer.fromJson<String>(json['branchId']),
+      databaseId: serializer.fromJson<String>(json['databaseId']),
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
       supplierId: serializer.fromJson<int>(json['supplierId']),
-      productCode: serializer.fromJson<String>(json['productCode']),
-      lockedAt: serializer.fromJson<String>(json['lockedAt']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      documentNumber: serializer.fromJson<String>(json['documentNumber']),
+      documentType: serializer.fromJson<String>(json['documentType']),
+      responsibility: serializer.fromJson<String>(json['responsibility']),
+      status: serializer.fromJson<String>(json['status']),
+      occurredAt: serializer.fromJson<String>(json['occurredAt']),
+      reason: serializer.fromJson<String>(json['reason']),
+      notes: serializer.fromJson<String>(json['notes']),
+      lineCount: serializer.fromJson<int>(json['lineCount']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      postedAt: serializer.fromJson<String?>(json['postedAt']),
+      voidedBy: serializer.fromJson<int?>(json['voidedBy']),
+      voidedAt: serializer.fromJson<String?>(json['voidedAt']),
+      voidReason: serializer.fromJson<String>(json['voidReason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
     );
   }
   @override
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'organizationId': serializer.toJson<String>(organizationId),
+      'branchId': serializer.toJson<String>(branchId),
+      'databaseId': serializer.toJson<String>(databaseId),
+      'warehouseId': serializer.toJson<String>(warehouseId),
       'supplierId': serializer.toJson<int>(supplierId),
-      'productCode': serializer.toJson<String>(productCode),
-      'lockedAt': serializer.toJson<String>(lockedAt),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'documentNumber': serializer.toJson<String>(documentNumber),
+      'documentType': serializer.toJson<String>(documentType),
+      'responsibility': serializer.toJson<String>(responsibility),
+      'status': serializer.toJson<String>(status),
+      'occurredAt': serializer.toJson<String>(occurredAt),
+      'reason': serializer.toJson<String>(reason),
+      'notes': serializer.toJson<String>(notes),
+      'lineCount': serializer.toJson<int>(lineCount),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'postedAt': serializer.toJson<String?>(postedAt),
+      'voidedBy': serializer.toJson<int?>(voidedBy),
+      'voidedAt': serializer.toJson<String?>(voidedAt),
+      'voidReason': serializer.toJson<String>(voidReason),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
     };
   }
 
-  SupplierProductCodeLocksData copyWith({
+  ConsignmentCustodyDocumentsData copyWith({
+    int? id,
+    String? organizationId,
+    String? branchId,
+    String? databaseId,
+    String? warehouseId,
     int? supplierId,
-    String? productCode,
-    String? lockedAt,
-  }) => SupplierProductCodeLocksData(
+    String? agreementId,
+    int? currencyId,
+    String? documentNumber,
+    String? documentType,
+    String? responsibility,
+    String? status,
+    String? occurredAt,
+    String? reason,
+    String? notes,
+    int? lineCount,
+    String? requestKey,
+    String? requestHash,
+    int? createdBy,
+    Value<int?> postedBy = const Value.absent(),
+    Value<String?> postedAt = const Value.absent(),
+    Value<int?> voidedBy = const Value.absent(),
+    Value<String?> voidedAt = const Value.absent(),
+    String? voidReason,
+    String? createdAt,
+    String? updatedAt,
+  }) => ConsignmentCustodyDocumentsData(
+    id: id ?? this.id,
+    organizationId: organizationId ?? this.organizationId,
+    branchId: branchId ?? this.branchId,
+    databaseId: databaseId ?? this.databaseId,
+    warehouseId: warehouseId ?? this.warehouseId,
     supplierId: supplierId ?? this.supplierId,
-    productCode: productCode ?? this.productCode,
-    lockedAt: lockedAt ?? this.lockedAt,
+    agreementId: agreementId ?? this.agreementId,
+    currencyId: currencyId ?? this.currencyId,
+    documentNumber: documentNumber ?? this.documentNumber,
+    documentType: documentType ?? this.documentType,
+    responsibility: responsibility ?? this.responsibility,
+    status: status ?? this.status,
+    occurredAt: occurredAt ?? this.occurredAt,
+    reason: reason ?? this.reason,
+    notes: notes ?? this.notes,
+    lineCount: lineCount ?? this.lineCount,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    createdBy: createdBy ?? this.createdBy,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    postedAt: postedAt.present ? postedAt.value : this.postedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidReason: voidReason ?? this.voidReason,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
   );
   @override
   String toString() {
-    return (StringBuffer('SupplierProductCodeLocksData(')
+    return (StringBuffer('ConsignmentCustodyDocumentsData(')
+          ..write('id: $id, ')
+          ..write('organizationId: $organizationId, ')
+          ..write('branchId: $branchId, ')
+          ..write('databaseId: $databaseId, ')
+          ..write('warehouseId: $warehouseId, ')
           ..write('supplierId: $supplierId, ')
-          ..write('productCode: $productCode, ')
-          ..write('lockedAt: $lockedAt')
+          ..write('agreementId: $agreementId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('documentNumber: $documentNumber, ')
+          ..write('documentType: $documentType, ')
+          ..write('responsibility: $responsibility, ')
+          ..write('status: $status, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('reason: $reason, ')
+          ..write('notes: $notes, ')
+          ..write('lineCount: $lineCount, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(supplierId, productCode, lockedAt);
+  int get hashCode => Object.hashAll([
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    documentNumber,
+    documentType,
+    responsibility,
+    status,
+    occurredAt,
+    reason,
+    notes,
+    lineCount,
+    requestKey,
+    requestHash,
+    createdBy,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+    updatedAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is SupplierProductCodeLocksData &&
+      (other is ConsignmentCustodyDocumentsData &&
+          other.id == this.id &&
+          other.organizationId == this.organizationId &&
+          other.branchId == this.branchId &&
+          other.databaseId == this.databaseId &&
+          other.warehouseId == this.warehouseId &&
           other.supplierId == this.supplierId &&
-          other.productCode == this.productCode &&
-          other.lockedAt == this.lockedAt);
+          other.agreementId == this.agreementId &&
+          other.currencyId == this.currencyId &&
+          other.documentNumber == this.documentNumber &&
+          other.documentType == this.documentType &&
+          other.responsibility == this.responsibility &&
+          other.status == this.status &&
+          other.occurredAt == this.occurredAt &&
+          other.reason == this.reason &&
+          other.notes == this.notes &&
+          other.lineCount == this.lineCount &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.createdBy == this.createdBy &&
+          other.postedBy == this.postedBy &&
+          other.postedAt == this.postedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidReason == this.voidReason &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ConsignmentCustodyItems extends Table
+    with TableInfo<ConsignmentCustodyItems, ConsignmentCustodyItemsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentCustodyItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> documentId = GeneratedColumn<int>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_custody_documents(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> layerId = GeneratedColumn<String>(
+    'layer_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_inventory_layers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> batchId = GeneratedColumn<int>(
+    'batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> liabilityUnitCents = GeneratedColumn<int>(
+    'liability_unit_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> liabilityAmountCents = GeneratedColumn<int>(
+    'liability_amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> batchConsumptionId = GeneratedColumn<int>(
+    'batch_consumption_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES batch_consumptions(id)ON DELETE RESTRICT',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    layerId,
+    productId,
+    variantId,
+    batchId,
+    quantity,
+    quantityScale,
+    liabilityUnitCents,
+    liabilityAmountCents,
+    batchConsumptionId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_custody_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {documentId, layerId},
+  ];
+  @override
+  ConsignmentCustodyItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentCustodyItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}document_id'],
+      )!,
+      layerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}layer_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      batchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_id'],
+      ),
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      liabilityUnitCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}liability_unit_cents'],
+      ),
+      liabilityAmountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}liability_amount_cents'],
+      )!,
+      batchConsumptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_consumption_id'],
+      ),
+    );
+  }
+
+  @override
+  ConsignmentCustodyItems createAlias(String alias) {
+    return ConsignmentCustodyItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'UNIQUE(document_id, layer_id)',
+    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
+    'CHECK(quantity_scale IN (1, 1000))',
+    'CHECK(liability_unit_cents IS NULL OR liability_unit_cents BETWEEN 0 AND 9007199254740991)',
+    'CHECK(liability_amount_cents BETWEEN 0 AND 9007199254740991)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentCustodyItemsData extends DataClass
+    implements Insertable<ConsignmentCustodyItemsData> {
+  final String id;
+  final int documentId;
+  final String layerId;
+  final int productId;
+  final int variantId;
+  final int? batchId;
+  final int quantity;
+  final int quantityScale;
+  final int? liabilityUnitCents;
+  final int liabilityAmountCents;
+  final int? batchConsumptionId;
+  const ConsignmentCustodyItemsData({
+    required this.id,
+    required this.documentId,
+    required this.layerId,
+    required this.productId,
+    required this.variantId,
+    this.batchId,
+    required this.quantity,
+    required this.quantityScale,
+    this.liabilityUnitCents,
+    required this.liabilityAmountCents,
+    this.batchConsumptionId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['document_id'] = Variable<int>(documentId);
+    map['layer_id'] = Variable<String>(layerId);
+    map['product_id'] = Variable<int>(productId);
+    map['variant_id'] = Variable<int>(variantId);
+    if (!nullToAbsent || batchId != null) {
+      map['batch_id'] = Variable<int>(batchId);
+    }
+    map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    if (!nullToAbsent || liabilityUnitCents != null) {
+      map['liability_unit_cents'] = Variable<int>(liabilityUnitCents);
+    }
+    map['liability_amount_cents'] = Variable<int>(liabilityAmountCents);
+    if (!nullToAbsent || batchConsumptionId != null) {
+      map['batch_consumption_id'] = Variable<int>(batchConsumptionId);
+    }
+    return map;
+  }
+
+  factory ConsignmentCustodyItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentCustodyItemsData(
+      id: serializer.fromJson<String>(json['id']),
+      documentId: serializer.fromJson<int>(json['documentId']),
+      layerId: serializer.fromJson<String>(json['layerId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      batchId: serializer.fromJson<int?>(json['batchId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      liabilityUnitCents: serializer.fromJson<int?>(json['liabilityUnitCents']),
+      liabilityAmountCents: serializer.fromJson<int>(
+        json['liabilityAmountCents'],
+      ),
+      batchConsumptionId: serializer.fromJson<int?>(json['batchConsumptionId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'documentId': serializer.toJson<int>(documentId),
+      'layerId': serializer.toJson<String>(layerId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int>(variantId),
+      'batchId': serializer.toJson<int?>(batchId),
+      'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'liabilityUnitCents': serializer.toJson<int?>(liabilityUnitCents),
+      'liabilityAmountCents': serializer.toJson<int>(liabilityAmountCents),
+      'batchConsumptionId': serializer.toJson<int?>(batchConsumptionId),
+    };
+  }
+
+  ConsignmentCustodyItemsData copyWith({
+    String? id,
+    int? documentId,
+    String? layerId,
+    int? productId,
+    int? variantId,
+    Value<int?> batchId = const Value.absent(),
+    int? quantity,
+    int? quantityScale,
+    Value<int?> liabilityUnitCents = const Value.absent(),
+    int? liabilityAmountCents,
+    Value<int?> batchConsumptionId = const Value.absent(),
+  }) => ConsignmentCustodyItemsData(
+    id: id ?? this.id,
+    documentId: documentId ?? this.documentId,
+    layerId: layerId ?? this.layerId,
+    productId: productId ?? this.productId,
+    variantId: variantId ?? this.variantId,
+    batchId: batchId.present ? batchId.value : this.batchId,
+    quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    liabilityUnitCents: liabilityUnitCents.present
+        ? liabilityUnitCents.value
+        : this.liabilityUnitCents,
+    liabilityAmountCents: liabilityAmountCents ?? this.liabilityAmountCents,
+    batchConsumptionId: batchConsumptionId.present
+        ? batchConsumptionId.value
+        : this.batchConsumptionId,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentCustodyItemsData(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('layerId: $layerId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('batchId: $batchId, ')
+          ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('liabilityUnitCents: $liabilityUnitCents, ')
+          ..write('liabilityAmountCents: $liabilityAmountCents, ')
+          ..write('batchConsumptionId: $batchConsumptionId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    documentId,
+    layerId,
+    productId,
+    variantId,
+    batchId,
+    quantity,
+    quantityScale,
+    liabilityUnitCents,
+    liabilityAmountCents,
+    batchConsumptionId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentCustodyItemsData &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.layerId == this.layerId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.batchId == this.batchId &&
+          other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.liabilityUnitCents == this.liabilityUnitCents &&
+          other.liabilityAmountCents == this.liabilityAmountCents &&
+          other.batchConsumptionId == this.batchConsumptionId);
+}
+
+class ConsignmentCustodyEvents extends Table
+    with TableInfo<ConsignmentCustodyEvents, ConsignmentCustodyEventsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentCustodyEvents(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> documentId = GeneratedColumn<int>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_custody_documents(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> signedQuantity = GeneratedColumn<int>(
+    'signed_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> signedAmountCents = GeneratedColumn<int>(
+    'signed_amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> settlementStatus = GeneratedColumn<String>(
+    'settlement_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'not_applicable\'',
+    defaultValue: const CustomExpression('\'not_applicable\''),
+  );
+  late final GeneratedColumn<int> actorId = GeneratedColumn<int>(
+    'actor_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> reason = GeneratedColumn<String>(
+    'reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> occurredAt = GeneratedColumn<String>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    documentId,
+    kind,
+    supplierId,
+    agreementId,
+    currencyId,
+    signedQuantity,
+    signedAmountCents,
+    requestKey,
+    requestHash,
+    journalEntryId,
+    settlementStatus,
+    actorId,
+    reason,
+    occurredAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_custody_events';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {documentId, kind},
+  ];
+  @override
+  ConsignmentCustodyEventsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentCustodyEventsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}document_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      signedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_quantity'],
+      )!,
+      signedAmountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_cents'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      settlementStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_status'],
+      )!,
+      actorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}actor_id'],
+      )!,
+      reason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reason'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentCustodyEvents createAlias(String alias) {
+    return ConsignmentCustodyEvents(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(document_id, kind)',
+    'CHECK(kind IN (\'posted\', \'voided\'))',
+    'CHECK(signed_quantity != 0 AND signed_quantity BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK(signed_amount_cents BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK(settlement_status IN (\'not_applicable\', \'unassigned\', \'assigned\'))',
+    'CHECK((signed_amount_cents = 0 AND settlement_status = \'not_applicable\' AND journal_entry_id IS NULL)OR(signed_amount_cents != 0 AND settlement_status IN (\'unassigned\', \'assigned\') AND journal_entry_id IS NOT NULL))',
+    'CHECK((kind = \'posted\' AND signed_quantity > 0 AND signed_amount_cents >= 0)OR(kind = \'voided\' AND signed_quantity < 0 AND signed_amount_cents <= 0 AND length(trim(reason)) > 0))',
+    'CHECK(length(reason) <= 500)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentCustodyEventsData extends DataClass
+    implements Insertable<ConsignmentCustodyEventsData> {
+  final int id;
+  final int documentId;
+  final String kind;
+  final int supplierId;
+  final String agreementId;
+  final int currencyId;
+  final int signedQuantity;
+  final int signedAmountCents;
+  final String requestKey;
+  final String requestHash;
+  final int? journalEntryId;
+  final String settlementStatus;
+  final int actorId;
+  final String reason;
+  final String occurredAt;
+  final String createdAt;
+  const ConsignmentCustodyEventsData({
+    required this.id,
+    required this.documentId,
+    required this.kind,
+    required this.supplierId,
+    required this.agreementId,
+    required this.currencyId,
+    required this.signedQuantity,
+    required this.signedAmountCents,
+    required this.requestKey,
+    required this.requestHash,
+    this.journalEntryId,
+    required this.settlementStatus,
+    required this.actorId,
+    required this.reason,
+    required this.occurredAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['document_id'] = Variable<int>(documentId);
+    map['kind'] = Variable<String>(kind);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['signed_quantity'] = Variable<int>(signedQuantity);
+    map['signed_amount_cents'] = Variable<int>(signedAmountCents);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    map['settlement_status'] = Variable<String>(settlementStatus);
+    map['actor_id'] = Variable<int>(actorId);
+    map['reason'] = Variable<String>(reason);
+    map['occurred_at'] = Variable<String>(occurredAt);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ConsignmentCustodyEventsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentCustodyEventsData(
+      id: serializer.fromJson<int>(json['id']),
+      documentId: serializer.fromJson<int>(json['documentId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      signedQuantity: serializer.fromJson<int>(json['signedQuantity']),
+      signedAmountCents: serializer.fromJson<int>(json['signedAmountCents']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      settlementStatus: serializer.fromJson<String>(json['settlementStatus']),
+      actorId: serializer.fromJson<int>(json['actorId']),
+      reason: serializer.fromJson<String>(json['reason']),
+      occurredAt: serializer.fromJson<String>(json['occurredAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'documentId': serializer.toJson<int>(documentId),
+      'kind': serializer.toJson<String>(kind),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'signedQuantity': serializer.toJson<int>(signedQuantity),
+      'signedAmountCents': serializer.toJson<int>(signedAmountCents),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'settlementStatus': serializer.toJson<String>(settlementStatus),
+      'actorId': serializer.toJson<int>(actorId),
+      'reason': serializer.toJson<String>(reason),
+      'occurredAt': serializer.toJson<String>(occurredAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ConsignmentCustodyEventsData copyWith({
+    int? id,
+    int? documentId,
+    String? kind,
+    int? supplierId,
+    String? agreementId,
+    int? currencyId,
+    int? signedQuantity,
+    int? signedAmountCents,
+    String? requestKey,
+    String? requestHash,
+    Value<int?> journalEntryId = const Value.absent(),
+    String? settlementStatus,
+    int? actorId,
+    String? reason,
+    String? occurredAt,
+    String? createdAt,
+  }) => ConsignmentCustodyEventsData(
+    id: id ?? this.id,
+    documentId: documentId ?? this.documentId,
+    kind: kind ?? this.kind,
+    supplierId: supplierId ?? this.supplierId,
+    agreementId: agreementId ?? this.agreementId,
+    currencyId: currencyId ?? this.currencyId,
+    signedQuantity: signedQuantity ?? this.signedQuantity,
+    signedAmountCents: signedAmountCents ?? this.signedAmountCents,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    settlementStatus: settlementStatus ?? this.settlementStatus,
+    actorId: actorId ?? this.actorId,
+    reason: reason ?? this.reason,
+    occurredAt: occurredAt ?? this.occurredAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentCustodyEventsData(')
+          ..write('id: $id, ')
+          ..write('documentId: $documentId, ')
+          ..write('kind: $kind, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('signedQuantity: $signedQuantity, ')
+          ..write('signedAmountCents: $signedAmountCents, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('settlementStatus: $settlementStatus, ')
+          ..write('actorId: $actorId, ')
+          ..write('reason: $reason, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    documentId,
+    kind,
+    supplierId,
+    agreementId,
+    currencyId,
+    signedQuantity,
+    signedAmountCents,
+    requestKey,
+    requestHash,
+    journalEntryId,
+    settlementStatus,
+    actorId,
+    reason,
+    occurredAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentCustodyEventsData &&
+          other.id == this.id &&
+          other.documentId == this.documentId &&
+          other.kind == this.kind &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.currencyId == this.currencyId &&
+          other.signedQuantity == this.signedQuantity &&
+          other.signedAmountCents == this.signedAmountCents &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.journalEntryId == this.journalEntryId &&
+          other.settlementStatus == this.settlementStatus &&
+          other.actorId == this.actorId &&
+          other.reason == this.reason &&
+          other.occurredAt == this.occurredAt &&
+          other.createdAt == this.createdAt);
 }
 
 class SupplierTransactions extends Table
@@ -31870,6 +36185,3192 @@ class SupplierTransactionsData extends DataClass
           other.referenceType == this.referenceType &&
           other.transactionDate == this.transactionDate &&
           other.createdAt == this.createdAt);
+}
+
+class ConsignmentOwnershipConversions extends Table
+    with
+        TableInfo<
+          ConsignmentOwnershipConversions,
+          ConsignmentOwnershipConversionsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentOwnershipConversions(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
+    'organization_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
+  );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
+    'database_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
+  );
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> receiptId = GeneratedColumn<String>(
+    'receipt_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL UNIQUE REFERENCES consignment_receipts(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> conversionNumber = GeneratedColumn<String>(
+    'conversion_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> evidenceReference =
+      GeneratedColumn<String>(
+        'evidence_reference',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      );
+  late final GeneratedColumn<String> convertedAt = GeneratedColumn<String>(
+    'converted_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> lineCount = GeneratedColumn<int>(
+    'line_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> inventoryValueCents = GeneratedColumn<int>(
+    'inventory_value_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'posting\'',
+    defaultValue: const CustomExpression('\'posting\''),
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierTransactionId = GeneratedColumn<int>(
+    'supplier_transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> voidRequestKey = GeneratedColumn<String>(
+    'void_request_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> voidRequestHash = GeneratedColumn<String>(
+    'void_request_hash',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> voidedBy = GeneratedColumn<int>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> voidedAt = GeneratedColumn<String>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> reversalJournalEntryId = GeneratedColumn<int>(
+    'reversal_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int>
+  reversalSupplierTransactionId = GeneratedColumn<int>(
+    'reversal_supplier_transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    receiptId,
+    conversionNumber,
+    evidenceReference,
+    convertedAt,
+    notes,
+    lineCount,
+    inventoryValueCents,
+    status,
+    requestKey,
+    requestHash,
+    journalEntryId,
+    supplierTransactionId,
+    createdBy,
+    createdAt,
+    voidRequestKey,
+    voidRequestHash,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    reversalJournalEntryId,
+    reversalSupplierTransactionId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_ownership_conversions';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {branchId, conversionNumber},
+  ];
+  @override
+  ConsignmentOwnershipConversionsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentOwnershipConversionsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      organizationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_id'],
+      )!,
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      databaseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}database_id'],
+      )!,
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      receiptId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_id'],
+      )!,
+      conversionNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversion_number'],
+      )!,
+      evidenceReference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}evidence_reference'],
+      )!,
+      convertedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}converted_at'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      lineCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}line_count'],
+      )!,
+      inventoryValueCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inventory_value_cents'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      supplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_transaction_id'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      voidRequestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_request_key'],
+      ),
+      voidRequestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_request_hash'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      )!,
+      reversalJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_journal_entry_id'],
+      ),
+      reversalSupplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_supplier_transaction_id'],
+      ),
+    );
+  }
+
+  @override
+  ConsignmentOwnershipConversions createAlias(String alias) {
+    return ConsignmentOwnershipConversions(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(branch_id, conversion_number)',
+    'FOREIGN KEY(warehouse_id, branch_id, organization_id)REFERENCES business_warehouses(id, branch_id, organization_id)ON DELETE RESTRICT',
+    'CHECK(line_count BETWEEN 1 AND 500)',
+    'CHECK(inventory_value_cents > 0 AND inventory_value_cents <= 9007199254740991)',
+    'CHECK(status IN (\'posting\', \'posted\', \'voided\'))',
+    'CHECK(length(notes) <= 2000 AND length(void_reason) <= 500)',
+    'CHECK((status = \'posting\' AND journal_entry_id IS NULL AND supplier_transaction_id IS NULL AND void_request_key IS NULL AND void_request_hash IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0 AND reversal_journal_entry_id IS NULL AND reversal_supplier_transaction_id IS NULL)OR(status = \'posted\' AND journal_entry_id IS NOT NULL AND supplier_transaction_id IS NOT NULL AND void_request_key IS NULL AND void_request_hash IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason) = 0 AND reversal_journal_entry_id IS NULL AND reversal_supplier_transaction_id IS NULL)OR(status = \'voided\' AND journal_entry_id IS NOT NULL AND supplier_transaction_id IS NOT NULL AND length(void_request_key) = 36 AND length(void_request_hash) = 64 AND voided_by IS NOT NULL AND voided_at IS NOT NULL AND length(trim(void_reason)) > 0 AND reversal_journal_entry_id IS NOT NULL AND reversal_supplier_transaction_id IS NOT NULL))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentOwnershipConversionsData extends DataClass
+    implements Insertable<ConsignmentOwnershipConversionsData> {
+  final int id;
+  final String organizationId;
+  final String branchId;
+  final String databaseId;
+  final String warehouseId;
+  final int supplierId;
+  final String agreementId;
+  final int currencyId;
+  final String receiptId;
+  final String conversionNumber;
+  final String evidenceReference;
+  final String convertedAt;
+  final String notes;
+  final int lineCount;
+  final int inventoryValueCents;
+  final String status;
+  final String requestKey;
+  final String requestHash;
+  final int? journalEntryId;
+  final int? supplierTransactionId;
+  final int createdBy;
+  final String createdAt;
+  final String? voidRequestKey;
+  final String? voidRequestHash;
+  final int? voidedBy;
+  final String? voidedAt;
+  final String voidReason;
+  final int? reversalJournalEntryId;
+  final int? reversalSupplierTransactionId;
+  const ConsignmentOwnershipConversionsData({
+    required this.id,
+    required this.organizationId,
+    required this.branchId,
+    required this.databaseId,
+    required this.warehouseId,
+    required this.supplierId,
+    required this.agreementId,
+    required this.currencyId,
+    required this.receiptId,
+    required this.conversionNumber,
+    required this.evidenceReference,
+    required this.convertedAt,
+    required this.notes,
+    required this.lineCount,
+    required this.inventoryValueCents,
+    required this.status,
+    required this.requestKey,
+    required this.requestHash,
+    this.journalEntryId,
+    this.supplierTransactionId,
+    required this.createdBy,
+    required this.createdAt,
+    this.voidRequestKey,
+    this.voidRequestHash,
+    this.voidedBy,
+    this.voidedAt,
+    required this.voidReason,
+    this.reversalJournalEntryId,
+    this.reversalSupplierTransactionId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['organization_id'] = Variable<String>(organizationId);
+    map['branch_id'] = Variable<String>(branchId);
+    map['database_id'] = Variable<String>(databaseId);
+    map['warehouse_id'] = Variable<String>(warehouseId);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['receipt_id'] = Variable<String>(receiptId);
+    map['conversion_number'] = Variable<String>(conversionNumber);
+    map['evidence_reference'] = Variable<String>(evidenceReference);
+    map['converted_at'] = Variable<String>(convertedAt);
+    map['notes'] = Variable<String>(notes);
+    map['line_count'] = Variable<int>(lineCount);
+    map['inventory_value_cents'] = Variable<int>(inventoryValueCents);
+    map['status'] = Variable<String>(status);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    if (!nullToAbsent || supplierTransactionId != null) {
+      map['supplier_transaction_id'] = Variable<int>(supplierTransactionId);
+    }
+    map['created_by'] = Variable<int>(createdBy);
+    map['created_at'] = Variable<String>(createdAt);
+    if (!nullToAbsent || voidRequestKey != null) {
+      map['void_request_key'] = Variable<String>(voidRequestKey);
+    }
+    if (!nullToAbsent || voidRequestHash != null) {
+      map['void_request_hash'] = Variable<String>(voidRequestHash);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<int>(voidedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<String>(voidedAt);
+    }
+    map['void_reason'] = Variable<String>(voidReason);
+    if (!nullToAbsent || reversalJournalEntryId != null) {
+      map['reversal_journal_entry_id'] = Variable<int>(reversalJournalEntryId);
+    }
+    if (!nullToAbsent || reversalSupplierTransactionId != null) {
+      map['reversal_supplier_transaction_id'] = Variable<int>(
+        reversalSupplierTransactionId,
+      );
+    }
+    return map;
+  }
+
+  factory ConsignmentOwnershipConversionsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentOwnershipConversionsData(
+      id: serializer.fromJson<int>(json['id']),
+      organizationId: serializer.fromJson<String>(json['organizationId']),
+      branchId: serializer.fromJson<String>(json['branchId']),
+      databaseId: serializer.fromJson<String>(json['databaseId']),
+      warehouseId: serializer.fromJson<String>(json['warehouseId']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      receiptId: serializer.fromJson<String>(json['receiptId']),
+      conversionNumber: serializer.fromJson<String>(json['conversionNumber']),
+      evidenceReference: serializer.fromJson<String>(json['evidenceReference']),
+      convertedAt: serializer.fromJson<String>(json['convertedAt']),
+      notes: serializer.fromJson<String>(json['notes']),
+      lineCount: serializer.fromJson<int>(json['lineCount']),
+      inventoryValueCents: serializer.fromJson<int>(
+        json['inventoryValueCents'],
+      ),
+      status: serializer.fromJson<String>(json['status']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      supplierTransactionId: serializer.fromJson<int?>(
+        json['supplierTransactionId'],
+      ),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      voidRequestKey: serializer.fromJson<String?>(json['voidRequestKey']),
+      voidRequestHash: serializer.fromJson<String?>(json['voidRequestHash']),
+      voidedBy: serializer.fromJson<int?>(json['voidedBy']),
+      voidedAt: serializer.fromJson<String?>(json['voidedAt']),
+      voidReason: serializer.fromJson<String>(json['voidReason']),
+      reversalJournalEntryId: serializer.fromJson<int?>(
+        json['reversalJournalEntryId'],
+      ),
+      reversalSupplierTransactionId: serializer.fromJson<int?>(
+        json['reversalSupplierTransactionId'],
+      ),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'organizationId': serializer.toJson<String>(organizationId),
+      'branchId': serializer.toJson<String>(branchId),
+      'databaseId': serializer.toJson<String>(databaseId),
+      'warehouseId': serializer.toJson<String>(warehouseId),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'receiptId': serializer.toJson<String>(receiptId),
+      'conversionNumber': serializer.toJson<String>(conversionNumber),
+      'evidenceReference': serializer.toJson<String>(evidenceReference),
+      'convertedAt': serializer.toJson<String>(convertedAt),
+      'notes': serializer.toJson<String>(notes),
+      'lineCount': serializer.toJson<int>(lineCount),
+      'inventoryValueCents': serializer.toJson<int>(inventoryValueCents),
+      'status': serializer.toJson<String>(status),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'supplierTransactionId': serializer.toJson<int?>(supplierTransactionId),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'voidRequestKey': serializer.toJson<String?>(voidRequestKey),
+      'voidRequestHash': serializer.toJson<String?>(voidRequestHash),
+      'voidedBy': serializer.toJson<int?>(voidedBy),
+      'voidedAt': serializer.toJson<String?>(voidedAt),
+      'voidReason': serializer.toJson<String>(voidReason),
+      'reversalJournalEntryId': serializer.toJson<int?>(reversalJournalEntryId),
+      'reversalSupplierTransactionId': serializer.toJson<int?>(
+        reversalSupplierTransactionId,
+      ),
+    };
+  }
+
+  ConsignmentOwnershipConversionsData copyWith({
+    int? id,
+    String? organizationId,
+    String? branchId,
+    String? databaseId,
+    String? warehouseId,
+    int? supplierId,
+    String? agreementId,
+    int? currencyId,
+    String? receiptId,
+    String? conversionNumber,
+    String? evidenceReference,
+    String? convertedAt,
+    String? notes,
+    int? lineCount,
+    int? inventoryValueCents,
+    String? status,
+    String? requestKey,
+    String? requestHash,
+    Value<int?> journalEntryId = const Value.absent(),
+    Value<int?> supplierTransactionId = const Value.absent(),
+    int? createdBy,
+    String? createdAt,
+    Value<String?> voidRequestKey = const Value.absent(),
+    Value<String?> voidRequestHash = const Value.absent(),
+    Value<int?> voidedBy = const Value.absent(),
+    Value<String?> voidedAt = const Value.absent(),
+    String? voidReason,
+    Value<int?> reversalJournalEntryId = const Value.absent(),
+    Value<int?> reversalSupplierTransactionId = const Value.absent(),
+  }) => ConsignmentOwnershipConversionsData(
+    id: id ?? this.id,
+    organizationId: organizationId ?? this.organizationId,
+    branchId: branchId ?? this.branchId,
+    databaseId: databaseId ?? this.databaseId,
+    warehouseId: warehouseId ?? this.warehouseId,
+    supplierId: supplierId ?? this.supplierId,
+    agreementId: agreementId ?? this.agreementId,
+    currencyId: currencyId ?? this.currencyId,
+    receiptId: receiptId ?? this.receiptId,
+    conversionNumber: conversionNumber ?? this.conversionNumber,
+    evidenceReference: evidenceReference ?? this.evidenceReference,
+    convertedAt: convertedAt ?? this.convertedAt,
+    notes: notes ?? this.notes,
+    lineCount: lineCount ?? this.lineCount,
+    inventoryValueCents: inventoryValueCents ?? this.inventoryValueCents,
+    status: status ?? this.status,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    supplierTransactionId: supplierTransactionId.present
+        ? supplierTransactionId.value
+        : this.supplierTransactionId,
+    createdBy: createdBy ?? this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    voidRequestKey: voidRequestKey.present
+        ? voidRequestKey.value
+        : this.voidRequestKey,
+    voidRequestHash: voidRequestHash.present
+        ? voidRequestHash.value
+        : this.voidRequestHash,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidReason: voidReason ?? this.voidReason,
+    reversalJournalEntryId: reversalJournalEntryId.present
+        ? reversalJournalEntryId.value
+        : this.reversalJournalEntryId,
+    reversalSupplierTransactionId: reversalSupplierTransactionId.present
+        ? reversalSupplierTransactionId.value
+        : this.reversalSupplierTransactionId,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentOwnershipConversionsData(')
+          ..write('id: $id, ')
+          ..write('organizationId: $organizationId, ')
+          ..write('branchId: $branchId, ')
+          ..write('databaseId: $databaseId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('receiptId: $receiptId, ')
+          ..write('conversionNumber: $conversionNumber, ')
+          ..write('evidenceReference: $evidenceReference, ')
+          ..write('convertedAt: $convertedAt, ')
+          ..write('notes: $notes, ')
+          ..write('lineCount: $lineCount, ')
+          ..write('inventoryValueCents: $inventoryValueCents, ')
+          ..write('status: $status, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('supplierTransactionId: $supplierTransactionId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('voidRequestKey: $voidRequestKey, ')
+          ..write('voidRequestHash: $voidRequestHash, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write(
+            'reversalSupplierTransactionId: $reversalSupplierTransactionId',
+          )
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    warehouseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    receiptId,
+    conversionNumber,
+    evidenceReference,
+    convertedAt,
+    notes,
+    lineCount,
+    inventoryValueCents,
+    status,
+    requestKey,
+    requestHash,
+    journalEntryId,
+    supplierTransactionId,
+    createdBy,
+    createdAt,
+    voidRequestKey,
+    voidRequestHash,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    reversalJournalEntryId,
+    reversalSupplierTransactionId,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentOwnershipConversionsData &&
+          other.id == this.id &&
+          other.organizationId == this.organizationId &&
+          other.branchId == this.branchId &&
+          other.databaseId == this.databaseId &&
+          other.warehouseId == this.warehouseId &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.currencyId == this.currencyId &&
+          other.receiptId == this.receiptId &&
+          other.conversionNumber == this.conversionNumber &&
+          other.evidenceReference == this.evidenceReference &&
+          other.convertedAt == this.convertedAt &&
+          other.notes == this.notes &&
+          other.lineCount == this.lineCount &&
+          other.inventoryValueCents == this.inventoryValueCents &&
+          other.status == this.status &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.journalEntryId == this.journalEntryId &&
+          other.supplierTransactionId == this.supplierTransactionId &&
+          other.createdBy == this.createdBy &&
+          other.createdAt == this.createdAt &&
+          other.voidRequestKey == this.voidRequestKey &&
+          other.voidRequestHash == this.voidRequestHash &&
+          other.voidedBy == this.voidedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidReason == this.voidReason &&
+          other.reversalJournalEntryId == this.reversalJournalEntryId &&
+          other.reversalSupplierTransactionId ==
+              this.reversalSupplierTransactionId);
+}
+
+class ConsignmentOwnershipConversionItems extends Table
+    with
+        TableInfo<
+          ConsignmentOwnershipConversionItems,
+          ConsignmentOwnershipConversionItemsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentOwnershipConversionItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> conversionId = GeneratedColumn<int>(
+    'conversion_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_ownership_conversions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> receiptItemId = GeneratedColumn<String>(
+    'receipt_item_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL UNIQUE REFERENCES consignment_receipt_items(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES products(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> variantId = GeneratedColumn<int>(
+    'variant_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES product_variants(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierIdentityId = GeneratedColumn<int>(
+    'supplier_identity_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES supplier_product_identities(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> sourceBatchId = GeneratedColumn<int>(
+    'source_batch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES product_batches(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+    'quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> inventoryUnitCostCents = GeneratedColumn<int>(
+    'inventory_unit_cost_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> inventoryAmountCents = GeneratedColumn<int>(
+    'inventory_amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> originRemovalEventKey =
+      GeneratedColumn<String>(
+        'origin_removal_event_key',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        $customConstraints: 'NULL',
+      );
+  late final GeneratedColumn<int> batchConsumptionId = GeneratedColumn<int>(
+    'batch_consumption_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL REFERENCES batch_consumptions(id)ON DELETE RESTRICT',
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    conversionId,
+    receiptItemId,
+    productId,
+    variantId,
+    supplierIdentityId,
+    sourceBatchId,
+    quantity,
+    quantityScale,
+    measurementType,
+    inventoryUnitCostCents,
+    inventoryAmountCents,
+    originRemovalEventKey,
+    batchConsumptionId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_ownership_conversion_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentOwnershipConversionItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentOwnershipConversionItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      conversionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}conversion_id'],
+      )!,
+      receiptItemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}receipt_item_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      variantId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}variant_id'],
+      )!,
+      supplierIdentityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_identity_id'],
+      ),
+      sourceBatchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_batch_id'],
+      ),
+      quantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity'],
+      )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
+      inventoryUnitCostCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inventory_unit_cost_cents'],
+      )!,
+      inventoryAmountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}inventory_amount_cents'],
+      )!,
+      originRemovalEventKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin_removal_event_key'],
+      ),
+      batchConsumptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}batch_consumption_id'],
+      ),
+    );
+  }
+
+  @override
+  ConsignmentOwnershipConversionItems createAlias(String alias) {
+    return ConsignmentOwnershipConversionItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'PRIMARY KEY(id)',
+    'CHECK((supplier_identity_id IS NOT NULL AND source_batch_id IS NULL AND origin_removal_event_key IS NOT NULL AND batch_consumption_id IS NULL)OR(supplier_identity_id IS NULL AND source_batch_id IS NOT NULL AND origin_removal_event_key IS NULL AND batch_consumption_id IS NOT NULL))',
+    'CHECK(quantity > 0 AND quantity <= 9007199254740991)',
+    'CHECK((measurement_type = \'piece\' AND quantity_scale = 1)OR(measurement_type IN (\'weight\', \'length\', \'volume\') AND quantity_scale = 1000))',
+    'CHECK(inventory_unit_cost_cents >= 0 AND inventory_unit_cost_cents <= 9007199254740991)',
+    'CHECK(inventory_amount_cents > 0 AND inventory_amount_cents <= 9007199254740991)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentOwnershipConversionItemsData extends DataClass
+    implements Insertable<ConsignmentOwnershipConversionItemsData> {
+  final String id;
+  final int conversionId;
+  final String receiptItemId;
+  final int productId;
+  final int variantId;
+  final int? supplierIdentityId;
+  final int? sourceBatchId;
+  final int quantity;
+  final int quantityScale;
+  final String measurementType;
+  final int inventoryUnitCostCents;
+  final int inventoryAmountCents;
+  final String? originRemovalEventKey;
+  final int? batchConsumptionId;
+  const ConsignmentOwnershipConversionItemsData({
+    required this.id,
+    required this.conversionId,
+    required this.receiptItemId,
+    required this.productId,
+    required this.variantId,
+    this.supplierIdentityId,
+    this.sourceBatchId,
+    required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.inventoryUnitCostCents,
+    required this.inventoryAmountCents,
+    this.originRemovalEventKey,
+    this.batchConsumptionId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['conversion_id'] = Variable<int>(conversionId);
+    map['receipt_item_id'] = Variable<String>(receiptItemId);
+    map['product_id'] = Variable<int>(productId);
+    map['variant_id'] = Variable<int>(variantId);
+    if (!nullToAbsent || supplierIdentityId != null) {
+      map['supplier_identity_id'] = Variable<int>(supplierIdentityId);
+    }
+    if (!nullToAbsent || sourceBatchId != null) {
+      map['source_batch_id'] = Variable<int>(sourceBatchId);
+    }
+    map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
+    map['inventory_unit_cost_cents'] = Variable<int>(inventoryUnitCostCents);
+    map['inventory_amount_cents'] = Variable<int>(inventoryAmountCents);
+    if (!nullToAbsent || originRemovalEventKey != null) {
+      map['origin_removal_event_key'] = Variable<String>(originRemovalEventKey);
+    }
+    if (!nullToAbsent || batchConsumptionId != null) {
+      map['batch_consumption_id'] = Variable<int>(batchConsumptionId);
+    }
+    return map;
+  }
+
+  factory ConsignmentOwnershipConversionItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentOwnershipConversionItemsData(
+      id: serializer.fromJson<String>(json['id']),
+      conversionId: serializer.fromJson<int>(json['conversionId']),
+      receiptItemId: serializer.fromJson<String>(json['receiptItemId']),
+      productId: serializer.fromJson<int>(json['productId']),
+      variantId: serializer.fromJson<int>(json['variantId']),
+      supplierIdentityId: serializer.fromJson<int?>(json['supplierIdentityId']),
+      sourceBatchId: serializer.fromJson<int?>(json['sourceBatchId']),
+      quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
+      inventoryUnitCostCents: serializer.fromJson<int>(
+        json['inventoryUnitCostCents'],
+      ),
+      inventoryAmountCents: serializer.fromJson<int>(
+        json['inventoryAmountCents'],
+      ),
+      originRemovalEventKey: serializer.fromJson<String?>(
+        json['originRemovalEventKey'],
+      ),
+      batchConsumptionId: serializer.fromJson<int?>(json['batchConsumptionId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'conversionId': serializer.toJson<int>(conversionId),
+      'receiptItemId': serializer.toJson<String>(receiptItemId),
+      'productId': serializer.toJson<int>(productId),
+      'variantId': serializer.toJson<int>(variantId),
+      'supplierIdentityId': serializer.toJson<int?>(supplierIdentityId),
+      'sourceBatchId': serializer.toJson<int?>(sourceBatchId),
+      'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
+      'inventoryUnitCostCents': serializer.toJson<int>(inventoryUnitCostCents),
+      'inventoryAmountCents': serializer.toJson<int>(inventoryAmountCents),
+      'originRemovalEventKey': serializer.toJson<String?>(
+        originRemovalEventKey,
+      ),
+      'batchConsumptionId': serializer.toJson<int?>(batchConsumptionId),
+    };
+  }
+
+  ConsignmentOwnershipConversionItemsData copyWith({
+    String? id,
+    int? conversionId,
+    String? receiptItemId,
+    int? productId,
+    int? variantId,
+    Value<int?> supplierIdentityId = const Value.absent(),
+    Value<int?> sourceBatchId = const Value.absent(),
+    int? quantity,
+    int? quantityScale,
+    String? measurementType,
+    int? inventoryUnitCostCents,
+    int? inventoryAmountCents,
+    Value<String?> originRemovalEventKey = const Value.absent(),
+    Value<int?> batchConsumptionId = const Value.absent(),
+  }) => ConsignmentOwnershipConversionItemsData(
+    id: id ?? this.id,
+    conversionId: conversionId ?? this.conversionId,
+    receiptItemId: receiptItemId ?? this.receiptItemId,
+    productId: productId ?? this.productId,
+    variantId: variantId ?? this.variantId,
+    supplierIdentityId: supplierIdentityId.present
+        ? supplierIdentityId.value
+        : this.supplierIdentityId,
+    sourceBatchId: sourceBatchId.present
+        ? sourceBatchId.value
+        : this.sourceBatchId,
+    quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
+    inventoryUnitCostCents:
+        inventoryUnitCostCents ?? this.inventoryUnitCostCents,
+    inventoryAmountCents: inventoryAmountCents ?? this.inventoryAmountCents,
+    originRemovalEventKey: originRemovalEventKey.present
+        ? originRemovalEventKey.value
+        : this.originRemovalEventKey,
+    batchConsumptionId: batchConsumptionId.present
+        ? batchConsumptionId.value
+        : this.batchConsumptionId,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentOwnershipConversionItemsData(')
+          ..write('id: $id, ')
+          ..write('conversionId: $conversionId, ')
+          ..write('receiptItemId: $receiptItemId, ')
+          ..write('productId: $productId, ')
+          ..write('variantId: $variantId, ')
+          ..write('supplierIdentityId: $supplierIdentityId, ')
+          ..write('sourceBatchId: $sourceBatchId, ')
+          ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
+          ..write('inventoryUnitCostCents: $inventoryUnitCostCents, ')
+          ..write('inventoryAmountCents: $inventoryAmountCents, ')
+          ..write('originRemovalEventKey: $originRemovalEventKey, ')
+          ..write('batchConsumptionId: $batchConsumptionId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    conversionId,
+    receiptItemId,
+    productId,
+    variantId,
+    supplierIdentityId,
+    sourceBatchId,
+    quantity,
+    quantityScale,
+    measurementType,
+    inventoryUnitCostCents,
+    inventoryAmountCents,
+    originRemovalEventKey,
+    batchConsumptionId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentOwnershipConversionItemsData &&
+          other.id == this.id &&
+          other.conversionId == this.conversionId &&
+          other.receiptItemId == this.receiptItemId &&
+          other.productId == this.productId &&
+          other.variantId == this.variantId &&
+          other.supplierIdentityId == this.supplierIdentityId &&
+          other.sourceBatchId == this.sourceBatchId &&
+          other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
+          other.inventoryUnitCostCents == this.inventoryUnitCostCents &&
+          other.inventoryAmountCents == this.inventoryAmountCents &&
+          other.originRemovalEventKey == this.originRemovalEventKey &&
+          other.batchConsumptionId == this.batchConsumptionId);
+}
+
+class ConsignmentSettlementStatements extends Table
+    with
+        TableInfo<
+          ConsignmentSettlementStatements,
+          ConsignmentSettlementStatementsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentSettlementStatements(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<String> organizationId = GeneratedColumn<String>(
+    'organization_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_organizations(id)',
+  );
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> databaseId = GeneratedColumn<String>(
+    'database_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES business_contexts(database_id)',
+  );
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> agreementId = GeneratedColumn<String>(
+    'agreement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_agreements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES currencies(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> statementNumber = GeneratedColumn<String>(
+    'statement_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> periodStart = GeneratedColumn<String>(
+    'period_start',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> periodEnd = GeneratedColumn<String>(
+    'period_end',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> taxRateBps = GeneratedColumn<int>(
+    'tax_rate_bps',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> taxInclusive = GeneratedColumn<int>(
+    'tax_inclusive',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0 CHECK (tax_inclusive IN (0, 1))',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> obligationSubtotalCents =
+      GeneratedColumn<int>(
+        'obligation_subtotal_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        $customConstraints: 'NOT NULL',
+      );
+  late final GeneratedColumn<int> taxCents = GeneratedColumn<int>(
+    'tax_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> totalCents = GeneratedColumn<int>(
+    'total_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> paidCents = GeneratedColumn<int>(
+    'paid_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT 0',
+    defaultValue: const CustomExpression('0'),
+  );
+  late final GeneratedColumn<int> lineCount = GeneratedColumn<int>(
+    'line_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'draft\'',
+    defaultValue: const CustomExpression('\'draft\''),
+  );
+  late final GeneratedColumn<String> dueDate = GeneratedColumn<String>(
+    'due_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<String> requestHash = GeneratedColumn<String>(
+    'request_hash',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> supplierTransactionId = GeneratedColumn<int>(
+    'supplier_transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> voidJournalEntryId = GeneratedColumn<int>(
+    'void_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int>
+  voidSupplierTransactionId = GeneratedColumn<int>(
+    'void_supplier_transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<int> reviewedBy = GeneratedColumn<int>(
+    'reviewed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> reviewedAt = GeneratedColumn<String>(
+    'reviewed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> postedAt = GeneratedColumn<String>(
+    'posted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> voidedBy = GeneratedColumn<int>(
+    'voided_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> voidedAt = GeneratedColumn<String>(
+    'voided_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<String> voidReason = GeneratedColumn<String>(
+    'void_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  late final GeneratedColumn<String> updatedAt = GeneratedColumn<String>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    statementNumber,
+    periodStart,
+    periodEnd,
+    taxRateBps,
+    taxInclusive,
+    obligationSubtotalCents,
+    taxCents,
+    totalCents,
+    paidCents,
+    lineCount,
+    status,
+    dueDate,
+    requestKey,
+    requestHash,
+    notes,
+    journalEntryId,
+    supplierTransactionId,
+    voidJournalEntryId,
+    voidSupplierTransactionId,
+    createdBy,
+    reviewedBy,
+    reviewedAt,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_settlement_statements';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {branchId, statementNumber},
+  ];
+  @override
+  ConsignmentSettlementStatementsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentSettlementStatementsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      organizationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}organization_id'],
+      )!,
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      )!,
+      databaseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}database_id'],
+      )!,
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      agreementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}agreement_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      statementNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}statement_number'],
+      )!,
+      periodStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}period_start'],
+      )!,
+      periodEnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}period_end'],
+      )!,
+      taxRateBps: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tax_rate_bps'],
+      )!,
+      taxInclusive: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tax_inclusive'],
+      )!,
+      obligationSubtotalCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}obligation_subtotal_cents'],
+      )!,
+      taxCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}tax_cents'],
+      )!,
+      totalCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total_cents'],
+      )!,
+      paidCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}paid_cents'],
+      )!,
+      lineCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}line_count'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}due_date'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      requestHash: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_hash'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      supplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_transaction_id'],
+      ),
+      voidJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}void_journal_entry_id'],
+      ),
+      voidSupplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}void_supplier_transaction_id'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      reviewedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reviewed_by'],
+      ),
+      reviewedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reviewed_at'],
+      ),
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      postedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}posted_at'],
+      ),
+      voidedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voided_by'],
+      ),
+      voidedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}voided_at'],
+      ),
+      voidReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}void_reason'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentSettlementStatements createAlias(String alias) {
+    return ConsignmentSettlementStatements(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'UNIQUE(branch_id, statement_number)',
+    'FOREIGN KEY(branch_id, organization_id)REFERENCES business_branches(id, organization_id)ON DELETE RESTRICT',
+    'CHECK(period_end >= period_start)',
+    'CHECK(tax_rate_bps BETWEEN 0 AND 10000)',
+    'CHECK(obligation_subtotal_cents BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK(tax_cents BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK(total_cents BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK((obligation_subtotal_cents < 0 AND tax_cents <= 0 AND total_cents <= 0)OR(obligation_subtotal_cents = 0 AND tax_cents = 0 AND total_cents = 0)OR(obligation_subtotal_cents > 0 AND tax_cents >= 0 AND total_cents >= 0))',
+    'CHECK(paid_cents >= 0 AND(total_cents <= 0 OR paid_cents <= total_cents))',
+    'CHECK(line_count BETWEEN 1 AND 10000)',
+    'CHECK(status IN (\'draft\', \'reviewed\', \'posted\', \'partially_paid\', \'paid\', \'voided\'))',
+    'CHECK(length(notes) <= 2000 AND length(void_reason) <= 500)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentSettlementStatementsData extends DataClass
+    implements Insertable<ConsignmentSettlementStatementsData> {
+  final int id;
+  final String organizationId;
+  final String branchId;
+  final String databaseId;
+  final int supplierId;
+  final String agreementId;
+  final int currencyId;
+  final String statementNumber;
+  final String periodStart;
+  final String periodEnd;
+  final int taxRateBps;
+  final int taxInclusive;
+  final int obligationSubtotalCents;
+  final int taxCents;
+  final int totalCents;
+  final int paidCents;
+  final int lineCount;
+  final String status;
+  final String dueDate;
+  final String requestKey;
+  final String requestHash;
+  final String notes;
+  final int? journalEntryId;
+  final int? supplierTransactionId;
+  final int? voidJournalEntryId;
+  final int? voidSupplierTransactionId;
+  final int createdBy;
+  final int? reviewedBy;
+  final String? reviewedAt;
+  final int? postedBy;
+  final String? postedAt;
+  final int? voidedBy;
+  final String? voidedAt;
+  final String voidReason;
+  final String createdAt;
+  final String updatedAt;
+  const ConsignmentSettlementStatementsData({
+    required this.id,
+    required this.organizationId,
+    required this.branchId,
+    required this.databaseId,
+    required this.supplierId,
+    required this.agreementId,
+    required this.currencyId,
+    required this.statementNumber,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.taxRateBps,
+    required this.taxInclusive,
+    required this.obligationSubtotalCents,
+    required this.taxCents,
+    required this.totalCents,
+    required this.paidCents,
+    required this.lineCount,
+    required this.status,
+    required this.dueDate,
+    required this.requestKey,
+    required this.requestHash,
+    required this.notes,
+    this.journalEntryId,
+    this.supplierTransactionId,
+    this.voidJournalEntryId,
+    this.voidSupplierTransactionId,
+    required this.createdBy,
+    this.reviewedBy,
+    this.reviewedAt,
+    this.postedBy,
+    this.postedAt,
+    this.voidedBy,
+    this.voidedAt,
+    required this.voidReason,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['organization_id'] = Variable<String>(organizationId);
+    map['branch_id'] = Variable<String>(branchId);
+    map['database_id'] = Variable<String>(databaseId);
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['agreement_id'] = Variable<String>(agreementId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['statement_number'] = Variable<String>(statementNumber);
+    map['period_start'] = Variable<String>(periodStart);
+    map['period_end'] = Variable<String>(periodEnd);
+    map['tax_rate_bps'] = Variable<int>(taxRateBps);
+    map['tax_inclusive'] = Variable<int>(taxInclusive);
+    map['obligation_subtotal_cents'] = Variable<int>(obligationSubtotalCents);
+    map['tax_cents'] = Variable<int>(taxCents);
+    map['total_cents'] = Variable<int>(totalCents);
+    map['paid_cents'] = Variable<int>(paidCents);
+    map['line_count'] = Variable<int>(lineCount);
+    map['status'] = Variable<String>(status);
+    map['due_date'] = Variable<String>(dueDate);
+    map['request_key'] = Variable<String>(requestKey);
+    map['request_hash'] = Variable<String>(requestHash);
+    map['notes'] = Variable<String>(notes);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    if (!nullToAbsent || supplierTransactionId != null) {
+      map['supplier_transaction_id'] = Variable<int>(supplierTransactionId);
+    }
+    if (!nullToAbsent || voidJournalEntryId != null) {
+      map['void_journal_entry_id'] = Variable<int>(voidJournalEntryId);
+    }
+    if (!nullToAbsent || voidSupplierTransactionId != null) {
+      map['void_supplier_transaction_id'] = Variable<int>(
+        voidSupplierTransactionId,
+      );
+    }
+    map['created_by'] = Variable<int>(createdBy);
+    if (!nullToAbsent || reviewedBy != null) {
+      map['reviewed_by'] = Variable<int>(reviewedBy);
+    }
+    if (!nullToAbsent || reviewedAt != null) {
+      map['reviewed_at'] = Variable<String>(reviewedAt);
+    }
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    if (!nullToAbsent || postedAt != null) {
+      map['posted_at'] = Variable<String>(postedAt);
+    }
+    if (!nullToAbsent || voidedBy != null) {
+      map['voided_by'] = Variable<int>(voidedBy);
+    }
+    if (!nullToAbsent || voidedAt != null) {
+      map['voided_at'] = Variable<String>(voidedAt);
+    }
+    map['void_reason'] = Variable<String>(voidReason);
+    map['created_at'] = Variable<String>(createdAt);
+    map['updated_at'] = Variable<String>(updatedAt);
+    return map;
+  }
+
+  factory ConsignmentSettlementStatementsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentSettlementStatementsData(
+      id: serializer.fromJson<int>(json['id']),
+      organizationId: serializer.fromJson<String>(json['organizationId']),
+      branchId: serializer.fromJson<String>(json['branchId']),
+      databaseId: serializer.fromJson<String>(json['databaseId']),
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      agreementId: serializer.fromJson<String>(json['agreementId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      statementNumber: serializer.fromJson<String>(json['statementNumber']),
+      periodStart: serializer.fromJson<String>(json['periodStart']),
+      periodEnd: serializer.fromJson<String>(json['periodEnd']),
+      taxRateBps: serializer.fromJson<int>(json['taxRateBps']),
+      taxInclusive: serializer.fromJson<int>(json['taxInclusive']),
+      obligationSubtotalCents: serializer.fromJson<int>(
+        json['obligationSubtotalCents'],
+      ),
+      taxCents: serializer.fromJson<int>(json['taxCents']),
+      totalCents: serializer.fromJson<int>(json['totalCents']),
+      paidCents: serializer.fromJson<int>(json['paidCents']),
+      lineCount: serializer.fromJson<int>(json['lineCount']),
+      status: serializer.fromJson<String>(json['status']),
+      dueDate: serializer.fromJson<String>(json['dueDate']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      requestHash: serializer.fromJson<String>(json['requestHash']),
+      notes: serializer.fromJson<String>(json['notes']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      supplierTransactionId: serializer.fromJson<int?>(
+        json['supplierTransactionId'],
+      ),
+      voidJournalEntryId: serializer.fromJson<int?>(json['voidJournalEntryId']),
+      voidSupplierTransactionId: serializer.fromJson<int?>(
+        json['voidSupplierTransactionId'],
+      ),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      reviewedBy: serializer.fromJson<int?>(json['reviewedBy']),
+      reviewedAt: serializer.fromJson<String?>(json['reviewedAt']),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      postedAt: serializer.fromJson<String?>(json['postedAt']),
+      voidedBy: serializer.fromJson<int?>(json['voidedBy']),
+      voidedAt: serializer.fromJson<String?>(json['voidedAt']),
+      voidReason: serializer.fromJson<String>(json['voidReason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+      updatedAt: serializer.fromJson<String>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'organizationId': serializer.toJson<String>(organizationId),
+      'branchId': serializer.toJson<String>(branchId),
+      'databaseId': serializer.toJson<String>(databaseId),
+      'supplierId': serializer.toJson<int>(supplierId),
+      'agreementId': serializer.toJson<String>(agreementId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'statementNumber': serializer.toJson<String>(statementNumber),
+      'periodStart': serializer.toJson<String>(periodStart),
+      'periodEnd': serializer.toJson<String>(periodEnd),
+      'taxRateBps': serializer.toJson<int>(taxRateBps),
+      'taxInclusive': serializer.toJson<int>(taxInclusive),
+      'obligationSubtotalCents': serializer.toJson<int>(
+        obligationSubtotalCents,
+      ),
+      'taxCents': serializer.toJson<int>(taxCents),
+      'totalCents': serializer.toJson<int>(totalCents),
+      'paidCents': serializer.toJson<int>(paidCents),
+      'lineCount': serializer.toJson<int>(lineCount),
+      'status': serializer.toJson<String>(status),
+      'dueDate': serializer.toJson<String>(dueDate),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'requestHash': serializer.toJson<String>(requestHash),
+      'notes': serializer.toJson<String>(notes),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'supplierTransactionId': serializer.toJson<int?>(supplierTransactionId),
+      'voidJournalEntryId': serializer.toJson<int?>(voidJournalEntryId),
+      'voidSupplierTransactionId': serializer.toJson<int?>(
+        voidSupplierTransactionId,
+      ),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'reviewedBy': serializer.toJson<int?>(reviewedBy),
+      'reviewedAt': serializer.toJson<String?>(reviewedAt),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'postedAt': serializer.toJson<String?>(postedAt),
+      'voidedBy': serializer.toJson<int?>(voidedBy),
+      'voidedAt': serializer.toJson<String?>(voidedAt),
+      'voidReason': serializer.toJson<String>(voidReason),
+      'createdAt': serializer.toJson<String>(createdAt),
+      'updatedAt': serializer.toJson<String>(updatedAt),
+    };
+  }
+
+  ConsignmentSettlementStatementsData copyWith({
+    int? id,
+    String? organizationId,
+    String? branchId,
+    String? databaseId,
+    int? supplierId,
+    String? agreementId,
+    int? currencyId,
+    String? statementNumber,
+    String? periodStart,
+    String? periodEnd,
+    int? taxRateBps,
+    int? taxInclusive,
+    int? obligationSubtotalCents,
+    int? taxCents,
+    int? totalCents,
+    int? paidCents,
+    int? lineCount,
+    String? status,
+    String? dueDate,
+    String? requestKey,
+    String? requestHash,
+    String? notes,
+    Value<int?> journalEntryId = const Value.absent(),
+    Value<int?> supplierTransactionId = const Value.absent(),
+    Value<int?> voidJournalEntryId = const Value.absent(),
+    Value<int?> voidSupplierTransactionId = const Value.absent(),
+    int? createdBy,
+    Value<int?> reviewedBy = const Value.absent(),
+    Value<String?> reviewedAt = const Value.absent(),
+    Value<int?> postedBy = const Value.absent(),
+    Value<String?> postedAt = const Value.absent(),
+    Value<int?> voidedBy = const Value.absent(),
+    Value<String?> voidedAt = const Value.absent(),
+    String? voidReason,
+    String? createdAt,
+    String? updatedAt,
+  }) => ConsignmentSettlementStatementsData(
+    id: id ?? this.id,
+    organizationId: organizationId ?? this.organizationId,
+    branchId: branchId ?? this.branchId,
+    databaseId: databaseId ?? this.databaseId,
+    supplierId: supplierId ?? this.supplierId,
+    agreementId: agreementId ?? this.agreementId,
+    currencyId: currencyId ?? this.currencyId,
+    statementNumber: statementNumber ?? this.statementNumber,
+    periodStart: periodStart ?? this.periodStart,
+    periodEnd: periodEnd ?? this.periodEnd,
+    taxRateBps: taxRateBps ?? this.taxRateBps,
+    taxInclusive: taxInclusive ?? this.taxInclusive,
+    obligationSubtotalCents:
+        obligationSubtotalCents ?? this.obligationSubtotalCents,
+    taxCents: taxCents ?? this.taxCents,
+    totalCents: totalCents ?? this.totalCents,
+    paidCents: paidCents ?? this.paidCents,
+    lineCount: lineCount ?? this.lineCount,
+    status: status ?? this.status,
+    dueDate: dueDate ?? this.dueDate,
+    requestKey: requestKey ?? this.requestKey,
+    requestHash: requestHash ?? this.requestHash,
+    notes: notes ?? this.notes,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    supplierTransactionId: supplierTransactionId.present
+        ? supplierTransactionId.value
+        : this.supplierTransactionId,
+    voidJournalEntryId: voidJournalEntryId.present
+        ? voidJournalEntryId.value
+        : this.voidJournalEntryId,
+    voidSupplierTransactionId: voidSupplierTransactionId.present
+        ? voidSupplierTransactionId.value
+        : this.voidSupplierTransactionId,
+    createdBy: createdBy ?? this.createdBy,
+    reviewedBy: reviewedBy.present ? reviewedBy.value : this.reviewedBy,
+    reviewedAt: reviewedAt.present ? reviewedAt.value : this.reviewedAt,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    postedAt: postedAt.present ? postedAt.value : this.postedAt,
+    voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
+    voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
+    voidReason: voidReason ?? this.voidReason,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentSettlementStatementsData(')
+          ..write('id: $id, ')
+          ..write('organizationId: $organizationId, ')
+          ..write('branchId: $branchId, ')
+          ..write('databaseId: $databaseId, ')
+          ..write('supplierId: $supplierId, ')
+          ..write('agreementId: $agreementId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('statementNumber: $statementNumber, ')
+          ..write('periodStart: $periodStart, ')
+          ..write('periodEnd: $periodEnd, ')
+          ..write('taxRateBps: $taxRateBps, ')
+          ..write('taxInclusive: $taxInclusive, ')
+          ..write('obligationSubtotalCents: $obligationSubtotalCents, ')
+          ..write('taxCents: $taxCents, ')
+          ..write('totalCents: $totalCents, ')
+          ..write('paidCents: $paidCents, ')
+          ..write('lineCount: $lineCount, ')
+          ..write('status: $status, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('requestHash: $requestHash, ')
+          ..write('notes: $notes, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('supplierTransactionId: $supplierTransactionId, ')
+          ..write('voidJournalEntryId: $voidJournalEntryId, ')
+          ..write('voidSupplierTransactionId: $voidSupplierTransactionId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('reviewedBy: $reviewedBy, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('postedAt: $postedAt, ')
+          ..write('voidedBy: $voidedBy, ')
+          ..write('voidedAt: $voidedAt, ')
+          ..write('voidReason: $voidReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    organizationId,
+    branchId,
+    databaseId,
+    supplierId,
+    agreementId,
+    currencyId,
+    statementNumber,
+    periodStart,
+    periodEnd,
+    taxRateBps,
+    taxInclusive,
+    obligationSubtotalCents,
+    taxCents,
+    totalCents,
+    paidCents,
+    lineCount,
+    status,
+    dueDate,
+    requestKey,
+    requestHash,
+    notes,
+    journalEntryId,
+    supplierTransactionId,
+    voidJournalEntryId,
+    voidSupplierTransactionId,
+    createdBy,
+    reviewedBy,
+    reviewedAt,
+    postedBy,
+    postedAt,
+    voidedBy,
+    voidedAt,
+    voidReason,
+    createdAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentSettlementStatementsData &&
+          other.id == this.id &&
+          other.organizationId == this.organizationId &&
+          other.branchId == this.branchId &&
+          other.databaseId == this.databaseId &&
+          other.supplierId == this.supplierId &&
+          other.agreementId == this.agreementId &&
+          other.currencyId == this.currencyId &&
+          other.statementNumber == this.statementNumber &&
+          other.periodStart == this.periodStart &&
+          other.periodEnd == this.periodEnd &&
+          other.taxRateBps == this.taxRateBps &&
+          other.taxInclusive == this.taxInclusive &&
+          other.obligationSubtotalCents == this.obligationSubtotalCents &&
+          other.taxCents == this.taxCents &&
+          other.totalCents == this.totalCents &&
+          other.paidCents == this.paidCents &&
+          other.lineCount == this.lineCount &&
+          other.status == this.status &&
+          other.dueDate == this.dueDate &&
+          other.requestKey == this.requestKey &&
+          other.requestHash == this.requestHash &&
+          other.notes == this.notes &&
+          other.journalEntryId == this.journalEntryId &&
+          other.supplierTransactionId == this.supplierTransactionId &&
+          other.voidJournalEntryId == this.voidJournalEntryId &&
+          other.voidSupplierTransactionId == this.voidSupplierTransactionId &&
+          other.createdBy == this.createdBy &&
+          other.reviewedBy == this.reviewedBy &&
+          other.reviewedAt == this.reviewedAt &&
+          other.postedBy == this.postedBy &&
+          other.postedAt == this.postedAt &&
+          other.voidedBy == this.voidedBy &&
+          other.voidedAt == this.voidedAt &&
+          other.voidReason == this.voidReason &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ConsignmentSettlementItems extends Table
+    with TableInfo<ConsignmentSettlementItems, ConsignmentSettlementItemsData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentSettlementItems(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> statementId = GeneratedColumn<int>(
+    'statement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_settlement_statements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> sourceLedger = GeneratedColumn<String>(
+    'source_ledger',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> eventId = GeneratedColumn<int>(
+    'event_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> signedQuantity = GeneratedColumn<int>(
+    'signed_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> signedAmountCents = GeneratedColumn<int>(
+    'signed_amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> occurredAt = GeneratedColumn<String>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    statementId,
+    sourceLedger,
+    eventId,
+    signedQuantity,
+    signedAmountCents,
+    occurredAt,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_settlement_items';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentSettlementItemsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentSettlementItemsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      statementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}statement_id'],
+      )!,
+      sourceLedger: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_ledger'],
+      )!,
+      eventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}event_id'],
+      )!,
+      signedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_quantity'],
+      )!,
+      signedAmountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}signed_amount_cents'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentSettlementItems createAlias(String alias) {
+    return ConsignmentSettlementItems(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK(source_ledger IN (\'sale_obligation\', \'adjustment_return\', \'custody_loss\'))',
+    'CHECK(signed_quantity != 0 AND signed_quantity BETWEEN -9007199254740991 AND 9007199254740991)',
+    'CHECK(signed_amount_cents BETWEEN -9007199254740991 AND 9007199254740991)',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentSettlementItemsData extends DataClass
+    implements Insertable<ConsignmentSettlementItemsData> {
+  final int id;
+  final int statementId;
+  final String sourceLedger;
+  final int eventId;
+  final int signedQuantity;
+  final int signedAmountCents;
+  final String occurredAt;
+  final String createdAt;
+  const ConsignmentSettlementItemsData({
+    required this.id,
+    required this.statementId,
+    required this.sourceLedger,
+    required this.eventId,
+    required this.signedQuantity,
+    required this.signedAmountCents,
+    required this.occurredAt,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['statement_id'] = Variable<int>(statementId);
+    map['source_ledger'] = Variable<String>(sourceLedger);
+    map['event_id'] = Variable<int>(eventId);
+    map['signed_quantity'] = Variable<int>(signedQuantity);
+    map['signed_amount_cents'] = Variable<int>(signedAmountCents);
+    map['occurred_at'] = Variable<String>(occurredAt);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ConsignmentSettlementItemsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentSettlementItemsData(
+      id: serializer.fromJson<int>(json['id']),
+      statementId: serializer.fromJson<int>(json['statementId']),
+      sourceLedger: serializer.fromJson<String>(json['sourceLedger']),
+      eventId: serializer.fromJson<int>(json['eventId']),
+      signedQuantity: serializer.fromJson<int>(json['signedQuantity']),
+      signedAmountCents: serializer.fromJson<int>(json['signedAmountCents']),
+      occurredAt: serializer.fromJson<String>(json['occurredAt']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'statementId': serializer.toJson<int>(statementId),
+      'sourceLedger': serializer.toJson<String>(sourceLedger),
+      'eventId': serializer.toJson<int>(eventId),
+      'signedQuantity': serializer.toJson<int>(signedQuantity),
+      'signedAmountCents': serializer.toJson<int>(signedAmountCents),
+      'occurredAt': serializer.toJson<String>(occurredAt),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ConsignmentSettlementItemsData copyWith({
+    int? id,
+    int? statementId,
+    String? sourceLedger,
+    int? eventId,
+    int? signedQuantity,
+    int? signedAmountCents,
+    String? occurredAt,
+    String? createdAt,
+  }) => ConsignmentSettlementItemsData(
+    id: id ?? this.id,
+    statementId: statementId ?? this.statementId,
+    sourceLedger: sourceLedger ?? this.sourceLedger,
+    eventId: eventId ?? this.eventId,
+    signedQuantity: signedQuantity ?? this.signedQuantity,
+    signedAmountCents: signedAmountCents ?? this.signedAmountCents,
+    occurredAt: occurredAt ?? this.occurredAt,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentSettlementItemsData(')
+          ..write('id: $id, ')
+          ..write('statementId: $statementId, ')
+          ..write('sourceLedger: $sourceLedger, ')
+          ..write('eventId: $eventId, ')
+          ..write('signedQuantity: $signedQuantity, ')
+          ..write('signedAmountCents: $signedAmountCents, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    statementId,
+    sourceLedger,
+    eventId,
+    signedQuantity,
+    signedAmountCents,
+    occurredAt,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentSettlementItemsData &&
+          other.id == this.id &&
+          other.statementId == this.statementId &&
+          other.sourceLedger == this.sourceLedger &&
+          other.eventId == this.eventId &&
+          other.signedQuantity == this.signedQuantity &&
+          other.signedAmountCents == this.signedAmountCents &&
+          other.occurredAt == this.occurredAt &&
+          other.createdAt == this.createdAt);
+}
+
+class ConsignmentSettlementPayments extends Table
+    with
+        TableInfo<
+          ConsignmentSettlementPayments,
+          ConsignmentSettlementPaymentsData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  ConsignmentSettlementPayments(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL PRIMARY KEY AUTOINCREMENT',
+  );
+  late final GeneratedColumn<int> statementId = GeneratedColumn<int>(
+    'statement_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL REFERENCES consignment_settlement_statements(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> paymentMethod = GeneratedColumn<String>(
+    'payment_method',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> reference = GeneratedColumn<String>(
+    'reference',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'posted\'',
+    defaultValue: const CustomExpression('\'posted\''),
+  );
+  late final GeneratedColumn<String> requestKey = GeneratedColumn<String>(
+    'request_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL UNIQUE',
+  );
+  late final GeneratedColumn<int> supplierTransactionId = GeneratedColumn<int>(
+    'supplier_transaction_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints:
+        'NOT NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int>
+  reversalSupplierTransactionId = GeneratedColumn<int>(
+    'reversal_supplier_transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES supplier_transactions(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<int> reversalJournalEntryId = GeneratedColumn<int>(
+    'reversal_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NULL UNIQUE REFERENCES journal_entries(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> paidAt = GeneratedColumn<String>(
+    'paid_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> reversedAt = GeneratedColumn<String>(
+    'reversed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL',
+  );
+  late final GeneratedColumn<int> reversedBy = GeneratedColumn<int>(
+    'reversed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NULL REFERENCES users(id)',
+  );
+  late final GeneratedColumn<String> reversalReason = GeneratedColumn<String>(
+    'reversal_reason',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT \'\'',
+    defaultValue: const CustomExpression('\'\''),
+  );
+  late final GeneratedColumn<String> createdAt = GeneratedColumn<String>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    statementId,
+    amountCents,
+    paymentMethod,
+    reference,
+    status,
+    requestKey,
+    supplierTransactionId,
+    journalEntryId,
+    reversalSupplierTransactionId,
+    reversalJournalEntryId,
+    paidAt,
+    createdBy,
+    reversedAt,
+    reversedBy,
+    reversalReason,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'consignment_settlement_payments';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ConsignmentSettlementPaymentsData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ConsignmentSettlementPaymentsData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      statementId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}statement_id'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      )!,
+      paymentMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payment_method'],
+      )!,
+      reference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      requestKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}request_key'],
+      )!,
+      supplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_transaction_id'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      )!,
+      reversalSupplierTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_supplier_transaction_id'],
+      ),
+      reversalJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_journal_entry_id'],
+      ),
+      paidAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}paid_at'],
+      )!,
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      )!,
+      reversedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reversed_at'],
+      ),
+      reversedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversed_by'],
+      ),
+      reversalReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reversal_reason'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  ConsignmentSettlementPayments createAlias(String alias) {
+    return ConsignmentSettlementPayments(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK(amount_cents > 0 AND amount_cents <= 9007199254740991)',
+    'CHECK(payment_method IN (\'cash\', \'card\', \'bank_transfer\'))',
+    'CHECK(status IN (\'posted\', \'reversed\'))',
+    'CHECK(length(reference) <= 200 AND length(reversal_reason) <= 500)',
+    'CHECK((status = \'posted\' AND reversal_supplier_transaction_id IS NULL AND reversal_journal_entry_id IS NULL AND reversed_at IS NULL AND reversed_by IS NULL AND length(reversal_reason) = 0)OR(status = \'reversed\' AND reversal_supplier_transaction_id IS NOT NULL AND reversal_journal_entry_id IS NOT NULL AND reversed_at IS NOT NULL AND reversed_by IS NOT NULL AND length(trim(reversal_reason)) > 0))',
+  ];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class ConsignmentSettlementPaymentsData extends DataClass
+    implements Insertable<ConsignmentSettlementPaymentsData> {
+  final int id;
+  final int statementId;
+  final int amountCents;
+  final String paymentMethod;
+  final String reference;
+  final String status;
+  final String requestKey;
+  final int supplierTransactionId;
+  final int journalEntryId;
+  final int? reversalSupplierTransactionId;
+  final int? reversalJournalEntryId;
+  final String paidAt;
+  final int createdBy;
+  final String? reversedAt;
+  final int? reversedBy;
+  final String reversalReason;
+  final String createdAt;
+  const ConsignmentSettlementPaymentsData({
+    required this.id,
+    required this.statementId,
+    required this.amountCents,
+    required this.paymentMethod,
+    required this.reference,
+    required this.status,
+    required this.requestKey,
+    required this.supplierTransactionId,
+    required this.journalEntryId,
+    this.reversalSupplierTransactionId,
+    this.reversalJournalEntryId,
+    required this.paidAt,
+    required this.createdBy,
+    this.reversedAt,
+    this.reversedBy,
+    required this.reversalReason,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['statement_id'] = Variable<int>(statementId);
+    map['amount_cents'] = Variable<int>(amountCents);
+    map['payment_method'] = Variable<String>(paymentMethod);
+    map['reference'] = Variable<String>(reference);
+    map['status'] = Variable<String>(status);
+    map['request_key'] = Variable<String>(requestKey);
+    map['supplier_transaction_id'] = Variable<int>(supplierTransactionId);
+    map['journal_entry_id'] = Variable<int>(journalEntryId);
+    if (!nullToAbsent || reversalSupplierTransactionId != null) {
+      map['reversal_supplier_transaction_id'] = Variable<int>(
+        reversalSupplierTransactionId,
+      );
+    }
+    if (!nullToAbsent || reversalJournalEntryId != null) {
+      map['reversal_journal_entry_id'] = Variable<int>(reversalJournalEntryId);
+    }
+    map['paid_at'] = Variable<String>(paidAt);
+    map['created_by'] = Variable<int>(createdBy);
+    if (!nullToAbsent || reversedAt != null) {
+      map['reversed_at'] = Variable<String>(reversedAt);
+    }
+    if (!nullToAbsent || reversedBy != null) {
+      map['reversed_by'] = Variable<int>(reversedBy);
+    }
+    map['reversal_reason'] = Variable<String>(reversalReason);
+    map['created_at'] = Variable<String>(createdAt);
+    return map;
+  }
+
+  factory ConsignmentSettlementPaymentsData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ConsignmentSettlementPaymentsData(
+      id: serializer.fromJson<int>(json['id']),
+      statementId: serializer.fromJson<int>(json['statementId']),
+      amountCents: serializer.fromJson<int>(json['amountCents']),
+      paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
+      reference: serializer.fromJson<String>(json['reference']),
+      status: serializer.fromJson<String>(json['status']),
+      requestKey: serializer.fromJson<String>(json['requestKey']),
+      supplierTransactionId: serializer.fromJson<int>(
+        json['supplierTransactionId'],
+      ),
+      journalEntryId: serializer.fromJson<int>(json['journalEntryId']),
+      reversalSupplierTransactionId: serializer.fromJson<int?>(
+        json['reversalSupplierTransactionId'],
+      ),
+      reversalJournalEntryId: serializer.fromJson<int?>(
+        json['reversalJournalEntryId'],
+      ),
+      paidAt: serializer.fromJson<String>(json['paidAt']),
+      createdBy: serializer.fromJson<int>(json['createdBy']),
+      reversedAt: serializer.fromJson<String?>(json['reversedAt']),
+      reversedBy: serializer.fromJson<int?>(json['reversedBy']),
+      reversalReason: serializer.fromJson<String>(json['reversalReason']),
+      createdAt: serializer.fromJson<String>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'statementId': serializer.toJson<int>(statementId),
+      'amountCents': serializer.toJson<int>(amountCents),
+      'paymentMethod': serializer.toJson<String>(paymentMethod),
+      'reference': serializer.toJson<String>(reference),
+      'status': serializer.toJson<String>(status),
+      'requestKey': serializer.toJson<String>(requestKey),
+      'supplierTransactionId': serializer.toJson<int>(supplierTransactionId),
+      'journalEntryId': serializer.toJson<int>(journalEntryId),
+      'reversalSupplierTransactionId': serializer.toJson<int?>(
+        reversalSupplierTransactionId,
+      ),
+      'reversalJournalEntryId': serializer.toJson<int?>(reversalJournalEntryId),
+      'paidAt': serializer.toJson<String>(paidAt),
+      'createdBy': serializer.toJson<int>(createdBy),
+      'reversedAt': serializer.toJson<String?>(reversedAt),
+      'reversedBy': serializer.toJson<int?>(reversedBy),
+      'reversalReason': serializer.toJson<String>(reversalReason),
+      'createdAt': serializer.toJson<String>(createdAt),
+    };
+  }
+
+  ConsignmentSettlementPaymentsData copyWith({
+    int? id,
+    int? statementId,
+    int? amountCents,
+    String? paymentMethod,
+    String? reference,
+    String? status,
+    String? requestKey,
+    int? supplierTransactionId,
+    int? journalEntryId,
+    Value<int?> reversalSupplierTransactionId = const Value.absent(),
+    Value<int?> reversalJournalEntryId = const Value.absent(),
+    String? paidAt,
+    int? createdBy,
+    Value<String?> reversedAt = const Value.absent(),
+    Value<int?> reversedBy = const Value.absent(),
+    String? reversalReason,
+    String? createdAt,
+  }) => ConsignmentSettlementPaymentsData(
+    id: id ?? this.id,
+    statementId: statementId ?? this.statementId,
+    amountCents: amountCents ?? this.amountCents,
+    paymentMethod: paymentMethod ?? this.paymentMethod,
+    reference: reference ?? this.reference,
+    status: status ?? this.status,
+    requestKey: requestKey ?? this.requestKey,
+    supplierTransactionId: supplierTransactionId ?? this.supplierTransactionId,
+    journalEntryId: journalEntryId ?? this.journalEntryId,
+    reversalSupplierTransactionId: reversalSupplierTransactionId.present
+        ? reversalSupplierTransactionId.value
+        : this.reversalSupplierTransactionId,
+    reversalJournalEntryId: reversalJournalEntryId.present
+        ? reversalJournalEntryId.value
+        : this.reversalJournalEntryId,
+    paidAt: paidAt ?? this.paidAt,
+    createdBy: createdBy ?? this.createdBy,
+    reversedAt: reversedAt.present ? reversedAt.value : this.reversedAt,
+    reversedBy: reversedBy.present ? reversedBy.value : this.reversedBy,
+    reversalReason: reversalReason ?? this.reversalReason,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('ConsignmentSettlementPaymentsData(')
+          ..write('id: $id, ')
+          ..write('statementId: $statementId, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('paymentMethod: $paymentMethod, ')
+          ..write('reference: $reference, ')
+          ..write('status: $status, ')
+          ..write('requestKey: $requestKey, ')
+          ..write('supplierTransactionId: $supplierTransactionId, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write(
+            'reversalSupplierTransactionId: $reversalSupplierTransactionId, ',
+          )
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('paidAt: $paidAt, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('reversedAt: $reversedAt, ')
+          ..write('reversedBy: $reversedBy, ')
+          ..write('reversalReason: $reversalReason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    statementId,
+    amountCents,
+    paymentMethod,
+    reference,
+    status,
+    requestKey,
+    supplierTransactionId,
+    journalEntryId,
+    reversalSupplierTransactionId,
+    reversalJournalEntryId,
+    paidAt,
+    createdBy,
+    reversedAt,
+    reversedBy,
+    reversalReason,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ConsignmentSettlementPaymentsData &&
+          other.id == this.id &&
+          other.statementId == this.statementId &&
+          other.amountCents == this.amountCents &&
+          other.paymentMethod == this.paymentMethod &&
+          other.reference == this.reference &&
+          other.status == this.status &&
+          other.requestKey == this.requestKey &&
+          other.supplierTransactionId == this.supplierTransactionId &&
+          other.journalEntryId == this.journalEntryId &&
+          other.reversalSupplierTransactionId ==
+              this.reversalSupplierTransactionId &&
+          other.reversalJournalEntryId == this.reversalJournalEntryId &&
+          other.paidAt == this.paidAt &&
+          other.createdBy == this.createdBy &&
+          other.reversedAt == this.reversedAt &&
+          other.reversedBy == this.reversedBy &&
+          other.reversalReason == this.reversalReason &&
+          other.createdAt == this.createdAt);
+}
+
+class SupplierProductCodeLocks extends Table
+    with TableInfo<SupplierProductCodeLocks, SupplierProductCodeLocksData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  SupplierProductCodeLocks(this.attachedDatabase, [this._alias]);
+  late final GeneratedColumn<int> supplierId = GeneratedColumn<int>(
+    'supplier_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL REFERENCES suppliers(id)ON DELETE RESTRICT',
+  );
+  late final GeneratedColumn<String> productCode = GeneratedColumn<String>(
+    'product_code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    $customConstraints: 'NOT NULL',
+  );
+  late final GeneratedColumn<String> lockedAt = GeneratedColumn<String>(
+    'locked_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints: 'NOT NULL DEFAULT CURRENT_TIMESTAMP',
+    defaultValue: const CustomExpression('CURRENT_TIMESTAMP'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [supplierId, productCode, lockedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'supplier_product_code_locks';
+  @override
+  Set<GeneratedColumn> get $primaryKey => {supplierId};
+  @override
+  SupplierProductCodeLocksData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SupplierProductCodeLocksData(
+      supplierId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}supplier_id'],
+      )!,
+      productCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_code'],
+      )!,
+      lockedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}locked_at'],
+      )!,
+    );
+  }
+
+  @override
+  SupplierProductCodeLocks createAlias(String alias) {
+    return SupplierProductCodeLocks(attachedDatabase, alias);
+  }
+
+  @override
+  List<String> get customConstraints => const ['PRIMARY KEY(supplier_id)'];
+  @override
+  bool get dontWriteConstraints => true;
+}
+
+class SupplierProductCodeLocksData extends DataClass
+    implements Insertable<SupplierProductCodeLocksData> {
+  final int supplierId;
+  final String productCode;
+  final String lockedAt;
+  const SupplierProductCodeLocksData({
+    required this.supplierId,
+    required this.productCode,
+    required this.lockedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['supplier_id'] = Variable<int>(supplierId);
+    map['product_code'] = Variable<String>(productCode);
+    map['locked_at'] = Variable<String>(lockedAt);
+    return map;
+  }
+
+  factory SupplierProductCodeLocksData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SupplierProductCodeLocksData(
+      supplierId: serializer.fromJson<int>(json['supplierId']),
+      productCode: serializer.fromJson<String>(json['productCode']),
+      lockedAt: serializer.fromJson<String>(json['lockedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'supplierId': serializer.toJson<int>(supplierId),
+      'productCode': serializer.toJson<String>(productCode),
+      'lockedAt': serializer.toJson<String>(lockedAt),
+    };
+  }
+
+  SupplierProductCodeLocksData copyWith({
+    int? supplierId,
+    String? productCode,
+    String? lockedAt,
+  }) => SupplierProductCodeLocksData(
+    supplierId: supplierId ?? this.supplierId,
+    productCode: productCode ?? this.productCode,
+    lockedAt: lockedAt ?? this.lockedAt,
+  );
+  @override
+  String toString() {
+    return (StringBuffer('SupplierProductCodeLocksData(')
+          ..write('supplierId: $supplierId, ')
+          ..write('productCode: $productCode, ')
+          ..write('lockedAt: $lockedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(supplierId, productCode, lockedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SupplierProductCodeLocksData &&
+          other.supplierId == this.supplierId &&
+          other.productCode == this.productCode &&
+          other.lockedAt == this.lockedAt);
 }
 
 class Commissions extends Table with TableInfo<Commissions, CommissionsData> {
@@ -44634,8 +52135,8 @@ class ChequeConfirmationsData extends DataClass
           other.updatedAt == this.updatedAt);
 }
 
-class DatabaseAtV10101 extends GeneratedDatabase {
-  DatabaseAtV10101(QueryExecutor e) : super(e);
+class DatabaseAtV10119 extends GeneratedDatabase {
+  DatabaseAtV10119(QueryExecutor e) : super(e);
   late final BusinessOrganizations businessOrganizations =
       BusinessOrganizations(this);
   late final BusinessBranches businessBranches = BusinessBranches(this);
@@ -44656,6 +52157,36 @@ class DatabaseAtV10101 extends GeneratedDatabase {
   late final WarehouseTransfers warehouseTransfers = WarehouseTransfers(this);
   late final WarehouseTransferLines warehouseTransferLines =
       WarehouseTransferLines(this);
+  late final AccountingPeriods accountingPeriods = AccountingPeriods(this);
+  late final JournalEntries journalEntries = JournalEntries(this);
+  late final WarehouseTransferDispatches warehouseTransferDispatches =
+      WarehouseTransferDispatches(this);
+  late final Purchases purchases = Purchases(this);
+  late final SupplierProductIdentities supplierProductIdentities =
+      SupplierProductIdentities(this);
+  late final PurchaseItems purchaseItems = PurchaseItems(this);
+  late final ProductBatches productBatches = ProductBatches(this);
+  late final ConsignmentAgreements consignmentAgreements =
+      ConsignmentAgreements(this);
+  late final ConsignmentReceipts consignmentReceipts = ConsignmentReceipts(
+    this,
+  );
+  late final ConsignmentAgreementItems consignmentAgreementItems =
+      ConsignmentAgreementItems(this);
+  late final ConsignmentReceiptItems consignmentReceiptItems =
+      ConsignmentReceiptItems(this);
+  late final ConsignmentInventoryLayers consignmentInventoryLayers =
+      ConsignmentInventoryLayers(this);
+  late final WarehouseTransferAllocations warehouseTransferAllocations =
+      WarehouseTransferAllocations(this);
+  late final WarehouseTransferReceipts warehouseTransferReceipts =
+      WarehouseTransferReceipts(this);
+  late final WarehouseTransferReceiptItems warehouseTransferReceiptItems =
+      WarehouseTransferReceiptItems(this);
+  late final WarehouseTransferRecalls warehouseTransferRecalls =
+      WarehouseTransferRecalls(this);
+  late final WarehouseTransferRecallItems warehouseTransferRecallItems =
+      WarehouseTransferRecallItems(this);
   late final WarehouseTransferEvents warehouseTransferEvents =
       WarehouseTransferEvents(this);
   late final InventoryOriginStates inventoryOriginStates =
@@ -44667,11 +52198,6 @@ class DatabaseAtV10101 extends GeneratedDatabase {
   late final ExpenseCategories expenseCategories = ExpenseCategories(this);
   late final ProductPriceHistories productPriceHistories =
       ProductPriceHistories(this);
-  late final Purchases purchases = Purchases(this);
-  late final SupplierProductIdentities supplierProductIdentities =
-      SupplierProductIdentities(this);
-  late final PurchaseItems purchaseItems = PurchaseItems(this);
-  late final ProductBatches productBatches = ProductBatches(this);
   late final LoyaltyTiers loyaltyTiers = LoyaltyTiers(this);
   late final Customers customers = Customers(this);
   late final Roles roles = Roles(this);
@@ -44720,32 +52246,37 @@ class DatabaseAtV10101 extends GeneratedDatabase {
   late final CustomerRewardRedemptions customerRewardRedemptions =
       CustomerRewardRedemptions(this);
   late final LoyaltySettings loyaltySettings = LoyaltySettings(this);
-  late final ConsignmentAgreements consignmentAgreements =
-      ConsignmentAgreements(this);
-  late final ConsignmentAgreementItems consignmentAgreementItems =
-      ConsignmentAgreementItems(this);
-  late final ConsignmentReceipts consignmentReceipts = ConsignmentReceipts(
-    this,
-  );
-  late final ConsignmentReceiptItems consignmentReceiptItems =
-      ConsignmentReceiptItems(this);
-  late final ConsignmentInventoryLayers consignmentInventoryLayers =
-      ConsignmentInventoryLayers(this);
   late final ConsignmentReceiptEvents consignmentReceiptEvents =
       ConsignmentReceiptEvents(this);
   late final ConsignmentSaleAllocations consignmentSaleAllocations =
       ConsignmentSaleAllocations(this);
-  late final AccountingPeriods accountingPeriods = AccountingPeriods(this);
-  late final JournalEntries journalEntries = JournalEntries(this);
   late final ConsignmentObligationEvents consignmentObligationEvents =
       ConsignmentObligationEvents(this);
   late final ConsignmentAdjustmentReturnEvents
   consignmentAdjustmentReturnEvents = ConsignmentAdjustmentReturnEvents(this);
-  late final SupplierProductCodeLocks supplierProductCodeLocks =
-      SupplierProductCodeLocks(this);
+  late final ConsignmentCustodyDocuments consignmentCustodyDocuments =
+      ConsignmentCustodyDocuments(this);
+  late final ConsignmentCustodyItems consignmentCustodyItems =
+      ConsignmentCustodyItems(this);
+  late final ConsignmentCustodyEvents consignmentCustodyEvents =
+      ConsignmentCustodyEvents(this);
   late final SupplierTransactions supplierTransactions = SupplierTransactions(
     this,
   );
+  late final ConsignmentOwnershipConversions consignmentOwnershipConversions =
+      ConsignmentOwnershipConversions(this);
+  late final ConsignmentOwnershipConversionItems
+  consignmentOwnershipConversionItems = ConsignmentOwnershipConversionItems(
+    this,
+  );
+  late final ConsignmentSettlementStatements consignmentSettlementStatements =
+      ConsignmentSettlementStatements(this);
+  late final ConsignmentSettlementItems consignmentSettlementItems =
+      ConsignmentSettlementItems(this);
+  late final ConsignmentSettlementPayments consignmentSettlementPayments =
+      ConsignmentSettlementPayments(this);
+  late final SupplierProductCodeLocks supplierProductCodeLocks =
+      SupplierProductCodeLocks(this);
   late final Commissions commissions = Commissions(this);
   late final Attendances attendances = Attendances(this);
   late final LeaveRequests leaveRequests = LeaveRequests(this);
@@ -44814,6 +52345,23 @@ class DatabaseAtV10101 extends GeneratedDatabase {
     users,
     warehouseTransfers,
     warehouseTransferLines,
+    accountingPeriods,
+    journalEntries,
+    warehouseTransferDispatches,
+    purchases,
+    supplierProductIdentities,
+    purchaseItems,
+    productBatches,
+    consignmentAgreements,
+    consignmentReceipts,
+    consignmentAgreementItems,
+    consignmentReceiptItems,
+    consignmentInventoryLayers,
+    warehouseTransferAllocations,
+    warehouseTransferReceipts,
+    warehouseTransferReceiptItems,
+    warehouseTransferRecalls,
+    warehouseTransferRecallItems,
     warehouseTransferEvents,
     inventoryOriginStates,
     inventoryOriginEvents,
@@ -44821,10 +52369,6 @@ class DatabaseAtV10101 extends GeneratedDatabase {
     storeLogos,
     expenseCategories,
     productPriceHistories,
-    purchases,
-    supplierProductIdentities,
-    purchaseItems,
-    productBatches,
     loyaltyTiers,
     customers,
     roles,
@@ -44857,19 +52401,20 @@ class DatabaseAtV10101 extends GeneratedDatabase {
     loyaltyRewards,
     customerRewardRedemptions,
     loyaltySettings,
-    consignmentAgreements,
-    consignmentAgreementItems,
-    consignmentReceipts,
-    consignmentReceiptItems,
-    consignmentInventoryLayers,
     consignmentReceiptEvents,
     consignmentSaleAllocations,
-    accountingPeriods,
-    journalEntries,
     consignmentObligationEvents,
     consignmentAdjustmentReturnEvents,
-    supplierProductCodeLocks,
+    consignmentCustodyDocuments,
+    consignmentCustodyItems,
+    consignmentCustodyEvents,
     supplierTransactions,
+    consignmentOwnershipConversions,
+    consignmentOwnershipConversionItems,
+    consignmentSettlementStatements,
+    consignmentSettlementItems,
+    consignmentSettlementPayments,
+    supplierProductCodeLocks,
     commissions,
     attendances,
     leaveRequests,
@@ -44925,27 +52470,6 @@ class DatabaseAtV10101 extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
-        'products',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('product_price_histories', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'product_variants',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('product_price_histories', kind: UpdateKind.delete)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
-        'users',
-        limitUpdateKind: UpdateKind.delete,
-      ),
-      result: [TableUpdate('product_price_histories', kind: UpdateKind.update)],
-    ),
-    WritePropagation(
-      on: TableUpdateQuery.onTableName(
         'purchases',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -44964,6 +52488,27 @@ class DatabaseAtV10101 extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('product_batches', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('product_price_histories', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'product_variants',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('product_price_histories', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('product_price_histories', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -45552,7 +53097,7 @@ class DatabaseAtV10101 extends GeneratedDatabase {
     ),
   ]);
   @override
-  int get schemaVersion => 10101;
+  int get schemaVersion => 10119;
   @override
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);

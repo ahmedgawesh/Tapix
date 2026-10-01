@@ -199,20 +199,6 @@ class CurrenciesData extends DataClass implements Insertable<CurrenciesData> {
     return map;
   }
 
-  CurrenciesCompanion toCompanion(bool nullToAbsent) {
-    return CurrenciesCompanion(
-      id: Value(id),
-      code: Value(code),
-      name: Value(name),
-      symbol: Value(symbol),
-      exchangeRate: Value(exchangeRate),
-      isBase: Value(isBase),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory CurrenciesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -267,22 +253,6 @@ class CurrenciesData extends DataClass implements Insertable<CurrenciesData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  CurrenciesData copyWithCompanion(CurrenciesCompanion data) {
-    return CurrenciesData(
-      id: data.id.present ? data.id.value : this.id,
-      code: data.code.present ? data.code.value : this.code,
-      name: data.name.present ? data.name.value : this.name,
-      symbol: data.symbol.present ? data.symbol.value : this.symbol,
-      exchangeRate: data.exchangeRate.present
-          ? data.exchangeRate.value
-          : this.exchangeRate,
-      isBase: data.isBase.present ? data.isBase.value : this.isBase,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('CurrenciesData(')
@@ -324,139 +294,6 @@ class CurrenciesData extends DataClass implements Insertable<CurrenciesData> {
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class CurrenciesCompanion extends UpdateCompanion<CurrenciesData> {
-  final Value<int> id;
-  final Value<String> code;
-  final Value<String> name;
-  final Value<String> symbol;
-  final Value<int> exchangeRate;
-  final Value<int> isBase;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const CurrenciesCompanion({
-    this.id = const Value.absent(),
-    this.code = const Value.absent(),
-    this.name = const Value.absent(),
-    this.symbol = const Value.absent(),
-    this.exchangeRate = const Value.absent(),
-    this.isBase = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  CurrenciesCompanion.insert({
-    this.id = const Value.absent(),
-    required String code,
-    required String name,
-    required String symbol,
-    required int exchangeRate,
-    this.isBase = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : code = Value(code),
-       name = Value(name),
-       symbol = Value(symbol),
-       exchangeRate = Value(exchangeRate);
-  static Insertable<CurrenciesData> custom({
-    Expression<int>? id,
-    Expression<String>? code,
-    Expression<String>? name,
-    Expression<String>? symbol,
-    Expression<int>? exchangeRate,
-    Expression<int>? isBase,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (code != null) 'code': code,
-      if (name != null) 'name': name,
-      if (symbol != null) 'symbol': symbol,
-      if (exchangeRate != null) 'exchange_rate': exchangeRate,
-      if (isBase != null) 'is_base': isBase,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  CurrenciesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? code,
-    Value<String>? name,
-    Value<String>? symbol,
-    Value<int>? exchangeRate,
-    Value<int>? isBase,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return CurrenciesCompanion(
-      id: id ?? this.id,
-      code: code ?? this.code,
-      name: name ?? this.name,
-      symbol: symbol ?? this.symbol,
-      exchangeRate: exchangeRate ?? this.exchangeRate,
-      isBase: isBase ?? this.isBase,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (code.present) {
-      map['code'] = Variable<String>(code.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (symbol.present) {
-      map['symbol'] = Variable<String>(symbol.value);
-    }
-    if (exchangeRate.present) {
-      map['exchange_rate'] = Variable<int>(exchangeRate.value);
-    }
-    if (isBase.present) {
-      map['is_base'] = Variable<int>(isBase.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CurrenciesCompanion(')
-          ..write('id: $id, ')
-          ..write('code: $code, ')
-          ..write('name: $name, ')
-          ..write('symbol: $symbol, ')
-          ..write('exchangeRate: $exchangeRate, ')
-          ..write('isBase: $isBase, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class AppSettings extends Table with TableInfo<AppSettings, AppSettingsData> {
@@ -606,19 +443,6 @@ class AppSettingsData extends DataClass implements Insertable<AppSettingsData> {
     return map;
   }
 
-  AppSettingsCompanion toCompanion(bool nullToAbsent) {
-    return AppSettingsCompanion(
-      id: Value(id),
-      key: Value(key),
-      value: Value(value),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory AppSettingsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -661,19 +485,6 @@ class AppSettingsData extends DataClass implements Insertable<AppSettingsData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  AppSettingsData copyWithCompanion(AppSettingsCompanion data) {
-    return AppSettingsData(
-      id: data.id.present ? data.id.value : this.id,
-      key: data.key.present ? data.key.value : this.key,
-      value: data.value.present ? data.value.value : this.value,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('AppSettingsData(')
@@ -700,104 +511,6 @@ class AppSettingsData extends DataClass implements Insertable<AppSettingsData> {
           other.description == this.description &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class AppSettingsCompanion extends UpdateCompanion<AppSettingsData> {
-  final Value<int> id;
-  final Value<String> key;
-  final Value<String> value;
-  final Value<String?> description;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const AppSettingsCompanion({
-    this.id = const Value.absent(),
-    this.key = const Value.absent(),
-    this.value = const Value.absent(),
-    this.description = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  AppSettingsCompanion.insert({
-    this.id = const Value.absent(),
-    required String key,
-    required String value,
-    this.description = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : key = Value(key),
-       value = Value(value);
-  static Insertable<AppSettingsData> custom({
-    Expression<int>? id,
-    Expression<String>? key,
-    Expression<String>? value,
-    Expression<String>? description,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (key != null) 'key': key,
-      if (value != null) 'value': value,
-      if (description != null) 'description': description,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  AppSettingsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? key,
-    Value<String>? value,
-    Value<String?>? description,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return AppSettingsCompanion(
-      id: id ?? this.id,
-      key: key ?? this.key,
-      value: value ?? this.value,
-      description: description ?? this.description,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (key.present) {
-      map['key'] = Variable<String>(key.value);
-    }
-    if (value.present) {
-      map['value'] = Variable<String>(value.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AppSettingsCompanion(')
-          ..write('id: $id, ')
-          ..write('key: $key, ')
-          ..write('value: $value, ')
-          ..write('description: $description, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class StoreLogos extends Table with TableInfo<StoreLogos, StoreLogosData> {
@@ -905,15 +618,6 @@ class StoreLogosData extends DataClass implements Insertable<StoreLogosData> {
     return map;
   }
 
-  StoreLogosCompanion toCompanion(bool nullToAbsent) {
-    return StoreLogosCompanion(
-      id: Value(id),
-      logoPath: Value(logoPath),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory StoreLogosData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -948,15 +652,6 @@ class StoreLogosData extends DataClass implements Insertable<StoreLogosData> {
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
   );
-  StoreLogosData copyWithCompanion(StoreLogosCompanion data) {
-    return StoreLogosData(
-      id: data.id.present ? data.id.value : this.id,
-      logoPath: data.logoPath.present ? data.logoPath.value : this.logoPath,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('StoreLogosData(')
@@ -978,81 +673,6 @@ class StoreLogosData extends DataClass implements Insertable<StoreLogosData> {
           other.logoPath == this.logoPath &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt);
-}
-
-class StoreLogosCompanion extends UpdateCompanion<StoreLogosData> {
-  final Value<int> id;
-  final Value<String> logoPath;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  const StoreLogosCompanion({
-    this.id = const Value.absent(),
-    this.logoPath = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  StoreLogosCompanion.insert({
-    this.id = const Value.absent(),
-    required String logoPath,
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : logoPath = Value(logoPath);
-  static Insertable<StoreLogosData> custom({
-    Expression<int>? id,
-    Expression<String>? logoPath,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (logoPath != null) 'logo_path': logoPath,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  StoreLogosCompanion copyWith({
-    Value<int>? id,
-    Value<String>? logoPath,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-  }) {
-    return StoreLogosCompanion(
-      id: id ?? this.id,
-      logoPath: logoPath ?? this.logoPath,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (logoPath.present) {
-      map['logo_path'] = Variable<String>(logoPath.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('StoreLogosCompanion(')
-          ..write('id: $id, ')
-          ..write('logoPath: $logoPath, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class ExpenseCategories extends Table
@@ -1205,19 +825,6 @@ class ExpenseCategoriesData extends DataClass
     return map;
   }
 
-  ExpenseCategoriesCompanion toCompanion(bool nullToAbsent) {
-    return ExpenseCategoriesCompanion(
-      id: Value(id),
-      name: Value(name),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory ExpenseCategoriesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -1260,19 +867,6 @@ class ExpenseCategoriesData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  ExpenseCategoriesData copyWithCompanion(ExpenseCategoriesCompanion data) {
-    return ExpenseCategoriesData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ExpenseCategoriesData(')
@@ -1299,104 +893,6 @@ class ExpenseCategoriesData extends DataClass
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class ExpenseCategoriesCompanion
-    extends UpdateCompanion<ExpenseCategoriesData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> description;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const ExpenseCategoriesCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.description = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  ExpenseCategoriesCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.description = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : name = Value(name);
-  static Insertable<ExpenseCategoriesData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? description,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  ExpenseCategoriesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? description,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return ExpenseCategoriesCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ExpenseCategoriesCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('description: $description, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class ProductCategories extends Table
@@ -1568,22 +1064,6 @@ class ProductCategoriesData extends DataClass
     return map;
   }
 
-  ProductCategoriesCompanion toCompanion(bool nullToAbsent) {
-    return ProductCategoriesCompanion(
-      id: Value(id),
-      name: Value(name),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      parentId: parentId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(parentId),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory ProductCategoriesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -1630,20 +1110,6 @@ class ProductCategoriesData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  ProductCategoriesData copyWithCompanion(ProductCategoriesCompanion data) {
-    return ProductCategoriesData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      parentId: data.parentId.present ? data.parentId.value : this.parentId,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ProductCategoriesData(')
@@ -1679,115 +1145,6 @@ class ProductCategoriesData extends DataClass
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class ProductCategoriesCompanion
-    extends UpdateCompanion<ProductCategoriesData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> description;
-  final Value<int?> parentId;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const ProductCategoriesCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.description = const Value.absent(),
-    this.parentId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  ProductCategoriesCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.description = const Value.absent(),
-    this.parentId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : name = Value(name);
-  static Insertable<ProductCategoriesData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? description,
-    Expression<int>? parentId,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (parentId != null) 'parent_id': parentId,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  ProductCategoriesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? description,
-    Value<int?>? parentId,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return ProductCategoriesCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      parentId: parentId ?? this.parentId,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (parentId.present) {
-      map['parent_id'] = Variable<int>(parentId.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ProductCategoriesCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('description: $description, ')
-          ..write('parentId: $parentId, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class ProductColors extends Table
@@ -1920,18 +1277,6 @@ class ProductColorsData extends DataClass
     return map;
   }
 
-  ProductColorsCompanion toCompanion(bool nullToAbsent) {
-    return ProductColorsCompanion(
-      id: Value(id),
-      name: Value(name),
-      hexCode: hexCode == null && nullToAbsent
-          ? const Value.absent()
-          : Value(hexCode),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory ProductColorsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -1970,16 +1315,6 @@ class ProductColorsData extends DataClass
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
   );
-  ProductColorsData copyWithCompanion(ProductColorsCompanion data) {
-    return ProductColorsData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      hexCode: data.hexCode.present ? data.hexCode.value : this.hexCode,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ProductColorsData(')
@@ -2003,92 +1338,6 @@ class ProductColorsData extends DataClass
           other.hexCode == this.hexCode &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt);
-}
-
-class ProductColorsCompanion extends UpdateCompanion<ProductColorsData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> hexCode;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  const ProductColorsCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.hexCode = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  ProductColorsCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.hexCode = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : name = Value(name);
-  static Insertable<ProductColorsData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? hexCode,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (hexCode != null) 'hex_code': hexCode,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  ProductColorsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? hexCode,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-  }) {
-    return ProductColorsCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      hexCode: hexCode ?? this.hexCode,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (hexCode.present) {
-      map['hex_code'] = Variable<String>(hexCode.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ProductColorsCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('hexCode: $hexCode, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Sizes extends Table with TableInfo<Sizes, SizesData> {
@@ -2219,18 +1468,6 @@ class SizesData extends DataClass implements Insertable<SizesData> {
     return map;
   }
 
-  SizesCompanion toCompanion(bool nullToAbsent) {
-    return SizesCompanion(
-      id: Value(id),
-      name: Value(name),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SizesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -2269,18 +1506,6 @@ class SizesData extends DataClass implements Insertable<SizesData> {
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
   );
-  SizesData copyWithCompanion(SizesCompanion data) {
-    return SizesData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SizesData(')
@@ -2304,92 +1529,6 @@ class SizesData extends DataClass implements Insertable<SizesData> {
           other.description == this.description &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt);
-}
-
-class SizesCompanion extends UpdateCompanion<SizesData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> description;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  const SizesCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.description = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SizesCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.description = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : name = Value(name);
-  static Insertable<SizesData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? description,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SizesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? description,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-  }) {
-    return SizesCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SizesCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('description: $description, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Products extends Table with TableInfo<Products, ProductsData> {
@@ -2692,32 +1831,6 @@ class ProductsData extends DataClass implements Insertable<ProductsData> {
     return map;
   }
 
-  ProductsCompanion toCompanion(bool nullToAbsent) {
-    return ProductsCompanion(
-      id: Value(id),
-      sku: Value(sku),
-      name: Value(name),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      categoryId: categoryId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(categoryId),
-      costCents: Value(costCents),
-      priceCents: Value(priceCents),
-      currencyId: Value(currencyId),
-      trackInventory: Value(trackInventory),
-      stockQuantity: Value(stockQuantity),
-      reorderLevel: reorderLevel == null && nullToAbsent
-          ? const Value.absent()
-          : Value(reorderLevel),
-      hasVariants: Value(hasVariants),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory ProductsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -2796,42 +1909,6 @@ class ProductsData extends DataClass implements Insertable<ProductsData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  ProductsData copyWithCompanion(ProductsCompanion data) {
-    return ProductsData(
-      id: data.id.present ? data.id.value : this.id,
-      sku: data.sku.present ? data.sku.value : this.sku,
-      name: data.name.present ? data.name.value : this.name,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      categoryId: data.categoryId.present
-          ? data.categoryId.value
-          : this.categoryId,
-      costCents: data.costCents.present ? data.costCents.value : this.costCents,
-      priceCents: data.priceCents.present
-          ? data.priceCents.value
-          : this.priceCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      trackInventory: data.trackInventory.present
-          ? data.trackInventory.value
-          : this.trackInventory,
-      stockQuantity: data.stockQuantity.present
-          ? data.stockQuantity.value
-          : this.stockQuantity,
-      reorderLevel: data.reorderLevel.present
-          ? data.reorderLevel.value
-          : this.reorderLevel,
-      hasVariants: data.hasVariants.present
-          ? data.hasVariants.value
-          : this.hasVariants,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ProductsData(')
@@ -2891,206 +1968,6 @@ class ProductsData extends DataClass implements Insertable<ProductsData> {
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class ProductsCompanion extends UpdateCompanion<ProductsData> {
-  final Value<int> id;
-  final Value<String> sku;
-  final Value<String> name;
-  final Value<String?> description;
-  final Value<int?> categoryId;
-  final Value<int> costCents;
-  final Value<int> priceCents;
-  final Value<int> currencyId;
-  final Value<int> trackInventory;
-  final Value<int> stockQuantity;
-  final Value<int?> reorderLevel;
-  final Value<int> hasVariants;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const ProductsCompanion({
-    this.id = const Value.absent(),
-    this.sku = const Value.absent(),
-    this.name = const Value.absent(),
-    this.description = const Value.absent(),
-    this.categoryId = const Value.absent(),
-    this.costCents = const Value.absent(),
-    this.priceCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.trackInventory = const Value.absent(),
-    this.stockQuantity = const Value.absent(),
-    this.reorderLevel = const Value.absent(),
-    this.hasVariants = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  ProductsCompanion.insert({
-    this.id = const Value.absent(),
-    required String sku,
-    required String name,
-    this.description = const Value.absent(),
-    this.categoryId = const Value.absent(),
-    required int costCents,
-    required int priceCents,
-    required int currencyId,
-    this.trackInventory = const Value.absent(),
-    this.stockQuantity = const Value.absent(),
-    this.reorderLevel = const Value.absent(),
-    this.hasVariants = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : sku = Value(sku),
-       name = Value(name),
-       costCents = Value(costCents),
-       priceCents = Value(priceCents),
-       currencyId = Value(currencyId);
-  static Insertable<ProductsData> custom({
-    Expression<int>? id,
-    Expression<String>? sku,
-    Expression<String>? name,
-    Expression<String>? description,
-    Expression<int>? categoryId,
-    Expression<int>? costCents,
-    Expression<int>? priceCents,
-    Expression<int>? currencyId,
-    Expression<int>? trackInventory,
-    Expression<int>? stockQuantity,
-    Expression<int>? reorderLevel,
-    Expression<int>? hasVariants,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (sku != null) 'sku': sku,
-      if (name != null) 'name': name,
-      if (description != null) 'description': description,
-      if (categoryId != null) 'category_id': categoryId,
-      if (costCents != null) 'cost_cents': costCents,
-      if (priceCents != null) 'price_cents': priceCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (trackInventory != null) 'track_inventory': trackInventory,
-      if (stockQuantity != null) 'stock_quantity': stockQuantity,
-      if (reorderLevel != null) 'reorder_level': reorderLevel,
-      if (hasVariants != null) 'has_variants': hasVariants,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  ProductsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? sku,
-    Value<String>? name,
-    Value<String?>? description,
-    Value<int?>? categoryId,
-    Value<int>? costCents,
-    Value<int>? priceCents,
-    Value<int>? currencyId,
-    Value<int>? trackInventory,
-    Value<int>? stockQuantity,
-    Value<int?>? reorderLevel,
-    Value<int>? hasVariants,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return ProductsCompanion(
-      id: id ?? this.id,
-      sku: sku ?? this.sku,
-      name: name ?? this.name,
-      description: description ?? this.description,
-      categoryId: categoryId ?? this.categoryId,
-      costCents: costCents ?? this.costCents,
-      priceCents: priceCents ?? this.priceCents,
-      currencyId: currencyId ?? this.currencyId,
-      trackInventory: trackInventory ?? this.trackInventory,
-      stockQuantity: stockQuantity ?? this.stockQuantity,
-      reorderLevel: reorderLevel ?? this.reorderLevel,
-      hasVariants: hasVariants ?? this.hasVariants,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (sku.present) {
-      map['sku'] = Variable<String>(sku.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (categoryId.present) {
-      map['category_id'] = Variable<int>(categoryId.value);
-    }
-    if (costCents.present) {
-      map['cost_cents'] = Variable<int>(costCents.value);
-    }
-    if (priceCents.present) {
-      map['price_cents'] = Variable<int>(priceCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (trackInventory.present) {
-      map['track_inventory'] = Variable<int>(trackInventory.value);
-    }
-    if (stockQuantity.present) {
-      map['stock_quantity'] = Variable<int>(stockQuantity.value);
-    }
-    if (reorderLevel.present) {
-      map['reorder_level'] = Variable<int>(reorderLevel.value);
-    }
-    if (hasVariants.present) {
-      map['has_variants'] = Variable<int>(hasVariants.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ProductsCompanion(')
-          ..write('id: $id, ')
-          ..write('sku: $sku, ')
-          ..write('name: $name, ')
-          ..write('description: $description, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('costCents: $costCents, ')
-          ..write('priceCents: $priceCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('trackInventory: $trackInventory, ')
-          ..write('stockQuantity: $stockQuantity, ')
-          ..write('reorderLevel: $reorderLevel, ')
-          ..write('hasVariants: $hasVariants, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class ProductVariants extends Table
@@ -3326,26 +2203,6 @@ class ProductVariantsData extends DataClass
     return map;
   }
 
-  ProductVariantsCompanion toCompanion(bool nullToAbsent) {
-    return ProductVariantsCompanion(
-      id: Value(id),
-      productId: Value(productId),
-      sku: Value(sku),
-      colorId: colorId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(colorId),
-      sizeId: sizeId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(sizeId),
-      costCents: Value(costCents),
-      priceCents: Value(priceCents),
-      stockQuantity: Value(stockQuantity),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory ProductVariantsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -3408,26 +2265,6 @@ class ProductVariantsData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  ProductVariantsData copyWithCompanion(ProductVariantsCompanion data) {
-    return ProductVariantsData(
-      id: data.id.present ? data.id.value : this.id,
-      productId: data.productId.present ? data.productId.value : this.productId,
-      sku: data.sku.present ? data.sku.value : this.sku,
-      colorId: data.colorId.present ? data.colorId.value : this.colorId,
-      sizeId: data.sizeId.present ? data.sizeId.value : this.sizeId,
-      costCents: data.costCents.present ? data.costCents.value : this.costCents,
-      priceCents: data.priceCents.present
-          ? data.priceCents.value
-          : this.priceCents,
-      stockQuantity: data.stockQuantity.present
-          ? data.stockQuantity.value
-          : this.stockQuantity,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ProductVariantsData(')
@@ -3475,161 +2312,6 @@ class ProductVariantsData extends DataClass
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class ProductVariantsCompanion extends UpdateCompanion<ProductVariantsData> {
-  final Value<int> id;
-  final Value<int> productId;
-  final Value<String> sku;
-  final Value<int?> colorId;
-  final Value<int?> sizeId;
-  final Value<int> costCents;
-  final Value<int> priceCents;
-  final Value<int> stockQuantity;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const ProductVariantsCompanion({
-    this.id = const Value.absent(),
-    this.productId = const Value.absent(),
-    this.sku = const Value.absent(),
-    this.colorId = const Value.absent(),
-    this.sizeId = const Value.absent(),
-    this.costCents = const Value.absent(),
-    this.priceCents = const Value.absent(),
-    this.stockQuantity = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  ProductVariantsCompanion.insert({
-    this.id = const Value.absent(),
-    required int productId,
-    required String sku,
-    this.colorId = const Value.absent(),
-    this.sizeId = const Value.absent(),
-    required int costCents,
-    required int priceCents,
-    this.stockQuantity = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : productId = Value(productId),
-       sku = Value(sku),
-       costCents = Value(costCents),
-       priceCents = Value(priceCents);
-  static Insertable<ProductVariantsData> custom({
-    Expression<int>? id,
-    Expression<int>? productId,
-    Expression<String>? sku,
-    Expression<int>? colorId,
-    Expression<int>? sizeId,
-    Expression<int>? costCents,
-    Expression<int>? priceCents,
-    Expression<int>? stockQuantity,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (productId != null) 'product_id': productId,
-      if (sku != null) 'sku': sku,
-      if (colorId != null) 'color_id': colorId,
-      if (sizeId != null) 'size_id': sizeId,
-      if (costCents != null) 'cost_cents': costCents,
-      if (priceCents != null) 'price_cents': priceCents,
-      if (stockQuantity != null) 'stock_quantity': stockQuantity,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  ProductVariantsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? productId,
-    Value<String>? sku,
-    Value<int?>? colorId,
-    Value<int?>? sizeId,
-    Value<int>? costCents,
-    Value<int>? priceCents,
-    Value<int>? stockQuantity,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return ProductVariantsCompanion(
-      id: id ?? this.id,
-      productId: productId ?? this.productId,
-      sku: sku ?? this.sku,
-      colorId: colorId ?? this.colorId,
-      sizeId: sizeId ?? this.sizeId,
-      costCents: costCents ?? this.costCents,
-      priceCents: priceCents ?? this.priceCents,
-      stockQuantity: stockQuantity ?? this.stockQuantity,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (productId.present) {
-      map['product_id'] = Variable<int>(productId.value);
-    }
-    if (sku.present) {
-      map['sku'] = Variable<String>(sku.value);
-    }
-    if (colorId.present) {
-      map['color_id'] = Variable<int>(colorId.value);
-    }
-    if (sizeId.present) {
-      map['size_id'] = Variable<int>(sizeId.value);
-    }
-    if (costCents.present) {
-      map['cost_cents'] = Variable<int>(costCents.value);
-    }
-    if (priceCents.present) {
-      map['price_cents'] = Variable<int>(priceCents.value);
-    }
-    if (stockQuantity.present) {
-      map['stock_quantity'] = Variable<int>(stockQuantity.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ProductVariantsCompanion(')
-          ..write('id: $id, ')
-          ..write('productId: $productId, ')
-          ..write('sku: $sku, ')
-          ..write('colorId: $colorId, ')
-          ..write('sizeId: $sizeId, ')
-          ..write('costCents: $costCents, ')
-          ..write('priceCents: $priceCents, ')
-          ..write('stockQuantity: $stockQuantity, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class ProductBatches extends Table
@@ -3811,23 +2493,6 @@ class ProductBatchesData extends DataClass
     return map;
   }
 
-  ProductBatchesCompanion toCompanion(bool nullToAbsent) {
-    return ProductBatchesCompanion(
-      id: Value(id),
-      productId: Value(productId),
-      variantId: variantId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(variantId),
-      batchNumber: Value(batchNumber),
-      quantity: Value(quantity),
-      costCents: Value(costCents),
-      expiryDate: expiryDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(expiryDate),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory ProductBatchesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -3878,23 +2543,6 @@ class ProductBatchesData extends DataClass
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     createdAt: createdAt ?? this.createdAt,
   );
-  ProductBatchesData copyWithCompanion(ProductBatchesCompanion data) {
-    return ProductBatchesData(
-      id: data.id.present ? data.id.value : this.id,
-      productId: data.productId.present ? data.productId.value : this.productId,
-      variantId: data.variantId.present ? data.variantId.value : this.variantId,
-      batchNumber: data.batchNumber.present
-          ? data.batchNumber.value
-          : this.batchNumber,
-      quantity: data.quantity.present ? data.quantity.value : this.quantity,
-      costCents: data.costCents.present ? data.costCents.value : this.costCents,
-      expiryDate: data.expiryDate.present
-          ? data.expiryDate.value
-          : this.expiryDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ProductBatchesData(')
@@ -3933,128 +2581,6 @@ class ProductBatchesData extends DataClass
           other.costCents == this.costCents &&
           other.expiryDate == this.expiryDate &&
           other.createdAt == this.createdAt);
-}
-
-class ProductBatchesCompanion extends UpdateCompanion<ProductBatchesData> {
-  final Value<int> id;
-  final Value<int> productId;
-  final Value<int?> variantId;
-  final Value<String> batchNumber;
-  final Value<int> quantity;
-  final Value<int> costCents;
-  final Value<int?> expiryDate;
-  final Value<int> createdAt;
-  const ProductBatchesCompanion({
-    this.id = const Value.absent(),
-    this.productId = const Value.absent(),
-    this.variantId = const Value.absent(),
-    this.batchNumber = const Value.absent(),
-    this.quantity = const Value.absent(),
-    this.costCents = const Value.absent(),
-    this.expiryDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  ProductBatchesCompanion.insert({
-    this.id = const Value.absent(),
-    required int productId,
-    this.variantId = const Value.absent(),
-    required String batchNumber,
-    required int quantity,
-    required int costCents,
-    this.expiryDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : productId = Value(productId),
-       batchNumber = Value(batchNumber),
-       quantity = Value(quantity),
-       costCents = Value(costCents);
-  static Insertable<ProductBatchesData> custom({
-    Expression<int>? id,
-    Expression<int>? productId,
-    Expression<int>? variantId,
-    Expression<String>? batchNumber,
-    Expression<int>? quantity,
-    Expression<int>? costCents,
-    Expression<int>? expiryDate,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (productId != null) 'product_id': productId,
-      if (variantId != null) 'variant_id': variantId,
-      if (batchNumber != null) 'batch_number': batchNumber,
-      if (quantity != null) 'quantity': quantity,
-      if (costCents != null) 'cost_cents': costCents,
-      if (expiryDate != null) 'expiry_date': expiryDate,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  ProductBatchesCompanion copyWith({
-    Value<int>? id,
-    Value<int>? productId,
-    Value<int?>? variantId,
-    Value<String>? batchNumber,
-    Value<int>? quantity,
-    Value<int>? costCents,
-    Value<int?>? expiryDate,
-    Value<int>? createdAt,
-  }) {
-    return ProductBatchesCompanion(
-      id: id ?? this.id,
-      productId: productId ?? this.productId,
-      variantId: variantId ?? this.variantId,
-      batchNumber: batchNumber ?? this.batchNumber,
-      quantity: quantity ?? this.quantity,
-      costCents: costCents ?? this.costCents,
-      expiryDate: expiryDate ?? this.expiryDate,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (productId.present) {
-      map['product_id'] = Variable<int>(productId.value);
-    }
-    if (variantId.present) {
-      map['variant_id'] = Variable<int>(variantId.value);
-    }
-    if (batchNumber.present) {
-      map['batch_number'] = Variable<String>(batchNumber.value);
-    }
-    if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
-    }
-    if (costCents.present) {
-      map['cost_cents'] = Variable<int>(costCents.value);
-    }
-    if (expiryDate.present) {
-      map['expiry_date'] = Variable<int>(expiryDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ProductBatchesCompanion(')
-          ..write('id: $id, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('batchNumber: $batchNumber, ')
-          ..write('quantity: $quantity, ')
-          ..write('costCents: $costCents, ')
-          ..write('expiryDate: $expiryDate, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Customers extends Table with TableInfo<Customers, CustomersData> {
@@ -4274,27 +2800,6 @@ class CustomersData extends DataClass implements Insertable<CustomersData> {
     return map;
   }
 
-  CustomersCompanion toCompanion(bool nullToAbsent) {
-    return CustomersCompanion(
-      id: Value(id),
-      name: Value(name),
-      email: email == null && nullToAbsent
-          ? const Value.absent()
-          : Value(email),
-      phone: phone == null && nullToAbsent
-          ? const Value.absent()
-          : Value(phone),
-      address: address == null && nullToAbsent
-          ? const Value.absent()
-          : Value(address),
-      balanceCents: Value(balanceCents),
-      currencyId: Value(currencyId),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory CustomersData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -4353,25 +2858,6 @@ class CustomersData extends DataClass implements Insertable<CustomersData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  CustomersData copyWithCompanion(CustomersCompanion data) {
-    return CustomersData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      email: data.email.present ? data.email.value : this.email,
-      phone: data.phone.present ? data.phone.value : this.phone,
-      address: data.address.present ? data.address.value : this.address,
-      balanceCents: data.balanceCents.present
-          ? data.balanceCents.value
-          : this.balanceCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('CustomersData(')
@@ -4416,148 +2902,6 @@ class CustomersData extends DataClass implements Insertable<CustomersData> {
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class CustomersCompanion extends UpdateCompanion<CustomersData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> email;
-  final Value<String?> phone;
-  final Value<String?> address;
-  final Value<int> balanceCents;
-  final Value<int> currencyId;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const CustomersCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.address = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  CustomersCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.address = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    required int currencyId,
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : name = Value(name),
-       currencyId = Value(currencyId);
-  static Insertable<CustomersData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? email,
-    Expression<String>? phone,
-    Expression<String>? address,
-    Expression<int>? balanceCents,
-    Expression<int>? currencyId,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (email != null) 'email': email,
-      if (phone != null) 'phone': phone,
-      if (address != null) 'address': address,
-      if (balanceCents != null) 'balance_cents': balanceCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  CustomersCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? email,
-    Value<String?>? phone,
-    Value<String?>? address,
-    Value<int>? balanceCents,
-    Value<int>? currencyId,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return CustomersCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      address: address ?? this.address,
-      balanceCents: balanceCents ?? this.balanceCents,
-      currencyId: currencyId ?? this.currencyId,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (email.present) {
-      map['email'] = Variable<String>(email.value);
-    }
-    if (phone.present) {
-      map['phone'] = Variable<String>(phone.value);
-    }
-    if (address.present) {
-      map['address'] = Variable<String>(address.value);
-    }
-    if (balanceCents.present) {
-      map['balance_cents'] = Variable<int>(balanceCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CustomersCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('email: $email, ')
-          ..write('phone: $phone, ')
-          ..write('address: $address, ')
-          ..write('balanceCents: $balanceCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class CustomerTransactions extends Table
@@ -4780,27 +3124,6 @@ class CustomerTransactionsData extends DataClass
     return map;
   }
 
-  CustomerTransactionsCompanion toCompanion(bool nullToAbsent) {
-    return CustomerTransactionsCompanion(
-      id: Value(id),
-      customerId: Value(customerId),
-      transactionType: Value(transactionType),
-      amountCents: Value(amountCents),
-      currencyId: Value(currencyId),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      referenceId: referenceId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(referenceId),
-      referenceType: referenceType == null && nullToAbsent
-          ? const Value.absent()
-          : Value(referenceType),
-      transactionDate: Value(transactionDate),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory CustomerTransactionsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -4861,39 +3184,6 @@ class CustomerTransactionsData extends DataClass
     transactionDate: transactionDate ?? this.transactionDate,
     createdAt: createdAt ?? this.createdAt,
   );
-  CustomerTransactionsData copyWithCompanion(
-    CustomerTransactionsCompanion data,
-  ) {
-    return CustomerTransactionsData(
-      id: data.id.present ? data.id.value : this.id,
-      customerId: data.customerId.present
-          ? data.customerId.value
-          : this.customerId,
-      transactionType: data.transactionType.present
-          ? data.transactionType.value
-          : this.transactionType,
-      amountCents: data.amountCents.present
-          ? data.amountCents.value
-          : this.amountCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      referenceId: data.referenceId.present
-          ? data.referenceId.value
-          : this.referenceId,
-      referenceType: data.referenceType.present
-          ? data.referenceType.value
-          : this.referenceType,
-      transactionDate: data.transactionDate.present
-          ? data.transactionDate.value
-          : this.transactionDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('CustomerTransactionsData(')
@@ -4938,151 +3228,6 @@ class CustomerTransactionsData extends DataClass
           other.referenceType == this.referenceType &&
           other.transactionDate == this.transactionDate &&
           other.createdAt == this.createdAt);
-}
-
-class CustomerTransactionsCompanion
-    extends UpdateCompanion<CustomerTransactionsData> {
-  final Value<int> id;
-  final Value<int> customerId;
-  final Value<String> transactionType;
-  final Value<int> amountCents;
-  final Value<int> currencyId;
-  final Value<String?> description;
-  final Value<int?> referenceId;
-  final Value<String?> referenceType;
-  final Value<int> transactionDate;
-  final Value<int> createdAt;
-  const CustomerTransactionsCompanion({
-    this.id = const Value.absent(),
-    this.customerId = const Value.absent(),
-    this.transactionType = const Value.absent(),
-    this.amountCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.description = const Value.absent(),
-    this.referenceId = const Value.absent(),
-    this.referenceType = const Value.absent(),
-    this.transactionDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  CustomerTransactionsCompanion.insert({
-    this.id = const Value.absent(),
-    required int customerId,
-    required String transactionType,
-    required int amountCents,
-    required int currencyId,
-    this.description = const Value.absent(),
-    this.referenceId = const Value.absent(),
-    this.referenceType = const Value.absent(),
-    this.transactionDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : customerId = Value(customerId),
-       transactionType = Value(transactionType),
-       amountCents = Value(amountCents),
-       currencyId = Value(currencyId);
-  static Insertable<CustomerTransactionsData> custom({
-    Expression<int>? id,
-    Expression<int>? customerId,
-    Expression<String>? transactionType,
-    Expression<int>? amountCents,
-    Expression<int>? currencyId,
-    Expression<String>? description,
-    Expression<int>? referenceId,
-    Expression<String>? referenceType,
-    Expression<int>? transactionDate,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (customerId != null) 'customer_id': customerId,
-      if (transactionType != null) 'transaction_type': transactionType,
-      if (amountCents != null) 'amount_cents': amountCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (description != null) 'description': description,
-      if (referenceId != null) 'reference_id': referenceId,
-      if (referenceType != null) 'reference_type': referenceType,
-      if (transactionDate != null) 'transaction_date': transactionDate,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  CustomerTransactionsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? customerId,
-    Value<String>? transactionType,
-    Value<int>? amountCents,
-    Value<int>? currencyId,
-    Value<String?>? description,
-    Value<int?>? referenceId,
-    Value<String?>? referenceType,
-    Value<int>? transactionDate,
-    Value<int>? createdAt,
-  }) {
-    return CustomerTransactionsCompanion(
-      id: id ?? this.id,
-      customerId: customerId ?? this.customerId,
-      transactionType: transactionType ?? this.transactionType,
-      amountCents: amountCents ?? this.amountCents,
-      currencyId: currencyId ?? this.currencyId,
-      description: description ?? this.description,
-      referenceId: referenceId ?? this.referenceId,
-      referenceType: referenceType ?? this.referenceType,
-      transactionDate: transactionDate ?? this.transactionDate,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (customerId.present) {
-      map['customer_id'] = Variable<int>(customerId.value);
-    }
-    if (transactionType.present) {
-      map['transaction_type'] = Variable<String>(transactionType.value);
-    }
-    if (amountCents.present) {
-      map['amount_cents'] = Variable<int>(amountCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (referenceId.present) {
-      map['reference_id'] = Variable<int>(referenceId.value);
-    }
-    if (referenceType.present) {
-      map['reference_type'] = Variable<String>(referenceType.value);
-    }
-    if (transactionDate.present) {
-      map['transaction_date'] = Variable<int>(transactionDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CustomerTransactionsCompanion(')
-          ..write('id: $id, ')
-          ..write('customerId: $customerId, ')
-          ..write('transactionType: $transactionType, ')
-          ..write('amountCents: $amountCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('description: $description, ')
-          ..write('referenceId: $referenceId, ')
-          ..write('referenceType: $referenceType, ')
-          ..write('transactionDate: $transactionDate, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Suppliers extends Table with TableInfo<Suppliers, SuppliersData> {
@@ -5302,27 +3447,6 @@ class SuppliersData extends DataClass implements Insertable<SuppliersData> {
     return map;
   }
 
-  SuppliersCompanion toCompanion(bool nullToAbsent) {
-    return SuppliersCompanion(
-      id: Value(id),
-      name: Value(name),
-      email: email == null && nullToAbsent
-          ? const Value.absent()
-          : Value(email),
-      phone: phone == null && nullToAbsent
-          ? const Value.absent()
-          : Value(phone),
-      address: address == null && nullToAbsent
-          ? const Value.absent()
-          : Value(address),
-      balanceCents: Value(balanceCents),
-      currencyId: Value(currencyId),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory SuppliersData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -5381,25 +3505,6 @@ class SuppliersData extends DataClass implements Insertable<SuppliersData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  SuppliersData copyWithCompanion(SuppliersCompanion data) {
-    return SuppliersData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      email: data.email.present ? data.email.value : this.email,
-      phone: data.phone.present ? data.phone.value : this.phone,
-      address: data.address.present ? data.address.value : this.address,
-      balanceCents: data.balanceCents.present
-          ? data.balanceCents.value
-          : this.balanceCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SuppliersData(')
@@ -5444,148 +3549,6 @@ class SuppliersData extends DataClass implements Insertable<SuppliersData> {
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class SuppliersCompanion extends UpdateCompanion<SuppliersData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> email;
-  final Value<String?> phone;
-  final Value<String?> address;
-  final Value<int> balanceCents;
-  final Value<int> currencyId;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const SuppliersCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.address = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  SuppliersCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.address = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    required int currencyId,
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : name = Value(name),
-       currencyId = Value(currencyId);
-  static Insertable<SuppliersData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? email,
-    Expression<String>? phone,
-    Expression<String>? address,
-    Expression<int>? balanceCents,
-    Expression<int>? currencyId,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (email != null) 'email': email,
-      if (phone != null) 'phone': phone,
-      if (address != null) 'address': address,
-      if (balanceCents != null) 'balance_cents': balanceCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  SuppliersCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? email,
-    Value<String?>? phone,
-    Value<String?>? address,
-    Value<int>? balanceCents,
-    Value<int>? currencyId,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return SuppliersCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      address: address ?? this.address,
-      balanceCents: balanceCents ?? this.balanceCents,
-      currencyId: currencyId ?? this.currencyId,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (email.present) {
-      map['email'] = Variable<String>(email.value);
-    }
-    if (phone.present) {
-      map['phone'] = Variable<String>(phone.value);
-    }
-    if (address.present) {
-      map['address'] = Variable<String>(address.value);
-    }
-    if (balanceCents.present) {
-      map['balance_cents'] = Variable<int>(balanceCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SuppliersCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('email: $email, ')
-          ..write('phone: $phone, ')
-          ..write('address: $address, ')
-          ..write('balanceCents: $balanceCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class SupplierTransactions extends Table
@@ -5808,27 +3771,6 @@ class SupplierTransactionsData extends DataClass
     return map;
   }
 
-  SupplierTransactionsCompanion toCompanion(bool nullToAbsent) {
-    return SupplierTransactionsCompanion(
-      id: Value(id),
-      supplierId: Value(supplierId),
-      transactionType: Value(transactionType),
-      amountCents: Value(amountCents),
-      currencyId: Value(currencyId),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      referenceId: referenceId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(referenceId),
-      referenceType: referenceType == null && nullToAbsent
-          ? const Value.absent()
-          : Value(referenceType),
-      transactionDate: Value(transactionDate),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SupplierTransactionsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -5889,39 +3831,6 @@ class SupplierTransactionsData extends DataClass
     transactionDate: transactionDate ?? this.transactionDate,
     createdAt: createdAt ?? this.createdAt,
   );
-  SupplierTransactionsData copyWithCompanion(
-    SupplierTransactionsCompanion data,
-  ) {
-    return SupplierTransactionsData(
-      id: data.id.present ? data.id.value : this.id,
-      supplierId: data.supplierId.present
-          ? data.supplierId.value
-          : this.supplierId,
-      transactionType: data.transactionType.present
-          ? data.transactionType.value
-          : this.transactionType,
-      amountCents: data.amountCents.present
-          ? data.amountCents.value
-          : this.amountCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      referenceId: data.referenceId.present
-          ? data.referenceId.value
-          : this.referenceId,
-      referenceType: data.referenceType.present
-          ? data.referenceType.value
-          : this.referenceType,
-      transactionDate: data.transactionDate.present
-          ? data.transactionDate.value
-          : this.transactionDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SupplierTransactionsData(')
@@ -5966,151 +3875,6 @@ class SupplierTransactionsData extends DataClass
           other.referenceType == this.referenceType &&
           other.transactionDate == this.transactionDate &&
           other.createdAt == this.createdAt);
-}
-
-class SupplierTransactionsCompanion
-    extends UpdateCompanion<SupplierTransactionsData> {
-  final Value<int> id;
-  final Value<int> supplierId;
-  final Value<String> transactionType;
-  final Value<int> amountCents;
-  final Value<int> currencyId;
-  final Value<String?> description;
-  final Value<int?> referenceId;
-  final Value<String?> referenceType;
-  final Value<int> transactionDate;
-  final Value<int> createdAt;
-  const SupplierTransactionsCompanion({
-    this.id = const Value.absent(),
-    this.supplierId = const Value.absent(),
-    this.transactionType = const Value.absent(),
-    this.amountCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.description = const Value.absent(),
-    this.referenceId = const Value.absent(),
-    this.referenceType = const Value.absent(),
-    this.transactionDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SupplierTransactionsCompanion.insert({
-    this.id = const Value.absent(),
-    required int supplierId,
-    required String transactionType,
-    required int amountCents,
-    required int currencyId,
-    this.description = const Value.absent(),
-    this.referenceId = const Value.absent(),
-    this.referenceType = const Value.absent(),
-    this.transactionDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : supplierId = Value(supplierId),
-       transactionType = Value(transactionType),
-       amountCents = Value(amountCents),
-       currencyId = Value(currencyId);
-  static Insertable<SupplierTransactionsData> custom({
-    Expression<int>? id,
-    Expression<int>? supplierId,
-    Expression<String>? transactionType,
-    Expression<int>? amountCents,
-    Expression<int>? currencyId,
-    Expression<String>? description,
-    Expression<int>? referenceId,
-    Expression<String>? referenceType,
-    Expression<int>? transactionDate,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (supplierId != null) 'supplier_id': supplierId,
-      if (transactionType != null) 'transaction_type': transactionType,
-      if (amountCents != null) 'amount_cents': amountCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (description != null) 'description': description,
-      if (referenceId != null) 'reference_id': referenceId,
-      if (referenceType != null) 'reference_type': referenceType,
-      if (transactionDate != null) 'transaction_date': transactionDate,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SupplierTransactionsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? supplierId,
-    Value<String>? transactionType,
-    Value<int>? amountCents,
-    Value<int>? currencyId,
-    Value<String?>? description,
-    Value<int?>? referenceId,
-    Value<String?>? referenceType,
-    Value<int>? transactionDate,
-    Value<int>? createdAt,
-  }) {
-    return SupplierTransactionsCompanion(
-      id: id ?? this.id,
-      supplierId: supplierId ?? this.supplierId,
-      transactionType: transactionType ?? this.transactionType,
-      amountCents: amountCents ?? this.amountCents,
-      currencyId: currencyId ?? this.currencyId,
-      description: description ?? this.description,
-      referenceId: referenceId ?? this.referenceId,
-      referenceType: referenceType ?? this.referenceType,
-      transactionDate: transactionDate ?? this.transactionDate,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (supplierId.present) {
-      map['supplier_id'] = Variable<int>(supplierId.value);
-    }
-    if (transactionType.present) {
-      map['transaction_type'] = Variable<String>(transactionType.value);
-    }
-    if (amountCents.present) {
-      map['amount_cents'] = Variable<int>(amountCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (referenceId.present) {
-      map['reference_id'] = Variable<int>(referenceId.value);
-    }
-    if (referenceType.present) {
-      map['reference_type'] = Variable<String>(referenceType.value);
-    }
-    if (transactionDate.present) {
-      map['transaction_date'] = Variable<int>(transactionDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SupplierTransactionsCompanion(')
-          ..write('id: $id, ')
-          ..write('supplierId: $supplierId, ')
-          ..write('transactionType: $transactionType, ')
-          ..write('amountCents: $amountCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('description: $description, ')
-          ..write('referenceId: $referenceId, ')
-          ..write('referenceType: $referenceType, ')
-          ..write('transactionDate: $transactionDate, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Employees extends Table with TableInfo<Employees, EmployeesData> {
@@ -6349,32 +4113,6 @@ class EmployeesData extends DataClass implements Insertable<EmployeesData> {
     return map;
   }
 
-  EmployeesCompanion toCompanion(bool nullToAbsent) {
-    return EmployeesCompanion(
-      id: Value(id),
-      name: Value(name),
-      email: email == null && nullToAbsent
-          ? const Value.absent()
-          : Value(email),
-      phone: phone == null && nullToAbsent
-          ? const Value.absent()
-          : Value(phone),
-      position: position == null && nullToAbsent
-          ? const Value.absent()
-          : Value(position),
-      salaryCents: salaryCents == null && nullToAbsent
-          ? const Value.absent()
-          : Value(salaryCents),
-      currencyId: Value(currencyId),
-      isActive: Value(isActive),
-      hireDate: hireDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(hireDate),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory EmployeesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -6437,26 +4175,6 @@ class EmployeesData extends DataClass implements Insertable<EmployeesData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  EmployeesData copyWithCompanion(EmployeesCompanion data) {
-    return EmployeesData(
-      id: data.id.present ? data.id.value : this.id,
-      name: data.name.present ? data.name.value : this.name,
-      email: data.email.present ? data.email.value : this.email,
-      phone: data.phone.present ? data.phone.value : this.phone,
-      position: data.position.present ? data.position.value : this.position,
-      salaryCents: data.salaryCents.present
-          ? data.salaryCents.value
-          : this.salaryCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      hireDate: data.hireDate.present ? data.hireDate.value : this.hireDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('EmployeesData(')
@@ -6504,159 +4222,6 @@ class EmployeesData extends DataClass implements Insertable<EmployeesData> {
           other.hireDate == this.hireDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class EmployeesCompanion extends UpdateCompanion<EmployeesData> {
-  final Value<int> id;
-  final Value<String> name;
-  final Value<String?> email;
-  final Value<String?> phone;
-  final Value<String?> position;
-  final Value<int?> salaryCents;
-  final Value<int> currencyId;
-  final Value<int> isActive;
-  final Value<int?> hireDate;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const EmployeesCompanion({
-    this.id = const Value.absent(),
-    this.name = const Value.absent(),
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.position = const Value.absent(),
-    this.salaryCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.hireDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  EmployeesCompanion.insert({
-    this.id = const Value.absent(),
-    required String name,
-    this.email = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.position = const Value.absent(),
-    this.salaryCents = const Value.absent(),
-    required int currencyId,
-    this.isActive = const Value.absent(),
-    this.hireDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : name = Value(name),
-       currencyId = Value(currencyId);
-  static Insertable<EmployeesData> custom({
-    Expression<int>? id,
-    Expression<String>? name,
-    Expression<String>? email,
-    Expression<String>? phone,
-    Expression<String>? position,
-    Expression<int>? salaryCents,
-    Expression<int>? currencyId,
-    Expression<int>? isActive,
-    Expression<int>? hireDate,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (name != null) 'name': name,
-      if (email != null) 'email': email,
-      if (phone != null) 'phone': phone,
-      if (position != null) 'position': position,
-      if (salaryCents != null) 'salary_cents': salaryCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (isActive != null) 'is_active': isActive,
-      if (hireDate != null) 'hire_date': hireDate,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  EmployeesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? name,
-    Value<String?>? email,
-    Value<String?>? phone,
-    Value<String?>? position,
-    Value<int?>? salaryCents,
-    Value<int>? currencyId,
-    Value<int>? isActive,
-    Value<int?>? hireDate,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return EmployeesCompanion(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      position: position ?? this.position,
-      salaryCents: salaryCents ?? this.salaryCents,
-      currencyId: currencyId ?? this.currencyId,
-      isActive: isActive ?? this.isActive,
-      hireDate: hireDate ?? this.hireDate,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (email.present) {
-      map['email'] = Variable<String>(email.value);
-    }
-    if (phone.present) {
-      map['phone'] = Variable<String>(phone.value);
-    }
-    if (position.present) {
-      map['position'] = Variable<String>(position.value);
-    }
-    if (salaryCents.present) {
-      map['salary_cents'] = Variable<int>(salaryCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (hireDate.present) {
-      map['hire_date'] = Variable<int>(hireDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('EmployeesCompanion(')
-          ..write('id: $id, ')
-          ..write('name: $name, ')
-          ..write('email: $email, ')
-          ..write('phone: $phone, ')
-          ..write('position: $position, ')
-          ..write('salaryCents: $salaryCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('isActive: $isActive, ')
-          ..write('hireDate: $hireDate, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Sales extends Table with TableInfo<Sales, SalesData> {
@@ -6942,29 +4507,6 @@ class SalesData extends DataClass implements Insertable<SalesData> {
     return map;
   }
 
-  SalesCompanion toCompanion(bool nullToAbsent) {
-    return SalesCompanion(
-      id: Value(id),
-      invoiceNumber: Value(invoiceNumber),
-      customerId: customerId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(customerId),
-      employeeId: employeeId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(employeeId),
-      subtotalCents: Value(subtotalCents),
-      taxCents: Value(taxCents),
-      discountCents: Value(discountCents),
-      totalCents: Value(totalCents),
-      currencyId: Value(currencyId),
-      paymentMethod: Value(paymentMethod),
-      status: Value(status),
-      saleDate: Value(saleDate),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory SalesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -7039,41 +4581,6 @@ class SalesData extends DataClass implements Insertable<SalesData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  SalesData copyWithCompanion(SalesCompanion data) {
-    return SalesData(
-      id: data.id.present ? data.id.value : this.id,
-      invoiceNumber: data.invoiceNumber.present
-          ? data.invoiceNumber.value
-          : this.invoiceNumber,
-      customerId: data.customerId.present
-          ? data.customerId.value
-          : this.customerId,
-      employeeId: data.employeeId.present
-          ? data.employeeId.value
-          : this.employeeId,
-      subtotalCents: data.subtotalCents.present
-          ? data.subtotalCents.value
-          : this.subtotalCents,
-      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
-      discountCents: data.discountCents.present
-          ? data.discountCents.value
-          : this.discountCents,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      paymentMethod: data.paymentMethod.present
-          ? data.paymentMethod.value
-          : this.paymentMethod,
-      status: data.status.present ? data.status.value : this.status,
-      saleDate: data.saleDate.present ? data.saleDate.value : this.saleDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SalesData(')
@@ -7130,196 +4637,6 @@ class SalesData extends DataClass implements Insertable<SalesData> {
           other.saleDate == this.saleDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class SalesCompanion extends UpdateCompanion<SalesData> {
-  final Value<int> id;
-  final Value<String> invoiceNumber;
-  final Value<int?> customerId;
-  final Value<int?> employeeId;
-  final Value<int> subtotalCents;
-  final Value<int> taxCents;
-  final Value<int> discountCents;
-  final Value<int> totalCents;
-  final Value<int> currencyId;
-  final Value<String> paymentMethod;
-  final Value<String> status;
-  final Value<int> saleDate;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const SalesCompanion({
-    this.id = const Value.absent(),
-    this.invoiceNumber = const Value.absent(),
-    this.customerId = const Value.absent(),
-    this.employeeId = const Value.absent(),
-    this.subtotalCents = const Value.absent(),
-    this.taxCents = const Value.absent(),
-    this.discountCents = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.paymentMethod = const Value.absent(),
-    this.status = const Value.absent(),
-    this.saleDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  SalesCompanion.insert({
-    this.id = const Value.absent(),
-    required String invoiceNumber,
-    this.customerId = const Value.absent(),
-    this.employeeId = const Value.absent(),
-    required int subtotalCents,
-    required int taxCents,
-    this.discountCents = const Value.absent(),
-    required int totalCents,
-    required int currencyId,
-    required String paymentMethod,
-    this.status = const Value.absent(),
-    this.saleDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : invoiceNumber = Value(invoiceNumber),
-       subtotalCents = Value(subtotalCents),
-       taxCents = Value(taxCents),
-       totalCents = Value(totalCents),
-       currencyId = Value(currencyId),
-       paymentMethod = Value(paymentMethod);
-  static Insertable<SalesData> custom({
-    Expression<int>? id,
-    Expression<String>? invoiceNumber,
-    Expression<int>? customerId,
-    Expression<int>? employeeId,
-    Expression<int>? subtotalCents,
-    Expression<int>? taxCents,
-    Expression<int>? discountCents,
-    Expression<int>? totalCents,
-    Expression<int>? currencyId,
-    Expression<String>? paymentMethod,
-    Expression<String>? status,
-    Expression<int>? saleDate,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (invoiceNumber != null) 'invoice_number': invoiceNumber,
-      if (customerId != null) 'customer_id': customerId,
-      if (employeeId != null) 'employee_id': employeeId,
-      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
-      if (taxCents != null) 'tax_cents': taxCents,
-      if (discountCents != null) 'discount_cents': discountCents,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (paymentMethod != null) 'payment_method': paymentMethod,
-      if (status != null) 'status': status,
-      if (saleDate != null) 'sale_date': saleDate,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  SalesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? invoiceNumber,
-    Value<int?>? customerId,
-    Value<int?>? employeeId,
-    Value<int>? subtotalCents,
-    Value<int>? taxCents,
-    Value<int>? discountCents,
-    Value<int>? totalCents,
-    Value<int>? currencyId,
-    Value<String>? paymentMethod,
-    Value<String>? status,
-    Value<int>? saleDate,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return SalesCompanion(
-      id: id ?? this.id,
-      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
-      customerId: customerId ?? this.customerId,
-      employeeId: employeeId ?? this.employeeId,
-      subtotalCents: subtotalCents ?? this.subtotalCents,
-      taxCents: taxCents ?? this.taxCents,
-      discountCents: discountCents ?? this.discountCents,
-      totalCents: totalCents ?? this.totalCents,
-      currencyId: currencyId ?? this.currencyId,
-      paymentMethod: paymentMethod ?? this.paymentMethod,
-      status: status ?? this.status,
-      saleDate: saleDate ?? this.saleDate,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (invoiceNumber.present) {
-      map['invoice_number'] = Variable<String>(invoiceNumber.value);
-    }
-    if (customerId.present) {
-      map['customer_id'] = Variable<int>(customerId.value);
-    }
-    if (employeeId.present) {
-      map['employee_id'] = Variable<int>(employeeId.value);
-    }
-    if (subtotalCents.present) {
-      map['subtotal_cents'] = Variable<int>(subtotalCents.value);
-    }
-    if (taxCents.present) {
-      map['tax_cents'] = Variable<int>(taxCents.value);
-    }
-    if (discountCents.present) {
-      map['discount_cents'] = Variable<int>(discountCents.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (paymentMethod.present) {
-      map['payment_method'] = Variable<String>(paymentMethod.value);
-    }
-    if (status.present) {
-      map['status'] = Variable<String>(status.value);
-    }
-    if (saleDate.present) {
-      map['sale_date'] = Variable<int>(saleDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SalesCompanion(')
-          ..write('id: $id, ')
-          ..write('invoiceNumber: $invoiceNumber, ')
-          ..write('customerId: $customerId, ')
-          ..write('employeeId: $employeeId, ')
-          ..write('subtotalCents: $subtotalCents, ')
-          ..write('taxCents: $taxCents, ')
-          ..write('discountCents: $discountCents, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('paymentMethod: $paymentMethod, ')
-          ..write('status: $status, ')
-          ..write('saleDate: $saleDate, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Commissions extends Table with TableInfo<Commissions, CommissionsData> {
@@ -7479,18 +4796,6 @@ class CommissionsData extends DataClass implements Insertable<CommissionsData> {
     return map;
   }
 
-  CommissionsCompanion toCompanion(bool nullToAbsent) {
-    return CommissionsCompanion(
-      id: Value(id),
-      employeeId: Value(employeeId),
-      saleId: Value(saleId),
-      commissionRateBps: Value(commissionRateBps),
-      commissionAmountCents: Value(commissionAmountCents),
-      currencyId: Value(currencyId),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory CommissionsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -7539,26 +4844,6 @@ class CommissionsData extends DataClass implements Insertable<CommissionsData> {
     currencyId: currencyId ?? this.currencyId,
     createdAt: createdAt ?? this.createdAt,
   );
-  CommissionsData copyWithCompanion(CommissionsCompanion data) {
-    return CommissionsData(
-      id: data.id.present ? data.id.value : this.id,
-      employeeId: data.employeeId.present
-          ? data.employeeId.value
-          : this.employeeId,
-      saleId: data.saleId.present ? data.saleId.value : this.saleId,
-      commissionRateBps: data.commissionRateBps.present
-          ? data.commissionRateBps.value
-          : this.commissionRateBps,
-      commissionAmountCents: data.commissionAmountCents.present
-          ? data.commissionAmountCents.value
-          : this.commissionAmountCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('CommissionsData(')
@@ -7594,122 +4879,6 @@ class CommissionsData extends DataClass implements Insertable<CommissionsData> {
           other.commissionAmountCents == this.commissionAmountCents &&
           other.currencyId == this.currencyId &&
           other.createdAt == this.createdAt);
-}
-
-class CommissionsCompanion extends UpdateCompanion<CommissionsData> {
-  final Value<int> id;
-  final Value<int> employeeId;
-  final Value<int> saleId;
-  final Value<int> commissionRateBps;
-  final Value<int> commissionAmountCents;
-  final Value<int> currencyId;
-  final Value<int> createdAt;
-  const CommissionsCompanion({
-    this.id = const Value.absent(),
-    this.employeeId = const Value.absent(),
-    this.saleId = const Value.absent(),
-    this.commissionRateBps = const Value.absent(),
-    this.commissionAmountCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  CommissionsCompanion.insert({
-    this.id = const Value.absent(),
-    required int employeeId,
-    required int saleId,
-    required int commissionRateBps,
-    required int commissionAmountCents,
-    required int currencyId,
-    this.createdAt = const Value.absent(),
-  }) : employeeId = Value(employeeId),
-       saleId = Value(saleId),
-       commissionRateBps = Value(commissionRateBps),
-       commissionAmountCents = Value(commissionAmountCents),
-       currencyId = Value(currencyId);
-  static Insertable<CommissionsData> custom({
-    Expression<int>? id,
-    Expression<int>? employeeId,
-    Expression<int>? saleId,
-    Expression<int>? commissionRateBps,
-    Expression<int>? commissionAmountCents,
-    Expression<int>? currencyId,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (employeeId != null) 'employee_id': employeeId,
-      if (saleId != null) 'sale_id': saleId,
-      if (commissionRateBps != null) 'commission_rate_bps': commissionRateBps,
-      if (commissionAmountCents != null)
-        'commission_amount_cents': commissionAmountCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  CommissionsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? employeeId,
-    Value<int>? saleId,
-    Value<int>? commissionRateBps,
-    Value<int>? commissionAmountCents,
-    Value<int>? currencyId,
-    Value<int>? createdAt,
-  }) {
-    return CommissionsCompanion(
-      id: id ?? this.id,
-      employeeId: employeeId ?? this.employeeId,
-      saleId: saleId ?? this.saleId,
-      commissionRateBps: commissionRateBps ?? this.commissionRateBps,
-      commissionAmountCents:
-          commissionAmountCents ?? this.commissionAmountCents,
-      currencyId: currencyId ?? this.currencyId,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (employeeId.present) {
-      map['employee_id'] = Variable<int>(employeeId.value);
-    }
-    if (saleId.present) {
-      map['sale_id'] = Variable<int>(saleId.value);
-    }
-    if (commissionRateBps.present) {
-      map['commission_rate_bps'] = Variable<int>(commissionRateBps.value);
-    }
-    if (commissionAmountCents.present) {
-      map['commission_amount_cents'] = Variable<int>(
-        commissionAmountCents.value,
-      );
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CommissionsCompanion(')
-          ..write('id: $id, ')
-          ..write('employeeId: $employeeId, ')
-          ..write('saleId: $saleId, ')
-          ..write('commissionRateBps: $commissionRateBps, ')
-          ..write('commissionAmountCents: $commissionAmountCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class SaleItems extends Table with TableInfo<SaleItems, SaleItemsData> {
@@ -7938,24 +5107,6 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     return map;
   }
 
-  SaleItemsCompanion toCompanion(bool nullToAbsent) {
-    return SaleItemsCompanion(
-      id: Value(id),
-      saleId: Value(saleId),
-      productId: Value(productId),
-      variantId: variantId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(variantId),
-      quantity: Value(quantity),
-      unitPriceCents: Value(unitPriceCents),
-      subtotalCents: Value(subtotalCents),
-      discountCents: Value(discountCents),
-      taxCents: Value(taxCents),
-      totalCents: Value(totalCents),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SaleItemsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -8018,30 +5169,6 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
     totalCents: totalCents ?? this.totalCents,
     createdAt: createdAt ?? this.createdAt,
   );
-  SaleItemsData copyWithCompanion(SaleItemsCompanion data) {
-    return SaleItemsData(
-      id: data.id.present ? data.id.value : this.id,
-      saleId: data.saleId.present ? data.saleId.value : this.saleId,
-      productId: data.productId.present ? data.productId.value : this.productId,
-      variantId: data.variantId.present ? data.variantId.value : this.variantId,
-      quantity: data.quantity.present ? data.quantity.value : this.quantity,
-      unitPriceCents: data.unitPriceCents.present
-          ? data.unitPriceCents.value
-          : this.unitPriceCents,
-      subtotalCents: data.subtotalCents.present
-          ? data.subtotalCents.value
-          : this.subtotalCents,
-      discountCents: data.discountCents.present
-          ? data.discountCents.value
-          : this.discountCents,
-      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SaleItemsData(')
@@ -8089,163 +5216,6 @@ class SaleItemsData extends DataClass implements Insertable<SaleItemsData> {
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.createdAt == this.createdAt);
-}
-
-class SaleItemsCompanion extends UpdateCompanion<SaleItemsData> {
-  final Value<int> id;
-  final Value<int> saleId;
-  final Value<int> productId;
-  final Value<int?> variantId;
-  final Value<int> quantity;
-  final Value<int> unitPriceCents;
-  final Value<int> subtotalCents;
-  final Value<int> discountCents;
-  final Value<int> taxCents;
-  final Value<int> totalCents;
-  final Value<int> createdAt;
-  const SaleItemsCompanion({
-    this.id = const Value.absent(),
-    this.saleId = const Value.absent(),
-    this.productId = const Value.absent(),
-    this.variantId = const Value.absent(),
-    this.quantity = const Value.absent(),
-    this.unitPriceCents = const Value.absent(),
-    this.subtotalCents = const Value.absent(),
-    this.discountCents = const Value.absent(),
-    this.taxCents = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SaleItemsCompanion.insert({
-    this.id = const Value.absent(),
-    required int saleId,
-    required int productId,
-    this.variantId = const Value.absent(),
-    required int quantity,
-    required int unitPriceCents,
-    required int subtotalCents,
-    this.discountCents = const Value.absent(),
-    this.taxCents = const Value.absent(),
-    required int totalCents,
-    this.createdAt = const Value.absent(),
-  }) : saleId = Value(saleId),
-       productId = Value(productId),
-       quantity = Value(quantity),
-       unitPriceCents = Value(unitPriceCents),
-       subtotalCents = Value(subtotalCents),
-       totalCents = Value(totalCents);
-  static Insertable<SaleItemsData> custom({
-    Expression<int>? id,
-    Expression<int>? saleId,
-    Expression<int>? productId,
-    Expression<int>? variantId,
-    Expression<int>? quantity,
-    Expression<int>? unitPriceCents,
-    Expression<int>? subtotalCents,
-    Expression<int>? discountCents,
-    Expression<int>? taxCents,
-    Expression<int>? totalCents,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (saleId != null) 'sale_id': saleId,
-      if (productId != null) 'product_id': productId,
-      if (variantId != null) 'variant_id': variantId,
-      if (quantity != null) 'quantity': quantity,
-      if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
-      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
-      if (discountCents != null) 'discount_cents': discountCents,
-      if (taxCents != null) 'tax_cents': taxCents,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SaleItemsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? saleId,
-    Value<int>? productId,
-    Value<int?>? variantId,
-    Value<int>? quantity,
-    Value<int>? unitPriceCents,
-    Value<int>? subtotalCents,
-    Value<int>? discountCents,
-    Value<int>? taxCents,
-    Value<int>? totalCents,
-    Value<int>? createdAt,
-  }) {
-    return SaleItemsCompanion(
-      id: id ?? this.id,
-      saleId: saleId ?? this.saleId,
-      productId: productId ?? this.productId,
-      variantId: variantId ?? this.variantId,
-      quantity: quantity ?? this.quantity,
-      unitPriceCents: unitPriceCents ?? this.unitPriceCents,
-      subtotalCents: subtotalCents ?? this.subtotalCents,
-      discountCents: discountCents ?? this.discountCents,
-      taxCents: taxCents ?? this.taxCents,
-      totalCents: totalCents ?? this.totalCents,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (saleId.present) {
-      map['sale_id'] = Variable<int>(saleId.value);
-    }
-    if (productId.present) {
-      map['product_id'] = Variable<int>(productId.value);
-    }
-    if (variantId.present) {
-      map['variant_id'] = Variable<int>(variantId.value);
-    }
-    if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
-    }
-    if (unitPriceCents.present) {
-      map['unit_price_cents'] = Variable<int>(unitPriceCents.value);
-    }
-    if (subtotalCents.present) {
-      map['subtotal_cents'] = Variable<int>(subtotalCents.value);
-    }
-    if (discountCents.present) {
-      map['discount_cents'] = Variable<int>(discountCents.value);
-    }
-    if (taxCents.present) {
-      map['tax_cents'] = Variable<int>(taxCents.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SaleItemsCompanion(')
-          ..write('id: $id, ')
-          ..write('saleId: $saleId, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('quantity: $quantity, ')
-          ..write('unitPriceCents: $unitPriceCents, ')
-          ..write('subtotalCents: $subtotalCents, ')
-          ..write('discountCents: $discountCents, ')
-          ..write('taxCents: $taxCents, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class SaleTaxBands extends Table
@@ -8391,17 +5361,6 @@ class SaleTaxBandsData extends DataClass
     return map;
   }
 
-  SaleTaxBandsCompanion toCompanion(bool nullToAbsent) {
-    return SaleTaxBandsCompanion(
-      id: Value(id),
-      saleId: Value(saleId),
-      taxName: Value(taxName),
-      taxRateBps: Value(taxRateBps),
-      taxAmountCents: Value(taxAmountCents),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SaleTaxBandsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -8444,21 +5403,6 @@ class SaleTaxBandsData extends DataClass
     taxAmountCents: taxAmountCents ?? this.taxAmountCents,
     createdAt: createdAt ?? this.createdAt,
   );
-  SaleTaxBandsData copyWithCompanion(SaleTaxBandsCompanion data) {
-    return SaleTaxBandsData(
-      id: data.id.present ? data.id.value : this.id,
-      saleId: data.saleId.present ? data.saleId.value : this.saleId,
-      taxName: data.taxName.present ? data.taxName.value : this.taxName,
-      taxRateBps: data.taxRateBps.present
-          ? data.taxRateBps.value
-          : this.taxRateBps,
-      taxAmountCents: data.taxAmountCents.present
-          ? data.taxAmountCents.value
-          : this.taxAmountCents,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SaleTaxBandsData(')
@@ -8485,106 +5429,6 @@ class SaleTaxBandsData extends DataClass
           other.taxRateBps == this.taxRateBps &&
           other.taxAmountCents == this.taxAmountCents &&
           other.createdAt == this.createdAt);
-}
-
-class SaleTaxBandsCompanion extends UpdateCompanion<SaleTaxBandsData> {
-  final Value<int> id;
-  final Value<int> saleId;
-  final Value<String> taxName;
-  final Value<int> taxRateBps;
-  final Value<int> taxAmountCents;
-  final Value<int> createdAt;
-  const SaleTaxBandsCompanion({
-    this.id = const Value.absent(),
-    this.saleId = const Value.absent(),
-    this.taxName = const Value.absent(),
-    this.taxRateBps = const Value.absent(),
-    this.taxAmountCents = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SaleTaxBandsCompanion.insert({
-    this.id = const Value.absent(),
-    required int saleId,
-    required String taxName,
-    required int taxRateBps,
-    required int taxAmountCents,
-    this.createdAt = const Value.absent(),
-  }) : saleId = Value(saleId),
-       taxName = Value(taxName),
-       taxRateBps = Value(taxRateBps),
-       taxAmountCents = Value(taxAmountCents);
-  static Insertable<SaleTaxBandsData> custom({
-    Expression<int>? id,
-    Expression<int>? saleId,
-    Expression<String>? taxName,
-    Expression<int>? taxRateBps,
-    Expression<int>? taxAmountCents,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (saleId != null) 'sale_id': saleId,
-      if (taxName != null) 'tax_name': taxName,
-      if (taxRateBps != null) 'tax_rate_bps': taxRateBps,
-      if (taxAmountCents != null) 'tax_amount_cents': taxAmountCents,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SaleTaxBandsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? saleId,
-    Value<String>? taxName,
-    Value<int>? taxRateBps,
-    Value<int>? taxAmountCents,
-    Value<int>? createdAt,
-  }) {
-    return SaleTaxBandsCompanion(
-      id: id ?? this.id,
-      saleId: saleId ?? this.saleId,
-      taxName: taxName ?? this.taxName,
-      taxRateBps: taxRateBps ?? this.taxRateBps,
-      taxAmountCents: taxAmountCents ?? this.taxAmountCents,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (saleId.present) {
-      map['sale_id'] = Variable<int>(saleId.value);
-    }
-    if (taxName.present) {
-      map['tax_name'] = Variable<String>(taxName.value);
-    }
-    if (taxRateBps.present) {
-      map['tax_rate_bps'] = Variable<int>(taxRateBps.value);
-    }
-    if (taxAmountCents.present) {
-      map['tax_amount_cents'] = Variable<int>(taxAmountCents.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SaleTaxBandsCompanion(')
-          ..write('id: $id, ')
-          ..write('saleId: $saleId, ')
-          ..write('taxName: $taxName, ')
-          ..write('taxRateBps: $taxRateBps, ')
-          ..write('taxAmountCents: $taxAmountCents, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class SaleReturns extends Table with TableInfo<SaleReturns, SaleReturnsData> {
@@ -8766,21 +5610,6 @@ class SaleReturnsData extends DataClass implements Insertable<SaleReturnsData> {
     return map;
   }
 
-  SaleReturnsCompanion toCompanion(bool nullToAbsent) {
-    return SaleReturnsCompanion(
-      id: Value(id),
-      saleId: Value(saleId),
-      returnNumber: Value(returnNumber),
-      totalCents: Value(totalCents),
-      currencyId: Value(currencyId),
-      reason: reason == null && nullToAbsent
-          ? const Value.absent()
-          : Value(reason),
-      returnDate: Value(returnDate),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SaleReturnsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -8831,27 +5660,6 @@ class SaleReturnsData extends DataClass implements Insertable<SaleReturnsData> {
     returnDate: returnDate ?? this.returnDate,
     createdAt: createdAt ?? this.createdAt,
   );
-  SaleReturnsData copyWithCompanion(SaleReturnsCompanion data) {
-    return SaleReturnsData(
-      id: data.id.present ? data.id.value : this.id,
-      saleId: data.saleId.present ? data.saleId.value : this.saleId,
-      returnNumber: data.returnNumber.present
-          ? data.returnNumber.value
-          : this.returnNumber,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      reason: data.reason.present ? data.reason.value : this.reason,
-      returnDate: data.returnDate.present
-          ? data.returnDate.value
-          : this.returnDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SaleReturnsData(')
@@ -8890,128 +5698,6 @@ class SaleReturnsData extends DataClass implements Insertable<SaleReturnsData> {
           other.reason == this.reason &&
           other.returnDate == this.returnDate &&
           other.createdAt == this.createdAt);
-}
-
-class SaleReturnsCompanion extends UpdateCompanion<SaleReturnsData> {
-  final Value<int> id;
-  final Value<int> saleId;
-  final Value<String> returnNumber;
-  final Value<int> totalCents;
-  final Value<int> currencyId;
-  final Value<String?> reason;
-  final Value<int> returnDate;
-  final Value<int> createdAt;
-  const SaleReturnsCompanion({
-    this.id = const Value.absent(),
-    this.saleId = const Value.absent(),
-    this.returnNumber = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.reason = const Value.absent(),
-    this.returnDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SaleReturnsCompanion.insert({
-    this.id = const Value.absent(),
-    required int saleId,
-    required String returnNumber,
-    required int totalCents,
-    required int currencyId,
-    this.reason = const Value.absent(),
-    this.returnDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : saleId = Value(saleId),
-       returnNumber = Value(returnNumber),
-       totalCents = Value(totalCents),
-       currencyId = Value(currencyId);
-  static Insertable<SaleReturnsData> custom({
-    Expression<int>? id,
-    Expression<int>? saleId,
-    Expression<String>? returnNumber,
-    Expression<int>? totalCents,
-    Expression<int>? currencyId,
-    Expression<String>? reason,
-    Expression<int>? returnDate,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (saleId != null) 'sale_id': saleId,
-      if (returnNumber != null) 'return_number': returnNumber,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (reason != null) 'reason': reason,
-      if (returnDate != null) 'return_date': returnDate,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SaleReturnsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? saleId,
-    Value<String>? returnNumber,
-    Value<int>? totalCents,
-    Value<int>? currencyId,
-    Value<String?>? reason,
-    Value<int>? returnDate,
-    Value<int>? createdAt,
-  }) {
-    return SaleReturnsCompanion(
-      id: id ?? this.id,
-      saleId: saleId ?? this.saleId,
-      returnNumber: returnNumber ?? this.returnNumber,
-      totalCents: totalCents ?? this.totalCents,
-      currencyId: currencyId ?? this.currencyId,
-      reason: reason ?? this.reason,
-      returnDate: returnDate ?? this.returnDate,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (saleId.present) {
-      map['sale_id'] = Variable<int>(saleId.value);
-    }
-    if (returnNumber.present) {
-      map['return_number'] = Variable<String>(returnNumber.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (reason.present) {
-      map['reason'] = Variable<String>(reason.value);
-    }
-    if (returnDate.present) {
-      map['return_date'] = Variable<int>(returnDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SaleReturnsCompanion(')
-          ..write('id: $id, ')
-          ..write('saleId: $saleId, ')
-          ..write('returnNumber: $returnNumber, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('reason: $reason, ')
-          ..write('returnDate: $returnDate, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class SaleReturnItems extends Table
@@ -9157,17 +5843,6 @@ class SaleReturnItemsData extends DataClass
     return map;
   }
 
-  SaleReturnItemsCompanion toCompanion(bool nullToAbsent) {
-    return SaleReturnItemsCompanion(
-      id: Value(id),
-      returnId: Value(returnId),
-      saleItemId: Value(saleItemId),
-      quantity: Value(quantity),
-      refundCents: Value(refundCents),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory SaleReturnItemsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -9210,21 +5885,6 @@ class SaleReturnItemsData extends DataClass
     refundCents: refundCents ?? this.refundCents,
     createdAt: createdAt ?? this.createdAt,
   );
-  SaleReturnItemsData copyWithCompanion(SaleReturnItemsCompanion data) {
-    return SaleReturnItemsData(
-      id: data.id.present ? data.id.value : this.id,
-      returnId: data.returnId.present ? data.returnId.value : this.returnId,
-      saleItemId: data.saleItemId.present
-          ? data.saleItemId.value
-          : this.saleItemId,
-      quantity: data.quantity.present ? data.quantity.value : this.quantity,
-      refundCents: data.refundCents.present
-          ? data.refundCents.value
-          : this.refundCents,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('SaleReturnItemsData(')
@@ -9251,106 +5911,6 @@ class SaleReturnItemsData extends DataClass
           other.quantity == this.quantity &&
           other.refundCents == this.refundCents &&
           other.createdAt == this.createdAt);
-}
-
-class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItemsData> {
-  final Value<int> id;
-  final Value<int> returnId;
-  final Value<int> saleItemId;
-  final Value<int> quantity;
-  final Value<int> refundCents;
-  final Value<int> createdAt;
-  const SaleReturnItemsCompanion({
-    this.id = const Value.absent(),
-    this.returnId = const Value.absent(),
-    this.saleItemId = const Value.absent(),
-    this.quantity = const Value.absent(),
-    this.refundCents = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  SaleReturnItemsCompanion.insert({
-    this.id = const Value.absent(),
-    required int returnId,
-    required int saleItemId,
-    required int quantity,
-    required int refundCents,
-    this.createdAt = const Value.absent(),
-  }) : returnId = Value(returnId),
-       saleItemId = Value(saleItemId),
-       quantity = Value(quantity),
-       refundCents = Value(refundCents);
-  static Insertable<SaleReturnItemsData> custom({
-    Expression<int>? id,
-    Expression<int>? returnId,
-    Expression<int>? saleItemId,
-    Expression<int>? quantity,
-    Expression<int>? refundCents,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (returnId != null) 'return_id': returnId,
-      if (saleItemId != null) 'sale_item_id': saleItemId,
-      if (quantity != null) 'quantity': quantity,
-      if (refundCents != null) 'refund_cents': refundCents,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  SaleReturnItemsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? returnId,
-    Value<int>? saleItemId,
-    Value<int>? quantity,
-    Value<int>? refundCents,
-    Value<int>? createdAt,
-  }) {
-    return SaleReturnItemsCompanion(
-      id: id ?? this.id,
-      returnId: returnId ?? this.returnId,
-      saleItemId: saleItemId ?? this.saleItemId,
-      quantity: quantity ?? this.quantity,
-      refundCents: refundCents ?? this.refundCents,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (returnId.present) {
-      map['return_id'] = Variable<int>(returnId.value);
-    }
-    if (saleItemId.present) {
-      map['sale_item_id'] = Variable<int>(saleItemId.value);
-    }
-    if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
-    }
-    if (refundCents.present) {
-      map['refund_cents'] = Variable<int>(refundCents.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('SaleReturnItemsCompanion(')
-          ..write('id: $id, ')
-          ..write('returnId: $returnId, ')
-          ..write('saleItemId: $saleItemId, ')
-          ..write('quantity: $quantity, ')
-          ..write('refundCents: $refundCents, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Purchases extends Table with TableInfo<Purchases, PurchasesData> {
@@ -9583,22 +6143,6 @@ class PurchasesData extends DataClass implements Insertable<PurchasesData> {
     return map;
   }
 
-  PurchasesCompanion toCompanion(bool nullToAbsent) {
-    return PurchasesCompanion(
-      id: Value(id),
-      purchaseNumber: Value(purchaseNumber),
-      supplierId: Value(supplierId),
-      subtotalCents: Value(subtotalCents),
-      taxCents: Value(taxCents),
-      totalCents: Value(totalCents),
-      currencyId: Value(currencyId),
-      status: Value(status),
-      purchaseDate: Value(purchaseDate),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory PurchasesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -9661,34 +6205,6 @@ class PurchasesData extends DataClass implements Insertable<PurchasesData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  PurchasesData copyWithCompanion(PurchasesCompanion data) {
-    return PurchasesData(
-      id: data.id.present ? data.id.value : this.id,
-      purchaseNumber: data.purchaseNumber.present
-          ? data.purchaseNumber.value
-          : this.purchaseNumber,
-      supplierId: data.supplierId.present
-          ? data.supplierId.value
-          : this.supplierId,
-      subtotalCents: data.subtotalCents.present
-          ? data.subtotalCents.value
-          : this.subtotalCents,
-      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      status: data.status.present ? data.status.value : this.status,
-      purchaseDate: data.purchaseDate.present
-          ? data.purchaseDate.value
-          : this.purchaseDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('PurchasesData(')
@@ -9736,163 +6252,6 @@ class PurchasesData extends DataClass implements Insertable<PurchasesData> {
           other.purchaseDate == this.purchaseDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class PurchasesCompanion extends UpdateCompanion<PurchasesData> {
-  final Value<int> id;
-  final Value<String> purchaseNumber;
-  final Value<int> supplierId;
-  final Value<int> subtotalCents;
-  final Value<int> taxCents;
-  final Value<int> totalCents;
-  final Value<int> currencyId;
-  final Value<String> status;
-  final Value<int> purchaseDate;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const PurchasesCompanion({
-    this.id = const Value.absent(),
-    this.purchaseNumber = const Value.absent(),
-    this.supplierId = const Value.absent(),
-    this.subtotalCents = const Value.absent(),
-    this.taxCents = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.status = const Value.absent(),
-    this.purchaseDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  PurchasesCompanion.insert({
-    this.id = const Value.absent(),
-    required String purchaseNumber,
-    required int supplierId,
-    required int subtotalCents,
-    required int taxCents,
-    required int totalCents,
-    required int currencyId,
-    this.status = const Value.absent(),
-    this.purchaseDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : purchaseNumber = Value(purchaseNumber),
-       supplierId = Value(supplierId),
-       subtotalCents = Value(subtotalCents),
-       taxCents = Value(taxCents),
-       totalCents = Value(totalCents),
-       currencyId = Value(currencyId);
-  static Insertable<PurchasesData> custom({
-    Expression<int>? id,
-    Expression<String>? purchaseNumber,
-    Expression<int>? supplierId,
-    Expression<int>? subtotalCents,
-    Expression<int>? taxCents,
-    Expression<int>? totalCents,
-    Expression<int>? currencyId,
-    Expression<String>? status,
-    Expression<int>? purchaseDate,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (purchaseNumber != null) 'purchase_number': purchaseNumber,
-      if (supplierId != null) 'supplier_id': supplierId,
-      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
-      if (taxCents != null) 'tax_cents': taxCents,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (status != null) 'status': status,
-      if (purchaseDate != null) 'purchase_date': purchaseDate,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  PurchasesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? purchaseNumber,
-    Value<int>? supplierId,
-    Value<int>? subtotalCents,
-    Value<int>? taxCents,
-    Value<int>? totalCents,
-    Value<int>? currencyId,
-    Value<String>? status,
-    Value<int>? purchaseDate,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return PurchasesCompanion(
-      id: id ?? this.id,
-      purchaseNumber: purchaseNumber ?? this.purchaseNumber,
-      supplierId: supplierId ?? this.supplierId,
-      subtotalCents: subtotalCents ?? this.subtotalCents,
-      taxCents: taxCents ?? this.taxCents,
-      totalCents: totalCents ?? this.totalCents,
-      currencyId: currencyId ?? this.currencyId,
-      status: status ?? this.status,
-      purchaseDate: purchaseDate ?? this.purchaseDate,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (purchaseNumber.present) {
-      map['purchase_number'] = Variable<String>(purchaseNumber.value);
-    }
-    if (supplierId.present) {
-      map['supplier_id'] = Variable<int>(supplierId.value);
-    }
-    if (subtotalCents.present) {
-      map['subtotal_cents'] = Variable<int>(subtotalCents.value);
-    }
-    if (taxCents.present) {
-      map['tax_cents'] = Variable<int>(taxCents.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (status.present) {
-      map['status'] = Variable<String>(status.value);
-    }
-    if (purchaseDate.present) {
-      map['purchase_date'] = Variable<int>(purchaseDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PurchasesCompanion(')
-          ..write('id: $id, ')
-          ..write('purchaseNumber: $purchaseNumber, ')
-          ..write('supplierId: $supplierId, ')
-          ..write('subtotalCents: $subtotalCents, ')
-          ..write('taxCents: $taxCents, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('status: $status, ')
-          ..write('purchaseDate: $purchaseDate, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class PurchaseItems extends Table
@@ -10106,23 +6465,6 @@ class PurchaseItemsData extends DataClass
     return map;
   }
 
-  PurchaseItemsCompanion toCompanion(bool nullToAbsent) {
-    return PurchaseItemsCompanion(
-      id: Value(id),
-      purchaseId: Value(purchaseId),
-      productId: Value(productId),
-      variantId: variantId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(variantId),
-      quantity: Value(quantity),
-      unitCostCents: Value(unitCostCents),
-      subtotalCents: Value(subtotalCents),
-      taxCents: Value(taxCents),
-      totalCents: Value(totalCents),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory PurchaseItemsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -10181,29 +6523,6 @@ class PurchaseItemsData extends DataClass
     totalCents: totalCents ?? this.totalCents,
     createdAt: createdAt ?? this.createdAt,
   );
-  PurchaseItemsData copyWithCompanion(PurchaseItemsCompanion data) {
-    return PurchaseItemsData(
-      id: data.id.present ? data.id.value : this.id,
-      purchaseId: data.purchaseId.present
-          ? data.purchaseId.value
-          : this.purchaseId,
-      productId: data.productId.present ? data.productId.value : this.productId,
-      variantId: data.variantId.present ? data.variantId.value : this.variantId,
-      quantity: data.quantity.present ? data.quantity.value : this.quantity,
-      unitCostCents: data.unitCostCents.present
-          ? data.unitCostCents.value
-          : this.unitCostCents,
-      subtotalCents: data.subtotalCents.present
-          ? data.subtotalCents.value
-          : this.subtotalCents,
-      taxCents: data.taxCents.present ? data.taxCents.value : this.taxCents,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('PurchaseItemsData(')
@@ -10248,152 +6567,6 @@ class PurchaseItemsData extends DataClass
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.createdAt == this.createdAt);
-}
-
-class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemsData> {
-  final Value<int> id;
-  final Value<int> purchaseId;
-  final Value<int> productId;
-  final Value<int?> variantId;
-  final Value<int> quantity;
-  final Value<int> unitCostCents;
-  final Value<int> subtotalCents;
-  final Value<int> taxCents;
-  final Value<int> totalCents;
-  final Value<int> createdAt;
-  const PurchaseItemsCompanion({
-    this.id = const Value.absent(),
-    this.purchaseId = const Value.absent(),
-    this.productId = const Value.absent(),
-    this.variantId = const Value.absent(),
-    this.quantity = const Value.absent(),
-    this.unitCostCents = const Value.absent(),
-    this.subtotalCents = const Value.absent(),
-    this.taxCents = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  PurchaseItemsCompanion.insert({
-    this.id = const Value.absent(),
-    required int purchaseId,
-    required int productId,
-    this.variantId = const Value.absent(),
-    required int quantity,
-    required int unitCostCents,
-    required int subtotalCents,
-    this.taxCents = const Value.absent(),
-    required int totalCents,
-    this.createdAt = const Value.absent(),
-  }) : purchaseId = Value(purchaseId),
-       productId = Value(productId),
-       quantity = Value(quantity),
-       unitCostCents = Value(unitCostCents),
-       subtotalCents = Value(subtotalCents),
-       totalCents = Value(totalCents);
-  static Insertable<PurchaseItemsData> custom({
-    Expression<int>? id,
-    Expression<int>? purchaseId,
-    Expression<int>? productId,
-    Expression<int>? variantId,
-    Expression<int>? quantity,
-    Expression<int>? unitCostCents,
-    Expression<int>? subtotalCents,
-    Expression<int>? taxCents,
-    Expression<int>? totalCents,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (purchaseId != null) 'purchase_id': purchaseId,
-      if (productId != null) 'product_id': productId,
-      if (variantId != null) 'variant_id': variantId,
-      if (quantity != null) 'quantity': quantity,
-      if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
-      if (subtotalCents != null) 'subtotal_cents': subtotalCents,
-      if (taxCents != null) 'tax_cents': taxCents,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  PurchaseItemsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? purchaseId,
-    Value<int>? productId,
-    Value<int?>? variantId,
-    Value<int>? quantity,
-    Value<int>? unitCostCents,
-    Value<int>? subtotalCents,
-    Value<int>? taxCents,
-    Value<int>? totalCents,
-    Value<int>? createdAt,
-  }) {
-    return PurchaseItemsCompanion(
-      id: id ?? this.id,
-      purchaseId: purchaseId ?? this.purchaseId,
-      productId: productId ?? this.productId,
-      variantId: variantId ?? this.variantId,
-      quantity: quantity ?? this.quantity,
-      unitCostCents: unitCostCents ?? this.unitCostCents,
-      subtotalCents: subtotalCents ?? this.subtotalCents,
-      taxCents: taxCents ?? this.taxCents,
-      totalCents: totalCents ?? this.totalCents,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (purchaseId.present) {
-      map['purchase_id'] = Variable<int>(purchaseId.value);
-    }
-    if (productId.present) {
-      map['product_id'] = Variable<int>(productId.value);
-    }
-    if (variantId.present) {
-      map['variant_id'] = Variable<int>(variantId.value);
-    }
-    if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
-    }
-    if (unitCostCents.present) {
-      map['unit_cost_cents'] = Variable<int>(unitCostCents.value);
-    }
-    if (subtotalCents.present) {
-      map['subtotal_cents'] = Variable<int>(subtotalCents.value);
-    }
-    if (taxCents.present) {
-      map['tax_cents'] = Variable<int>(taxCents.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PurchaseItemsCompanion(')
-          ..write('id: $id, ')
-          ..write('purchaseId: $purchaseId, ')
-          ..write('productId: $productId, ')
-          ..write('variantId: $variantId, ')
-          ..write('quantity: $quantity, ')
-          ..write('unitCostCents: $unitCostCents, ')
-          ..write('subtotalCents: $subtotalCents, ')
-          ..write('taxCents: $taxCents, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class PurchaseReturns extends Table
@@ -10577,21 +6750,6 @@ class PurchaseReturnsData extends DataClass
     return map;
   }
 
-  PurchaseReturnsCompanion toCompanion(bool nullToAbsent) {
-    return PurchaseReturnsCompanion(
-      id: Value(id),
-      purchaseId: Value(purchaseId),
-      returnNumber: Value(returnNumber),
-      totalCents: Value(totalCents),
-      currencyId: Value(currencyId),
-      reason: reason == null && nullToAbsent
-          ? const Value.absent()
-          : Value(reason),
-      returnDate: Value(returnDate),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory PurchaseReturnsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -10642,29 +6800,6 @@ class PurchaseReturnsData extends DataClass
     returnDate: returnDate ?? this.returnDate,
     createdAt: createdAt ?? this.createdAt,
   );
-  PurchaseReturnsData copyWithCompanion(PurchaseReturnsCompanion data) {
-    return PurchaseReturnsData(
-      id: data.id.present ? data.id.value : this.id,
-      purchaseId: data.purchaseId.present
-          ? data.purchaseId.value
-          : this.purchaseId,
-      returnNumber: data.returnNumber.present
-          ? data.returnNumber.value
-          : this.returnNumber,
-      totalCents: data.totalCents.present
-          ? data.totalCents.value
-          : this.totalCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      reason: data.reason.present ? data.reason.value : this.reason,
-      returnDate: data.returnDate.present
-          ? data.returnDate.value
-          : this.returnDate,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('PurchaseReturnsData(')
@@ -10703,128 +6838,6 @@ class PurchaseReturnsData extends DataClass
           other.reason == this.reason &&
           other.returnDate == this.returnDate &&
           other.createdAt == this.createdAt);
-}
-
-class PurchaseReturnsCompanion extends UpdateCompanion<PurchaseReturnsData> {
-  final Value<int> id;
-  final Value<int> purchaseId;
-  final Value<String> returnNumber;
-  final Value<int> totalCents;
-  final Value<int> currencyId;
-  final Value<String?> reason;
-  final Value<int> returnDate;
-  final Value<int> createdAt;
-  const PurchaseReturnsCompanion({
-    this.id = const Value.absent(),
-    this.purchaseId = const Value.absent(),
-    this.returnNumber = const Value.absent(),
-    this.totalCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.reason = const Value.absent(),
-    this.returnDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  PurchaseReturnsCompanion.insert({
-    this.id = const Value.absent(),
-    required int purchaseId,
-    required String returnNumber,
-    required int totalCents,
-    required int currencyId,
-    this.reason = const Value.absent(),
-    this.returnDate = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : purchaseId = Value(purchaseId),
-       returnNumber = Value(returnNumber),
-       totalCents = Value(totalCents),
-       currencyId = Value(currencyId);
-  static Insertable<PurchaseReturnsData> custom({
-    Expression<int>? id,
-    Expression<int>? purchaseId,
-    Expression<String>? returnNumber,
-    Expression<int>? totalCents,
-    Expression<int>? currencyId,
-    Expression<String>? reason,
-    Expression<int>? returnDate,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (purchaseId != null) 'purchase_id': purchaseId,
-      if (returnNumber != null) 'return_number': returnNumber,
-      if (totalCents != null) 'total_cents': totalCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (reason != null) 'reason': reason,
-      if (returnDate != null) 'return_date': returnDate,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  PurchaseReturnsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? purchaseId,
-    Value<String>? returnNumber,
-    Value<int>? totalCents,
-    Value<int>? currencyId,
-    Value<String?>? reason,
-    Value<int>? returnDate,
-    Value<int>? createdAt,
-  }) {
-    return PurchaseReturnsCompanion(
-      id: id ?? this.id,
-      purchaseId: purchaseId ?? this.purchaseId,
-      returnNumber: returnNumber ?? this.returnNumber,
-      totalCents: totalCents ?? this.totalCents,
-      currencyId: currencyId ?? this.currencyId,
-      reason: reason ?? this.reason,
-      returnDate: returnDate ?? this.returnDate,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (purchaseId.present) {
-      map['purchase_id'] = Variable<int>(purchaseId.value);
-    }
-    if (returnNumber.present) {
-      map['return_number'] = Variable<String>(returnNumber.value);
-    }
-    if (totalCents.present) {
-      map['total_cents'] = Variable<int>(totalCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (reason.present) {
-      map['reason'] = Variable<String>(reason.value);
-    }
-    if (returnDate.present) {
-      map['return_date'] = Variable<int>(returnDate.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PurchaseReturnsCompanion(')
-          ..write('id: $id, ')
-          ..write('purchaseId: $purchaseId, ')
-          ..write('returnNumber: $returnNumber, ')
-          ..write('totalCents: $totalCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('reason: $reason, ')
-          ..write('returnDate: $returnDate, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class PurchaseReturnItems extends Table
@@ -10975,17 +6988,6 @@ class PurchaseReturnItemsData extends DataClass
     return map;
   }
 
-  PurchaseReturnItemsCompanion toCompanion(bool nullToAbsent) {
-    return PurchaseReturnItemsCompanion(
-      id: Value(id),
-      returnId: Value(returnId),
-      purchaseItemId: Value(purchaseItemId),
-      quantity: Value(quantity),
-      refundCents: Value(refundCents),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory PurchaseReturnItemsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -11028,21 +7030,6 @@ class PurchaseReturnItemsData extends DataClass
     refundCents: refundCents ?? this.refundCents,
     createdAt: createdAt ?? this.createdAt,
   );
-  PurchaseReturnItemsData copyWithCompanion(PurchaseReturnItemsCompanion data) {
-    return PurchaseReturnItemsData(
-      id: data.id.present ? data.id.value : this.id,
-      returnId: data.returnId.present ? data.returnId.value : this.returnId,
-      purchaseItemId: data.purchaseItemId.present
-          ? data.purchaseItemId.value
-          : this.purchaseItemId,
-      quantity: data.quantity.present ? data.quantity.value : this.quantity,
-      refundCents: data.refundCents.present
-          ? data.refundCents.value
-          : this.refundCents,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('PurchaseReturnItemsData(')
@@ -11075,107 +7062,6 @@ class PurchaseReturnItemsData extends DataClass
           other.quantity == this.quantity &&
           other.refundCents == this.refundCents &&
           other.createdAt == this.createdAt);
-}
-
-class PurchaseReturnItemsCompanion
-    extends UpdateCompanion<PurchaseReturnItemsData> {
-  final Value<int> id;
-  final Value<int> returnId;
-  final Value<int> purchaseItemId;
-  final Value<int> quantity;
-  final Value<int> refundCents;
-  final Value<int> createdAt;
-  const PurchaseReturnItemsCompanion({
-    this.id = const Value.absent(),
-    this.returnId = const Value.absent(),
-    this.purchaseItemId = const Value.absent(),
-    this.quantity = const Value.absent(),
-    this.refundCents = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  PurchaseReturnItemsCompanion.insert({
-    this.id = const Value.absent(),
-    required int returnId,
-    required int purchaseItemId,
-    required int quantity,
-    required int refundCents,
-    this.createdAt = const Value.absent(),
-  }) : returnId = Value(returnId),
-       purchaseItemId = Value(purchaseItemId),
-       quantity = Value(quantity),
-       refundCents = Value(refundCents);
-  static Insertable<PurchaseReturnItemsData> custom({
-    Expression<int>? id,
-    Expression<int>? returnId,
-    Expression<int>? purchaseItemId,
-    Expression<int>? quantity,
-    Expression<int>? refundCents,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (returnId != null) 'return_id': returnId,
-      if (purchaseItemId != null) 'purchase_item_id': purchaseItemId,
-      if (quantity != null) 'quantity': quantity,
-      if (refundCents != null) 'refund_cents': refundCents,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  PurchaseReturnItemsCompanion copyWith({
-    Value<int>? id,
-    Value<int>? returnId,
-    Value<int>? purchaseItemId,
-    Value<int>? quantity,
-    Value<int>? refundCents,
-    Value<int>? createdAt,
-  }) {
-    return PurchaseReturnItemsCompanion(
-      id: id ?? this.id,
-      returnId: returnId ?? this.returnId,
-      purchaseItemId: purchaseItemId ?? this.purchaseItemId,
-      quantity: quantity ?? this.quantity,
-      refundCents: refundCents ?? this.refundCents,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (returnId.present) {
-      map['return_id'] = Variable<int>(returnId.value);
-    }
-    if (purchaseItemId.present) {
-      map['purchase_item_id'] = Variable<int>(purchaseItemId.value);
-    }
-    if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
-    }
-    if (refundCents.present) {
-      map['refund_cents'] = Variable<int>(refundCents.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PurchaseReturnItemsCompanion(')
-          ..write('id: $id, ')
-          ..write('returnId: $returnId, ')
-          ..write('purchaseItemId: $purchaseItemId, ')
-          ..write('quantity: $quantity, ')
-          ..write('refundCents: $refundCents, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Accounts extends Table with TableInfo<Accounts, AccountsData> {
@@ -11391,23 +7277,6 @@ class AccountsData extends DataClass implements Insertable<AccountsData> {
     return map;
   }
 
-  AccountsCompanion toCompanion(bool nullToAbsent) {
-    return AccountsCompanion(
-      id: Value(id),
-      accountCode: Value(accountCode),
-      accountName: Value(accountName),
-      accountType: Value(accountType),
-      parentAccountId: parentAccountId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(parentAccountId),
-      balanceCents: Value(balanceCents),
-      currencyId: Value(currencyId),
-      isActive: Value(isActive),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory AccountsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -11468,33 +7337,6 @@ class AccountsData extends DataClass implements Insertable<AccountsData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  AccountsData copyWithCompanion(AccountsCompanion data) {
-    return AccountsData(
-      id: data.id.present ? data.id.value : this.id,
-      accountCode: data.accountCode.present
-          ? data.accountCode.value
-          : this.accountCode,
-      accountName: data.accountName.present
-          ? data.accountName.value
-          : this.accountName,
-      accountType: data.accountType.present
-          ? data.accountType.value
-          : this.accountType,
-      parentAccountId: data.parentAccountId.present
-          ? data.parentAccountId.value
-          : this.parentAccountId,
-      balanceCents: data.balanceCents.present
-          ? data.balanceCents.value
-          : this.balanceCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      isActive: data.isActive.present ? data.isActive.value : this.isActive,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('AccountsData(')
@@ -11539,150 +7381,6 @@ class AccountsData extends DataClass implements Insertable<AccountsData> {
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class AccountsCompanion extends UpdateCompanion<AccountsData> {
-  final Value<int> id;
-  final Value<String> accountCode;
-  final Value<String> accountName;
-  final Value<String> accountType;
-  final Value<int?> parentAccountId;
-  final Value<int> balanceCents;
-  final Value<int> currencyId;
-  final Value<int> isActive;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const AccountsCompanion({
-    this.id = const Value.absent(),
-    this.accountCode = const Value.absent(),
-    this.accountName = const Value.absent(),
-    this.accountType = const Value.absent(),
-    this.parentAccountId = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  AccountsCompanion.insert({
-    this.id = const Value.absent(),
-    required String accountCode,
-    required String accountName,
-    required String accountType,
-    this.parentAccountId = const Value.absent(),
-    this.balanceCents = const Value.absent(),
-    required int currencyId,
-    this.isActive = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : accountCode = Value(accountCode),
-       accountName = Value(accountName),
-       accountType = Value(accountType),
-       currencyId = Value(currencyId);
-  static Insertable<AccountsData> custom({
-    Expression<int>? id,
-    Expression<String>? accountCode,
-    Expression<String>? accountName,
-    Expression<String>? accountType,
-    Expression<int>? parentAccountId,
-    Expression<int>? balanceCents,
-    Expression<int>? currencyId,
-    Expression<int>? isActive,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (accountCode != null) 'account_code': accountCode,
-      if (accountName != null) 'account_name': accountName,
-      if (accountType != null) 'account_type': accountType,
-      if (parentAccountId != null) 'parent_account_id': parentAccountId,
-      if (balanceCents != null) 'balance_cents': balanceCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (isActive != null) 'is_active': isActive,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  AccountsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? accountCode,
-    Value<String>? accountName,
-    Value<String>? accountType,
-    Value<int?>? parentAccountId,
-    Value<int>? balanceCents,
-    Value<int>? currencyId,
-    Value<int>? isActive,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return AccountsCompanion(
-      id: id ?? this.id,
-      accountCode: accountCode ?? this.accountCode,
-      accountName: accountName ?? this.accountName,
-      accountType: accountType ?? this.accountType,
-      parentAccountId: parentAccountId ?? this.parentAccountId,
-      balanceCents: balanceCents ?? this.balanceCents,
-      currencyId: currencyId ?? this.currencyId,
-      isActive: isActive ?? this.isActive,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (accountCode.present) {
-      map['account_code'] = Variable<String>(accountCode.value);
-    }
-    if (accountName.present) {
-      map['account_name'] = Variable<String>(accountName.value);
-    }
-    if (accountType.present) {
-      map['account_type'] = Variable<String>(accountType.value);
-    }
-    if (parentAccountId.present) {
-      map['parent_account_id'] = Variable<int>(parentAccountId.value);
-    }
-    if (balanceCents.present) {
-      map['balance_cents'] = Variable<int>(balanceCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (isActive.present) {
-      map['is_active'] = Variable<int>(isActive.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AccountsCompanion(')
-          ..write('id: $id, ')
-          ..write('accountCode: $accountCode, ')
-          ..write('accountName: $accountName, ')
-          ..write('accountType: $accountType, ')
-          ..write('parentAccountId: $parentAccountId, ')
-          ..write('balanceCents: $balanceCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('isActive: $isActive, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class AccountingPeriods extends Table
@@ -11849,18 +7547,6 @@ class AccountingPeriodsData extends DataClass
     return map;
   }
 
-  AccountingPeriodsCompanion toCompanion(bool nullToAbsent) {
-    return AccountingPeriodsCompanion(
-      id: Value(id),
-      periodName: Value(periodName),
-      startDate: Value(startDate),
-      endDate: Value(endDate),
-      isClosed: Value(isClosed),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory AccountingPeriodsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -11907,20 +7593,6 @@ class AccountingPeriodsData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  AccountingPeriodsData copyWithCompanion(AccountingPeriodsCompanion data) {
-    return AccountingPeriodsData(
-      id: data.id.present ? data.id.value : this.id,
-      periodName: data.periodName.present
-          ? data.periodName.value
-          : this.periodName,
-      startDate: data.startDate.present ? data.startDate.value : this.startDate,
-      endDate: data.endDate.present ? data.endDate.value : this.endDate,
-      isClosed: data.isClosed.present ? data.isClosed.value : this.isClosed,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('AccountingPeriodsData(')
@@ -11956,117 +7628,6 @@ class AccountingPeriodsData extends DataClass
           other.isClosed == this.isClosed &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class AccountingPeriodsCompanion
-    extends UpdateCompanion<AccountingPeriodsData> {
-  final Value<int> id;
-  final Value<String> periodName;
-  final Value<int> startDate;
-  final Value<int> endDate;
-  final Value<int> isClosed;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const AccountingPeriodsCompanion({
-    this.id = const Value.absent(),
-    this.periodName = const Value.absent(),
-    this.startDate = const Value.absent(),
-    this.endDate = const Value.absent(),
-    this.isClosed = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  AccountingPeriodsCompanion.insert({
-    this.id = const Value.absent(),
-    required String periodName,
-    required int startDate,
-    required int endDate,
-    this.isClosed = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : periodName = Value(periodName),
-       startDate = Value(startDate),
-       endDate = Value(endDate);
-  static Insertable<AccountingPeriodsData> custom({
-    Expression<int>? id,
-    Expression<String>? periodName,
-    Expression<int>? startDate,
-    Expression<int>? endDate,
-    Expression<int>? isClosed,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (periodName != null) 'period_name': periodName,
-      if (startDate != null) 'start_date': startDate,
-      if (endDate != null) 'end_date': endDate,
-      if (isClosed != null) 'is_closed': isClosed,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  AccountingPeriodsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? periodName,
-    Value<int>? startDate,
-    Value<int>? endDate,
-    Value<int>? isClosed,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return AccountingPeriodsCompanion(
-      id: id ?? this.id,
-      periodName: periodName ?? this.periodName,
-      startDate: startDate ?? this.startDate,
-      endDate: endDate ?? this.endDate,
-      isClosed: isClosed ?? this.isClosed,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (periodName.present) {
-      map['period_name'] = Variable<String>(periodName.value);
-    }
-    if (startDate.present) {
-      map['start_date'] = Variable<int>(startDate.value);
-    }
-    if (endDate.present) {
-      map['end_date'] = Variable<int>(endDate.value);
-    }
-    if (isClosed.present) {
-      map['is_closed'] = Variable<int>(isClosed.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AccountingPeriodsCompanion(')
-          ..write('id: $id, ')
-          ..write('periodName: $periodName, ')
-          ..write('startDate: $startDate, ')
-          ..write('endDate: $endDate, ')
-          ..write('isClosed: $isClosed, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class JournalEntries extends Table
@@ -12274,24 +7835,6 @@ class JournalEntriesData extends DataClass
     return map;
   }
 
-  JournalEntriesCompanion toCompanion(bool nullToAbsent) {
-    return JournalEntriesCompanion(
-      id: Value(id),
-      entryNumber: Value(entryNumber),
-      description: Value(description),
-      entryDate: Value(entryDate),
-      accountingPeriodId: accountingPeriodId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(accountingPeriodId),
-      status: Value(status),
-      createdBy: createdBy == null && nullToAbsent
-          ? const Value.absent()
-          : Value(createdBy),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory JournalEntriesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -12348,26 +7891,6 @@ class JournalEntriesData extends DataClass
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  JournalEntriesData copyWithCompanion(JournalEntriesCompanion data) {
-    return JournalEntriesData(
-      id: data.id.present ? data.id.value : this.id,
-      entryNumber: data.entryNumber.present
-          ? data.entryNumber.value
-          : this.entryNumber,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      entryDate: data.entryDate.present ? data.entryDate.value : this.entryDate,
-      accountingPeriodId: data.accountingPeriodId.present
-          ? data.accountingPeriodId.value
-          : this.accountingPeriodId,
-      status: data.status.present ? data.status.value : this.status,
-      createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('JournalEntriesData(')
@@ -12409,138 +7932,6 @@ class JournalEntriesData extends DataClass
           other.createdBy == this.createdBy &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class JournalEntriesCompanion extends UpdateCompanion<JournalEntriesData> {
-  final Value<int> id;
-  final Value<String> entryNumber;
-  final Value<String> description;
-  final Value<int> entryDate;
-  final Value<int?> accountingPeriodId;
-  final Value<String> status;
-  final Value<int?> createdBy;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const JournalEntriesCompanion({
-    this.id = const Value.absent(),
-    this.entryNumber = const Value.absent(),
-    this.description = const Value.absent(),
-    this.entryDate = const Value.absent(),
-    this.accountingPeriodId = const Value.absent(),
-    this.status = const Value.absent(),
-    this.createdBy = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  JournalEntriesCompanion.insert({
-    this.id = const Value.absent(),
-    required String entryNumber,
-    required String description,
-    this.entryDate = const Value.absent(),
-    this.accountingPeriodId = const Value.absent(),
-    this.status = const Value.absent(),
-    this.createdBy = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : entryNumber = Value(entryNumber),
-       description = Value(description);
-  static Insertable<JournalEntriesData> custom({
-    Expression<int>? id,
-    Expression<String>? entryNumber,
-    Expression<String>? description,
-    Expression<int>? entryDate,
-    Expression<int>? accountingPeriodId,
-    Expression<String>? status,
-    Expression<int>? createdBy,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (entryNumber != null) 'entry_number': entryNumber,
-      if (description != null) 'description': description,
-      if (entryDate != null) 'entry_date': entryDate,
-      if (accountingPeriodId != null)
-        'accounting_period_id': accountingPeriodId,
-      if (status != null) 'status': status,
-      if (createdBy != null) 'created_by': createdBy,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  JournalEntriesCompanion copyWith({
-    Value<int>? id,
-    Value<String>? entryNumber,
-    Value<String>? description,
-    Value<int>? entryDate,
-    Value<int?>? accountingPeriodId,
-    Value<String>? status,
-    Value<int?>? createdBy,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return JournalEntriesCompanion(
-      id: id ?? this.id,
-      entryNumber: entryNumber ?? this.entryNumber,
-      description: description ?? this.description,
-      entryDate: entryDate ?? this.entryDate,
-      accountingPeriodId: accountingPeriodId ?? this.accountingPeriodId,
-      status: status ?? this.status,
-      createdBy: createdBy ?? this.createdBy,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (entryNumber.present) {
-      map['entry_number'] = Variable<String>(entryNumber.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (entryDate.present) {
-      map['entry_date'] = Variable<int>(entryDate.value);
-    }
-    if (accountingPeriodId.present) {
-      map['accounting_period_id'] = Variable<int>(accountingPeriodId.value);
-    }
-    if (status.present) {
-      map['status'] = Variable<String>(status.value);
-    }
-    if (createdBy.present) {
-      map['created_by'] = Variable<int>(createdBy.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('JournalEntriesCompanion(')
-          ..write('id: $id, ')
-          ..write('entryNumber: $entryNumber, ')
-          ..write('description: $description, ')
-          ..write('entryDate: $entryDate, ')
-          ..write('accountingPeriodId: $accountingPeriodId, ')
-          ..write('status: $status, ')
-          ..write('createdBy: $createdBy, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class JournalEntryLines extends Table
@@ -12723,21 +8114,6 @@ class JournalEntryLinesData extends DataClass
     return map;
   }
 
-  JournalEntryLinesCompanion toCompanion(bool nullToAbsent) {
-    return JournalEntryLinesCompanion(
-      id: Value(id),
-      journalEntryId: Value(journalEntryId),
-      accountId: Value(accountId),
-      debitCents: Value(debitCents),
-      creditCents: Value(creditCents),
-      currencyId: Value(currencyId),
-      description: description == null && nullToAbsent
-          ? const Value.absent()
-          : Value(description),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory JournalEntryLinesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -12788,29 +8164,6 @@ class JournalEntryLinesData extends DataClass
     description: description.present ? description.value : this.description,
     createdAt: createdAt ?? this.createdAt,
   );
-  JournalEntryLinesData copyWithCompanion(JournalEntryLinesCompanion data) {
-    return JournalEntryLinesData(
-      id: data.id.present ? data.id.value : this.id,
-      journalEntryId: data.journalEntryId.present
-          ? data.journalEntryId.value
-          : this.journalEntryId,
-      accountId: data.accountId.present ? data.accountId.value : this.accountId,
-      debitCents: data.debitCents.present
-          ? data.debitCents.value
-          : this.debitCents,
-      creditCents: data.creditCents.present
-          ? data.creditCents.value
-          : this.creditCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('JournalEntryLinesData(')
@@ -12849,128 +8202,6 @@ class JournalEntryLinesData extends DataClass
           other.currencyId == this.currencyId &&
           other.description == this.description &&
           other.createdAt == this.createdAt);
-}
-
-class JournalEntryLinesCompanion
-    extends UpdateCompanion<JournalEntryLinesData> {
-  final Value<int> id;
-  final Value<int> journalEntryId;
-  final Value<int> accountId;
-  final Value<int> debitCents;
-  final Value<int> creditCents;
-  final Value<int> currencyId;
-  final Value<String?> description;
-  final Value<int> createdAt;
-  const JournalEntryLinesCompanion({
-    this.id = const Value.absent(),
-    this.journalEntryId = const Value.absent(),
-    this.accountId = const Value.absent(),
-    this.debitCents = const Value.absent(),
-    this.creditCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.description = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  JournalEntryLinesCompanion.insert({
-    this.id = const Value.absent(),
-    required int journalEntryId,
-    required int accountId,
-    this.debitCents = const Value.absent(),
-    this.creditCents = const Value.absent(),
-    required int currencyId,
-    this.description = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : journalEntryId = Value(journalEntryId),
-       accountId = Value(accountId),
-       currencyId = Value(currencyId);
-  static Insertable<JournalEntryLinesData> custom({
-    Expression<int>? id,
-    Expression<int>? journalEntryId,
-    Expression<int>? accountId,
-    Expression<int>? debitCents,
-    Expression<int>? creditCents,
-    Expression<int>? currencyId,
-    Expression<String>? description,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (journalEntryId != null) 'journal_entry_id': journalEntryId,
-      if (accountId != null) 'account_id': accountId,
-      if (debitCents != null) 'debit_cents': debitCents,
-      if (creditCents != null) 'credit_cents': creditCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (description != null) 'description': description,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  JournalEntryLinesCompanion copyWith({
-    Value<int>? id,
-    Value<int>? journalEntryId,
-    Value<int>? accountId,
-    Value<int>? debitCents,
-    Value<int>? creditCents,
-    Value<int>? currencyId,
-    Value<String?>? description,
-    Value<int>? createdAt,
-  }) {
-    return JournalEntryLinesCompanion(
-      id: id ?? this.id,
-      journalEntryId: journalEntryId ?? this.journalEntryId,
-      accountId: accountId ?? this.accountId,
-      debitCents: debitCents ?? this.debitCents,
-      creditCents: creditCents ?? this.creditCents,
-      currencyId: currencyId ?? this.currencyId,
-      description: description ?? this.description,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (journalEntryId.present) {
-      map['journal_entry_id'] = Variable<int>(journalEntryId.value);
-    }
-    if (accountId.present) {
-      map['account_id'] = Variable<int>(accountId.value);
-    }
-    if (debitCents.present) {
-      map['debit_cents'] = Variable<int>(debitCents.value);
-    }
-    if (creditCents.present) {
-      map['credit_cents'] = Variable<int>(creditCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('JournalEntryLinesCompanion(')
-          ..write('id: $id, ')
-          ..write('journalEntryId: $journalEntryId, ')
-          ..write('accountId: $accountId, ')
-          ..write('debitCents: $debitCents, ')
-          ..write('creditCents: $creditCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('description: $description, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Expenses extends Table with TableInfo<Expenses, ExpensesData> {
@@ -13191,25 +8422,6 @@ class ExpensesData extends DataClass implements Insertable<ExpensesData> {
     return map;
   }
 
-  ExpensesCompanion toCompanion(bool nullToAbsent) {
-    return ExpensesCompanion(
-      id: Value(id),
-      categoryId: Value(categoryId),
-      description: Value(description),
-      amountCents: Value(amountCents),
-      currencyId: Value(currencyId),
-      accountId: accountId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(accountId),
-      expenseDate: Value(expenseDate),
-      receiptPath: receiptPath == null && nullToAbsent
-          ? const Value.absent()
-          : Value(receiptPath),
-      createdAt: Value(createdAt),
-      updatedAt: Value(updatedAt),
-    );
-  }
-
   factory ExpensesData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -13268,33 +8480,6 @@ class ExpensesData extends DataClass implements Insertable<ExpensesData> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  ExpensesData copyWithCompanion(ExpensesCompanion data) {
-    return ExpensesData(
-      id: data.id.present ? data.id.value : this.id,
-      categoryId: data.categoryId.present
-          ? data.categoryId.value
-          : this.categoryId,
-      description: data.description.present
-          ? data.description.value
-          : this.description,
-      amountCents: data.amountCents.present
-          ? data.amountCents.value
-          : this.amountCents,
-      currencyId: data.currencyId.present
-          ? data.currencyId.value
-          : this.currencyId,
-      accountId: data.accountId.present ? data.accountId.value : this.accountId,
-      expenseDate: data.expenseDate.present
-          ? data.expenseDate.value
-          : this.expenseDate,
-      receiptPath: data.receiptPath.present
-          ? data.receiptPath.value
-          : this.receiptPath,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('ExpensesData(')
@@ -13339,150 +8524,6 @@ class ExpensesData extends DataClass implements Insertable<ExpensesData> {
           other.receiptPath == this.receiptPath &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
-}
-
-class ExpensesCompanion extends UpdateCompanion<ExpensesData> {
-  final Value<int> id;
-  final Value<int> categoryId;
-  final Value<String> description;
-  final Value<int> amountCents;
-  final Value<int> currencyId;
-  final Value<int?> accountId;
-  final Value<int> expenseDate;
-  final Value<String?> receiptPath;
-  final Value<int> createdAt;
-  final Value<int> updatedAt;
-  const ExpensesCompanion({
-    this.id = const Value.absent(),
-    this.categoryId = const Value.absent(),
-    this.description = const Value.absent(),
-    this.amountCents = const Value.absent(),
-    this.currencyId = const Value.absent(),
-    this.accountId = const Value.absent(),
-    this.expenseDate = const Value.absent(),
-    this.receiptPath = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  });
-  ExpensesCompanion.insert({
-    this.id = const Value.absent(),
-    required int categoryId,
-    required String description,
-    required int amountCents,
-    required int currencyId,
-    this.accountId = const Value.absent(),
-    this.expenseDate = const Value.absent(),
-    this.receiptPath = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.updatedAt = const Value.absent(),
-  }) : categoryId = Value(categoryId),
-       description = Value(description),
-       amountCents = Value(amountCents),
-       currencyId = Value(currencyId);
-  static Insertable<ExpensesData> custom({
-    Expression<int>? id,
-    Expression<int>? categoryId,
-    Expression<String>? description,
-    Expression<int>? amountCents,
-    Expression<int>? currencyId,
-    Expression<int>? accountId,
-    Expression<int>? expenseDate,
-    Expression<String>? receiptPath,
-    Expression<int>? createdAt,
-    Expression<int>? updatedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (categoryId != null) 'category_id': categoryId,
-      if (description != null) 'description': description,
-      if (amountCents != null) 'amount_cents': amountCents,
-      if (currencyId != null) 'currency_id': currencyId,
-      if (accountId != null) 'account_id': accountId,
-      if (expenseDate != null) 'expense_date': expenseDate,
-      if (receiptPath != null) 'receipt_path': receiptPath,
-      if (createdAt != null) 'created_at': createdAt,
-      if (updatedAt != null) 'updated_at': updatedAt,
-    });
-  }
-
-  ExpensesCompanion copyWith({
-    Value<int>? id,
-    Value<int>? categoryId,
-    Value<String>? description,
-    Value<int>? amountCents,
-    Value<int>? currencyId,
-    Value<int?>? accountId,
-    Value<int>? expenseDate,
-    Value<String?>? receiptPath,
-    Value<int>? createdAt,
-    Value<int>? updatedAt,
-  }) {
-    return ExpensesCompanion(
-      id: id ?? this.id,
-      categoryId: categoryId ?? this.categoryId,
-      description: description ?? this.description,
-      amountCents: amountCents ?? this.amountCents,
-      currencyId: currencyId ?? this.currencyId,
-      accountId: accountId ?? this.accountId,
-      expenseDate: expenseDate ?? this.expenseDate,
-      receiptPath: receiptPath ?? this.receiptPath,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (categoryId.present) {
-      map['category_id'] = Variable<int>(categoryId.value);
-    }
-    if (description.present) {
-      map['description'] = Variable<String>(description.value);
-    }
-    if (amountCents.present) {
-      map['amount_cents'] = Variable<int>(amountCents.value);
-    }
-    if (currencyId.present) {
-      map['currency_id'] = Variable<int>(currencyId.value);
-    }
-    if (accountId.present) {
-      map['account_id'] = Variable<int>(accountId.value);
-    }
-    if (expenseDate.present) {
-      map['expense_date'] = Variable<int>(expenseDate.value);
-    }
-    if (receiptPath.present) {
-      map['receipt_path'] = Variable<String>(receiptPath.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    if (updatedAt.present) {
-      map['updated_at'] = Variable<int>(updatedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('ExpensesCompanion(')
-          ..write('id: $id, ')
-          ..write('categoryId: $categoryId, ')
-          ..write('description: $description, ')
-          ..write('amountCents: $amountCents, ')
-          ..write('currencyId: $currencyId, ')
-          ..write('accountId: $accountId, ')
-          ..write('expenseDate: $expenseDate, ')
-          ..write('receiptPath: $receiptPath, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class AuditLogs extends Table with TableInfo<AuditLogs, AuditLogsData> {
@@ -13644,20 +8685,6 @@ class AuditLogsData extends DataClass implements Insertable<AuditLogsData> {
     return map;
   }
 
-  AuditLogsCompanion toCompanion(bool nullToAbsent) {
-    return AuditLogsCompanion(
-      id: Value(id),
-      targetTable: Value(targetTable),
-      recordId: Value(recordId),
-      action: Value(action),
-      changes: Value(changes),
-      userId: userId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(userId),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory AuditLogsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -13704,20 +8731,6 @@ class AuditLogsData extends DataClass implements Insertable<AuditLogsData> {
     userId: userId.present ? userId.value : this.userId,
     createdAt: createdAt ?? this.createdAt,
   );
-  AuditLogsData copyWithCompanion(AuditLogsCompanion data) {
-    return AuditLogsData(
-      id: data.id.present ? data.id.value : this.id,
-      targetTable: data.targetTable.present
-          ? data.targetTable.value
-          : this.targetTable,
-      recordId: data.recordId.present ? data.recordId.value : this.recordId,
-      action: data.action.present ? data.action.value : this.action,
-      changes: data.changes.present ? data.changes.value : this.changes,
-      userId: data.userId.present ? data.userId.value : this.userId,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('AuditLogsData(')
@@ -13753,117 +8766,6 @@ class AuditLogsData extends DataClass implements Insertable<AuditLogsData> {
           other.changes == this.changes &&
           other.userId == this.userId &&
           other.createdAt == this.createdAt);
-}
-
-class AuditLogsCompanion extends UpdateCompanion<AuditLogsData> {
-  final Value<int> id;
-  final Value<String> targetTable;
-  final Value<int> recordId;
-  final Value<String> action;
-  final Value<String> changes;
-  final Value<int?> userId;
-  final Value<int> createdAt;
-  const AuditLogsCompanion({
-    this.id = const Value.absent(),
-    this.targetTable = const Value.absent(),
-    this.recordId = const Value.absent(),
-    this.action = const Value.absent(),
-    this.changes = const Value.absent(),
-    this.userId = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  AuditLogsCompanion.insert({
-    this.id = const Value.absent(),
-    required String targetTable,
-    required int recordId,
-    required String action,
-    required String changes,
-    this.userId = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : targetTable = Value(targetTable),
-       recordId = Value(recordId),
-       action = Value(action),
-       changes = Value(changes);
-  static Insertable<AuditLogsData> custom({
-    Expression<int>? id,
-    Expression<String>? targetTable,
-    Expression<int>? recordId,
-    Expression<String>? action,
-    Expression<String>? changes,
-    Expression<int>? userId,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (targetTable != null) 'target_table': targetTable,
-      if (recordId != null) 'record_id': recordId,
-      if (action != null) 'action': action,
-      if (changes != null) 'changes': changes,
-      if (userId != null) 'user_id': userId,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  AuditLogsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? targetTable,
-    Value<int>? recordId,
-    Value<String>? action,
-    Value<String>? changes,
-    Value<int?>? userId,
-    Value<int>? createdAt,
-  }) {
-    return AuditLogsCompanion(
-      id: id ?? this.id,
-      targetTable: targetTable ?? this.targetTable,
-      recordId: recordId ?? this.recordId,
-      action: action ?? this.action,
-      changes: changes ?? this.changes,
-      userId: userId ?? this.userId,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (targetTable.present) {
-      map['target_table'] = Variable<String>(targetTable.value);
-    }
-    if (recordId.present) {
-      map['record_id'] = Variable<int>(recordId.value);
-    }
-    if (action.present) {
-      map['action'] = Variable<String>(action.value);
-    }
-    if (changes.present) {
-      map['changes'] = Variable<String>(changes.value);
-    }
-    if (userId.present) {
-      map['user_id'] = Variable<int>(userId.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('AuditLogsCompanion(')
-          ..write('id: $id, ')
-          ..write('targetTable: $targetTable, ')
-          ..write('recordId: $recordId, ')
-          ..write('action: $action, ')
-          ..write('changes: $changes, ')
-          ..write('userId: $userId, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class VoidLogs extends Table with TableInfo<VoidLogs, VoidLogsData> {
@@ -14009,19 +8911,6 @@ class VoidLogsData extends DataClass implements Insertable<VoidLogsData> {
     return map;
   }
 
-  VoidLogsCompanion toCompanion(bool nullToAbsent) {
-    return VoidLogsCompanion(
-      id: Value(id),
-      targetTable: Value(targetTable),
-      recordId: Value(recordId),
-      reason: Value(reason),
-      voidedBy: voidedBy == null && nullToAbsent
-          ? const Value.absent()
-          : Value(voidedBy),
-      voidedAt: Value(voidedAt),
-    );
-  }
-
   factory VoidLogsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -14064,19 +8953,6 @@ class VoidLogsData extends DataClass implements Insertable<VoidLogsData> {
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
     voidedAt: voidedAt ?? this.voidedAt,
   );
-  VoidLogsData copyWithCompanion(VoidLogsCompanion data) {
-    return VoidLogsData(
-      id: data.id.present ? data.id.value : this.id,
-      targetTable: data.targetTable.present
-          ? data.targetTable.value
-          : this.targetTable,
-      recordId: data.recordId.present ? data.recordId.value : this.recordId,
-      reason: data.reason.present ? data.reason.value : this.reason,
-      voidedBy: data.voidedBy.present ? data.voidedBy.value : this.voidedBy,
-      voidedAt: data.voidedAt.present ? data.voidedAt.value : this.voidedAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('VoidLogsData(')
@@ -14103,105 +8979,6 @@ class VoidLogsData extends DataClass implements Insertable<VoidLogsData> {
           other.reason == this.reason &&
           other.voidedBy == this.voidedBy &&
           other.voidedAt == this.voidedAt);
-}
-
-class VoidLogsCompanion extends UpdateCompanion<VoidLogsData> {
-  final Value<int> id;
-  final Value<String> targetTable;
-  final Value<int> recordId;
-  final Value<String> reason;
-  final Value<int?> voidedBy;
-  final Value<int> voidedAt;
-  const VoidLogsCompanion({
-    this.id = const Value.absent(),
-    this.targetTable = const Value.absent(),
-    this.recordId = const Value.absent(),
-    this.reason = const Value.absent(),
-    this.voidedBy = const Value.absent(),
-    this.voidedAt = const Value.absent(),
-  });
-  VoidLogsCompanion.insert({
-    this.id = const Value.absent(),
-    required String targetTable,
-    required int recordId,
-    required String reason,
-    this.voidedBy = const Value.absent(),
-    this.voidedAt = const Value.absent(),
-  }) : targetTable = Value(targetTable),
-       recordId = Value(recordId),
-       reason = Value(reason);
-  static Insertable<VoidLogsData> custom({
-    Expression<int>? id,
-    Expression<String>? targetTable,
-    Expression<int>? recordId,
-    Expression<String>? reason,
-    Expression<int>? voidedBy,
-    Expression<int>? voidedAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (targetTable != null) 'target_table': targetTable,
-      if (recordId != null) 'record_id': recordId,
-      if (reason != null) 'reason': reason,
-      if (voidedBy != null) 'voided_by': voidedBy,
-      if (voidedAt != null) 'voided_at': voidedAt,
-    });
-  }
-
-  VoidLogsCompanion copyWith({
-    Value<int>? id,
-    Value<String>? targetTable,
-    Value<int>? recordId,
-    Value<String>? reason,
-    Value<int?>? voidedBy,
-    Value<int>? voidedAt,
-  }) {
-    return VoidLogsCompanion(
-      id: id ?? this.id,
-      targetTable: targetTable ?? this.targetTable,
-      recordId: recordId ?? this.recordId,
-      reason: reason ?? this.reason,
-      voidedBy: voidedBy ?? this.voidedBy,
-      voidedAt: voidedAt ?? this.voidedAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (targetTable.present) {
-      map['target_table'] = Variable<String>(targetTable.value);
-    }
-    if (recordId.present) {
-      map['record_id'] = Variable<int>(recordId.value);
-    }
-    if (reason.present) {
-      map['reason'] = Variable<String>(reason.value);
-    }
-    if (voidedBy.present) {
-      map['voided_by'] = Variable<int>(voidedBy.value);
-    }
-    if (voidedAt.present) {
-      map['voided_at'] = Variable<int>(voidedAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('VoidLogsCompanion(')
-          ..write('id: $id, ')
-          ..write('targetTable: $targetTable, ')
-          ..write('recordId: $recordId, ')
-          ..write('reason: $reason, ')
-          ..write('voidedBy: $voidedBy, ')
-          ..write('voidedAt: $voidedAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class Notifications extends Table
@@ -14366,20 +9143,6 @@ class NotificationsData extends DataClass
     return map;
   }
 
-  NotificationsCompanion toCompanion(bool nullToAbsent) {
-    return NotificationsCompanion(
-      id: Value(id),
-      userId: userId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(userId),
-      title: Value(title),
-      message: Value(message),
-      type: Value(type),
-      isRead: Value(isRead),
-      createdAt: Value(createdAt),
-    );
-  }
-
   factory NotificationsData.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
@@ -14426,18 +9189,6 @@ class NotificationsData extends DataClass
     isRead: isRead ?? this.isRead,
     createdAt: createdAt ?? this.createdAt,
   );
-  NotificationsData copyWithCompanion(NotificationsCompanion data) {
-    return NotificationsData(
-      id: data.id.present ? data.id.value : this.id,
-      userId: data.userId.present ? data.userId.value : this.userId,
-      title: data.title.present ? data.title.value : this.title,
-      message: data.message.present ? data.message.value : this.message,
-      type: data.type.present ? data.type.value : this.type,
-      isRead: data.isRead.present ? data.isRead.value : this.isRead,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-    );
-  }
-
   @override
   String toString() {
     return (StringBuffer('NotificationsData(')
@@ -14466,116 +9217,6 @@ class NotificationsData extends DataClass
           other.type == this.type &&
           other.isRead == this.isRead &&
           other.createdAt == this.createdAt);
-}
-
-class NotificationsCompanion extends UpdateCompanion<NotificationsData> {
-  final Value<int> id;
-  final Value<int?> userId;
-  final Value<String> title;
-  final Value<String> message;
-  final Value<String> type;
-  final Value<int> isRead;
-  final Value<int> createdAt;
-  const NotificationsCompanion({
-    this.id = const Value.absent(),
-    this.userId = const Value.absent(),
-    this.title = const Value.absent(),
-    this.message = const Value.absent(),
-    this.type = const Value.absent(),
-    this.isRead = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  });
-  NotificationsCompanion.insert({
-    this.id = const Value.absent(),
-    this.userId = const Value.absent(),
-    required String title,
-    required String message,
-    required String type,
-    this.isRead = const Value.absent(),
-    this.createdAt = const Value.absent(),
-  }) : title = Value(title),
-       message = Value(message),
-       type = Value(type);
-  static Insertable<NotificationsData> custom({
-    Expression<int>? id,
-    Expression<int>? userId,
-    Expression<String>? title,
-    Expression<String>? message,
-    Expression<String>? type,
-    Expression<int>? isRead,
-    Expression<int>? createdAt,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (userId != null) 'user_id': userId,
-      if (title != null) 'title': title,
-      if (message != null) 'message': message,
-      if (type != null) 'type': type,
-      if (isRead != null) 'is_read': isRead,
-      if (createdAt != null) 'created_at': createdAt,
-    });
-  }
-
-  NotificationsCompanion copyWith({
-    Value<int>? id,
-    Value<int?>? userId,
-    Value<String>? title,
-    Value<String>? message,
-    Value<String>? type,
-    Value<int>? isRead,
-    Value<int>? createdAt,
-  }) {
-    return NotificationsCompanion(
-      id: id ?? this.id,
-      userId: userId ?? this.userId,
-      title: title ?? this.title,
-      message: message ?? this.message,
-      type: type ?? this.type,
-      isRead: isRead ?? this.isRead,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<int>(id.value);
-    }
-    if (userId.present) {
-      map['user_id'] = Variable<int>(userId.value);
-    }
-    if (title.present) {
-      map['title'] = Variable<String>(title.value);
-    }
-    if (message.present) {
-      map['message'] = Variable<String>(message.value);
-    }
-    if (type.present) {
-      map['type'] = Variable<String>(type.value);
-    }
-    if (isRead.present) {
-      map['is_read'] = Variable<int>(isRead.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<int>(createdAt.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('NotificationsCompanion(')
-          ..write('id: $id, ')
-          ..write('userId: $userId, ')
-          ..write('title: $title, ')
-          ..write('message: $message, ')
-          ..write('type: $type, ')
-          ..write('isRead: $isRead, ')
-          ..write('createdAt: $createdAt')
-          ..write(')'))
-        .toString();
-  }
 }
 
 class DatabaseAtV10000 extends GeneratedDatabase {
