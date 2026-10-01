@@ -61,6 +61,8 @@ import '../../../employees/domain/repositories/employee_repository.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/sale_form_bloc.dart';
 import '../services/sale_pdf_service.dart';
+import '../services/sale_customer_account.dart';
+import '../widgets/sale_customer_points_summary.dart';
 
 import '../widgets/remote_customer_checkout_card.dart';
 
@@ -365,6 +367,7 @@ class _SaleFormView extends StatelessWidget {
         if (state.isSuccess) {
           // Capture state snapshot before navigating away
           final stateSnapshot = state;
+          final nav = Navigator.of(context, rootNavigator: true);
           // Navigate back immediately to prevent duplicate submissions
           if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
             context.go('/dashboard');
@@ -375,7 +378,6 @@ class _SaleFormView extends StatelessWidget {
           }
           // Show print/share dialog after navigation completes
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            final nav = Navigator.of(context, rootNavigator: true);
             if (nav.context.mounted) {
               final autoPrint = nav.context
                   .read<AppSettingsBloc>()
@@ -855,7 +857,7 @@ class _SaleFormView extends StatelessWidget {
     );
     if (result != null && result.isNotEmpty && context.mounted) {
       final lan = sl<LanNetworkService>();
-      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      if (lan.snapshot.mode == LanMode.client) {
         try {
           final page = await lan.fetchRemoteCatalog(query: result, limit: 50);
           if (!context.mounted) return;
@@ -1682,7 +1684,7 @@ class _SaleFormView extends StatelessWidget {
   // Dialog launchers
   bool get _usesRemoteMaster {
     final lan = sl<LanNetworkService>();
-    return lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+    return lan.snapshot.mode == LanMode.client;
   }
 
   void _showCustomerPicker(BuildContext ctx) {
@@ -2311,14 +2313,13 @@ class _SaleFormView extends StatelessWidget {
     BuildContext context,
     SaleLineItem item,
     int requestedQuantity,
+    Iterable<SaleLineItem> items,
   ) async {
     if (!item.product.trackInventory) return true;
     try {
       final variantId = item.stockSourceVariantId ?? item.variant?.id;
       final target = _saleLineSourceRef(item);
-      final reservations = _saleSourceReservations(
-        context.read<SaleFormBloc>().state.items,
-      );
+      final reservations = _saleSourceReservations(items);
       int availableQuantity;
       if (_usesRemoteMaster) {
         final snapshot = await sl<LanNetworkService>()
@@ -2399,7 +2400,12 @@ class _SaleFormView extends StatelessWidget {
                 String? itemNote,
                 bool clearEmployee = false,
               }) async {
-                final valid = await _validateSaleLineQuantity(sc, item, qty);
+                final valid = await _validateSaleLineQuantity(
+                  sc,
+                  item,
+                  qty,
+                  bloc.state.items,
+                );
                 if (!valid || !sc.mounted) return;
                 bloc.add(
                   SaleLineItemUpdated(
@@ -2714,6 +2720,24 @@ class _SaleFormView extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
+              if (state.customerId != null)
+                SaleCustomerPointsSummary(
+                  key: ValueKey(
+                    'saved-customer-${state.customerId}-${state.saleId}',
+                  ),
+                  load: () async {
+                    final account = await loadSaleCustomerAccount(
+                      customerId: state.customerId!,
+                      lan: sl<LanNetworkService>(),
+                      loadLocal: (id) =>
+                          sl<CustomerRepository>().getCustomer(id),
+                    );
+                    if (account == null) {
+                      throw StateError('Customer unavailable');
+                    }
+                    return account.pointsBalance;
+                  },
+                ),
             ],
           ),
           actionsAlignment: MainAxisAlignment.center,

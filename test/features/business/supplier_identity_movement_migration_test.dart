@@ -70,7 +70,7 @@ void main() {
       ''');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10115);
+      await verifier.migrateAndValidate(db, 10119);
       addTearDown(db.close);
 
       final saleLine = await db.select(db.saleItems).getSingle();

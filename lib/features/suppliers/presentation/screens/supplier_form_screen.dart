@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/shared_catalogue_authority_gate.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/supplier_form_bloc.dart';
 
@@ -18,11 +20,16 @@ class SupplierFormScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (context) =>
-          SupplierFormBloc(sl<SupplierRepository>())
-            ..add(SupplierFormLoadRequested(supplierId: supplierId)),
-      child: _SupplierFormContent(supplierId: supplierId),
+    return SharedCatalogueAuthorityGate(
+      title: (supplierId == null ? 'suppliers.add' : 'suppliers.edit').tr(),
+      authorityCheck:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueAuthority,
+      child: BlocProvider(
+        create: (context) =>
+            SupplierFormBloc(sl<SupplierRepository>())
+              ..add(SupplierFormLoadRequested(supplierId: supplierId)),
+        child: _SupplierFormContent(supplierId: supplierId),
+      ),
     );
   }
 }

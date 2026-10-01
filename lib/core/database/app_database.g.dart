@@ -758,6 +758,21 @@ class $BusinessWarehousesTable extends BusinessWarehouses
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _locationKindMeta = const VerificationMeta(
+    'locationKind',
+  );
+  @override
+  late final GeneratedColumn<String> locationKind = GeneratedColumn<String>(
+    'location_kind',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>(
+      "location_kind IN ('branch_store','warehouse')",
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('warehouse'),
+  );
   static const VerificationMeta _isActiveMeta = const VerificationMeta(
     'isActive',
   );
@@ -792,6 +807,7 @@ class $BusinessWarehousesTable extends BusinessWarehouses
     branchId,
     code,
     name,
+    locationKind,
     isActive,
     createdAt,
   ];
@@ -845,6 +861,15 @@ class $BusinessWarehousesTable extends BusinessWarehouses
         name.isAcceptableOrUnknown(data['name']!, _nameMeta),
       );
     }
+    if (data.containsKey('location_kind')) {
+      context.handle(
+        _locationKindMeta,
+        locationKind.isAcceptableOrUnknown(
+          data['location_kind']!,
+          _locationKindMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_active')) {
       context.handle(
         _isActiveMeta,
@@ -891,6 +916,10 @@ class $BusinessWarehousesTable extends BusinessWarehouses
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      locationKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}location_kind'],
+      )!,
       isActive: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_active'],
@@ -915,6 +944,11 @@ class BusinessWarehouse extends DataClass
   final String branchId;
   final String code;
   final String name;
+
+  /// A branch sales location is the branch's own sellable stock. Additional
+  /// warehouses are separate physical balances even when they belong to the
+  /// same branch.
+  final String locationKind;
   final bool isActive;
   final DateTime createdAt;
   const BusinessWarehouse({
@@ -923,6 +957,7 @@ class BusinessWarehouse extends DataClass
     required this.branchId,
     required this.code,
     required this.name,
+    required this.locationKind,
     required this.isActive,
     required this.createdAt,
   });
@@ -934,6 +969,7 @@ class BusinessWarehouse extends DataClass
     map['branch_id'] = Variable<String>(branchId);
     map['code'] = Variable<String>(code);
     map['name'] = Variable<String>(name);
+    map['location_kind'] = Variable<String>(locationKind);
     map['is_active'] = Variable<bool>(isActive);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -946,6 +982,7 @@ class BusinessWarehouse extends DataClass
       branchId: Value(branchId),
       code: Value(code),
       name: Value(name),
+      locationKind: Value(locationKind),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
     );
@@ -962,6 +999,7 @@ class BusinessWarehouse extends DataClass
       branchId: serializer.fromJson<String>(json['branchId']),
       code: serializer.fromJson<String>(json['code']),
       name: serializer.fromJson<String>(json['name']),
+      locationKind: serializer.fromJson<String>(json['locationKind']),
       isActive: serializer.fromJson<bool>(json['isActive']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -975,6 +1013,7 @@ class BusinessWarehouse extends DataClass
       'branchId': serializer.toJson<String>(branchId),
       'code': serializer.toJson<String>(code),
       'name': serializer.toJson<String>(name),
+      'locationKind': serializer.toJson<String>(locationKind),
       'isActive': serializer.toJson<bool>(isActive),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -986,6 +1025,7 @@ class BusinessWarehouse extends DataClass
     String? branchId,
     String? code,
     String? name,
+    String? locationKind,
     bool? isActive,
     DateTime? createdAt,
   }) => BusinessWarehouse(
@@ -994,6 +1034,7 @@ class BusinessWarehouse extends DataClass
     branchId: branchId ?? this.branchId,
     code: code ?? this.code,
     name: name ?? this.name,
+    locationKind: locationKind ?? this.locationKind,
     isActive: isActive ?? this.isActive,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -1006,6 +1047,9 @@ class BusinessWarehouse extends DataClass
       branchId: data.branchId.present ? data.branchId.value : this.branchId,
       code: data.code.present ? data.code.value : this.code,
       name: data.name.present ? data.name.value : this.name,
+      locationKind: data.locationKind.present
+          ? data.locationKind.value
+          : this.locationKind,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -1019,6 +1063,7 @@ class BusinessWarehouse extends DataClass
           ..write('branchId: $branchId, ')
           ..write('code: $code, ')
           ..write('name: $name, ')
+          ..write('locationKind: $locationKind, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -1032,6 +1077,7 @@ class BusinessWarehouse extends DataClass
     branchId,
     code,
     name,
+    locationKind,
     isActive,
     createdAt,
   );
@@ -1044,6 +1090,7 @@ class BusinessWarehouse extends DataClass
           other.branchId == this.branchId &&
           other.code == this.code &&
           other.name == this.name &&
+          other.locationKind == this.locationKind &&
           other.isActive == this.isActive &&
           other.createdAt == this.createdAt);
 }
@@ -1054,6 +1101,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
   final Value<String> branchId;
   final Value<String> code;
   final Value<String> name;
+  final Value<String> locationKind;
   final Value<bool> isActive;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -1063,6 +1111,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
     this.branchId = const Value.absent(),
     this.code = const Value.absent(),
     this.name = const Value.absent(),
+    this.locationKind = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1073,6 +1122,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
     required String branchId,
     required String code,
     this.name = const Value.absent(),
+    this.locationKind = const Value.absent(),
     this.isActive = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1086,6 +1136,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
     Expression<String>? branchId,
     Expression<String>? code,
     Expression<String>? name,
+    Expression<String>? locationKind,
     Expression<bool>? isActive,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -1096,6 +1147,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
       if (branchId != null) 'branch_id': branchId,
       if (code != null) 'code': code,
       if (name != null) 'name': name,
+      if (locationKind != null) 'location_kind': locationKind,
       if (isActive != null) 'is_active': isActive,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -1108,6 +1160,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
     Value<String>? branchId,
     Value<String>? code,
     Value<String>? name,
+    Value<String>? locationKind,
     Value<bool>? isActive,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -1118,6 +1171,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
       branchId: branchId ?? this.branchId,
       code: code ?? this.code,
       name: name ?? this.name,
+      locationKind: locationKind ?? this.locationKind,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -1142,6 +1196,9 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (locationKind.present) {
+      map['location_kind'] = Variable<String>(locationKind.value);
+    }
     if (isActive.present) {
       map['is_active'] = Variable<bool>(isActive.value);
     }
@@ -1162,6 +1219,7 @@ class BusinessWarehousesCompanion extends UpdateCompanion<BusinessWarehouse> {
           ..write('branchId: $branchId, ')
           ..write('code: $code, ')
           ..write('name: $name, ')
+          ..write('locationKind: $locationKind, ')
           ..write('isActive: $isActive, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -8096,6 +8154,42 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _branchIdMeta = const VerificationMeta(
+    'branchId',
+  );
+  @override
+  late final GeneratedColumn<String> branchId = GeneratedColumn<String>(
+    'branch_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _warehouseIdMeta = const VerificationMeta(
+    'warehouseId',
+  );
+  @override
+  late final GeneratedColumn<String> warehouseId = GeneratedColumn<String>(
+    'warehouse_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _globalLocationAccessMeta =
+      const VerificationMeta('globalLocationAccess');
+  @override
+  late final GeneratedColumn<bool> globalLocationAccess = GeneratedColumn<bool>(
+    'global_location_access',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("global_location_access" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _isActiveMeta = const VerificationMeta(
     'isActive',
   );
@@ -8164,6 +8258,9 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
     passwordHash,
     role,
     employeeId,
+    branchId,
+    warehouseId,
+    globalLocationAccess,
     isActive,
     securityQuestion,
     securityAnswerHash,
@@ -8219,6 +8316,30 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         employeeId.isAcceptableOrUnknown(data['employee_id']!, _employeeIdMeta),
       );
     }
+    if (data.containsKey('branch_id')) {
+      context.handle(
+        _branchIdMeta,
+        branchId.isAcceptableOrUnknown(data['branch_id']!, _branchIdMeta),
+      );
+    }
+    if (data.containsKey('warehouse_id')) {
+      context.handle(
+        _warehouseIdMeta,
+        warehouseId.isAcceptableOrUnknown(
+          data['warehouse_id']!,
+          _warehouseIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('global_location_access')) {
+      context.handle(
+        _globalLocationAccessMeta,
+        globalLocationAccess.isAcceptableOrUnknown(
+          data['global_location_access']!,
+          _globalLocationAccessMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_active')) {
       context.handle(
         _isActiveMeta,
@@ -8272,6 +8393,18 @@ class $UsersTable extends Users with TableInfo<$UsersTable, User> {
         DriftSqlType.int,
         data['${effectivePrefix}employee_id'],
       ),
+      branchId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}branch_id'],
+      ),
+      warehouseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}warehouse_id'],
+      ),
+      globalLocationAccess: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}global_location_access'],
+      )!,
       isActive: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}is_active'],
@@ -8326,6 +8459,9 @@ class User extends DataClass implements Insertable<User> {
   final String passwordHash;
   final String role;
   final int? employeeId;
+  final String? branchId;
+  final String? warehouseId;
+  final bool globalLocationAccess;
   final int isActive;
   final String? securityQuestion;
   final String? securityAnswerHash;
@@ -8338,6 +8474,9 @@ class User extends DataClass implements Insertable<User> {
     required this.passwordHash,
     required this.role,
     this.employeeId,
+    this.branchId,
+    this.warehouseId,
+    required this.globalLocationAccess,
     required this.isActive,
     this.securityQuestion,
     this.securityAnswerHash,
@@ -8355,6 +8494,13 @@ class User extends DataClass implements Insertable<User> {
     if (!nullToAbsent || employeeId != null) {
       map['employee_id'] = Variable<int>(employeeId);
     }
+    if (!nullToAbsent || branchId != null) {
+      map['branch_id'] = Variable<String>(branchId);
+    }
+    if (!nullToAbsent || warehouseId != null) {
+      map['warehouse_id'] = Variable<String>(warehouseId);
+    }
+    map['global_location_access'] = Variable<bool>(globalLocationAccess);
     map['is_active'] = Variable<int>(isActive);
     if (!nullToAbsent || securityQuestion != null) {
       map['security_question'] = Variable<String>(securityQuestion);
@@ -8389,6 +8535,13 @@ class User extends DataClass implements Insertable<User> {
       employeeId: employeeId == null && nullToAbsent
           ? const Value.absent()
           : Value(employeeId),
+      branchId: branchId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(branchId),
+      warehouseId: warehouseId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(warehouseId),
+      globalLocationAccess: Value(globalLocationAccess),
       isActive: Value(isActive),
       securityQuestion: securityQuestion == null && nullToAbsent
           ? const Value.absent()
@@ -8415,6 +8568,11 @@ class User extends DataClass implements Insertable<User> {
       passwordHash: serializer.fromJson<String>(json['passwordHash']),
       role: serializer.fromJson<String>(json['role']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
+      branchId: serializer.fromJson<String?>(json['branchId']),
+      warehouseId: serializer.fromJson<String?>(json['warehouseId']),
+      globalLocationAccess: serializer.fromJson<bool>(
+        json['globalLocationAccess'],
+      ),
       isActive: serializer.fromJson<int>(json['isActive']),
       securityQuestion: serializer.fromJson<String?>(json['securityQuestion']),
       securityAnswerHash: serializer.fromJson<String?>(
@@ -8434,6 +8592,9 @@ class User extends DataClass implements Insertable<User> {
       'passwordHash': serializer.toJson<String>(passwordHash),
       'role': serializer.toJson<String>(role),
       'employeeId': serializer.toJson<int?>(employeeId),
+      'branchId': serializer.toJson<String?>(branchId),
+      'warehouseId': serializer.toJson<String?>(warehouseId),
+      'globalLocationAccess': serializer.toJson<bool>(globalLocationAccess),
       'isActive': serializer.toJson<int>(isActive),
       'securityQuestion': serializer.toJson<String?>(securityQuestion),
       'securityAnswerHash': serializer.toJson<String?>(securityAnswerHash),
@@ -8449,6 +8610,9 @@ class User extends DataClass implements Insertable<User> {
     String? passwordHash,
     String? role,
     Value<int?> employeeId = const Value.absent(),
+    Value<String?> branchId = const Value.absent(),
+    Value<String?> warehouseId = const Value.absent(),
+    bool? globalLocationAccess,
     int? isActive,
     Value<String?> securityQuestion = const Value.absent(),
     Value<String?> securityAnswerHash = const Value.absent(),
@@ -8461,6 +8625,9 @@ class User extends DataClass implements Insertable<User> {
     passwordHash: passwordHash ?? this.passwordHash,
     role: role ?? this.role,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
+    branchId: branchId.present ? branchId.value : this.branchId,
+    warehouseId: warehouseId.present ? warehouseId.value : this.warehouseId,
+    globalLocationAccess: globalLocationAccess ?? this.globalLocationAccess,
     isActive: isActive ?? this.isActive,
     securityQuestion: securityQuestion.present
         ? securityQuestion.value
@@ -8483,6 +8650,13 @@ class User extends DataClass implements Insertable<User> {
       employeeId: data.employeeId.present
           ? data.employeeId.value
           : this.employeeId,
+      branchId: data.branchId.present ? data.branchId.value : this.branchId,
+      warehouseId: data.warehouseId.present
+          ? data.warehouseId.value
+          : this.warehouseId,
+      globalLocationAccess: data.globalLocationAccess.present
+          ? data.globalLocationAccess.value
+          : this.globalLocationAccess,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
       securityQuestion: data.securityQuestion.present
           ? data.securityQuestion.value
@@ -8506,6 +8680,9 @@ class User extends DataClass implements Insertable<User> {
           ..write('passwordHash: $passwordHash, ')
           ..write('role: $role, ')
           ..write('employeeId: $employeeId, ')
+          ..write('branchId: $branchId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('globalLocationAccess: $globalLocationAccess, ')
           ..write('isActive: $isActive, ')
           ..write('securityQuestion: $securityQuestion, ')
           ..write('securityAnswerHash: $securityAnswerHash, ')
@@ -8523,6 +8700,9 @@ class User extends DataClass implements Insertable<User> {
     passwordHash,
     role,
     employeeId,
+    branchId,
+    warehouseId,
+    globalLocationAccess,
     isActive,
     securityQuestion,
     securityAnswerHash,
@@ -8539,6 +8719,9 @@ class User extends DataClass implements Insertable<User> {
           other.passwordHash == this.passwordHash &&
           other.role == this.role &&
           other.employeeId == this.employeeId &&
+          other.branchId == this.branchId &&
+          other.warehouseId == this.warehouseId &&
+          other.globalLocationAccess == this.globalLocationAccess &&
           other.isActive == this.isActive &&
           other.securityQuestion == this.securityQuestion &&
           other.securityAnswerHash == this.securityAnswerHash &&
@@ -8553,6 +8736,9 @@ class UsersCompanion extends UpdateCompanion<User> {
   final Value<String> passwordHash;
   final Value<String> role;
   final Value<int?> employeeId;
+  final Value<String?> branchId;
+  final Value<String?> warehouseId;
+  final Value<bool> globalLocationAccess;
   final Value<int> isActive;
   final Value<String?> securityQuestion;
   final Value<String?> securityAnswerHash;
@@ -8565,6 +8751,9 @@ class UsersCompanion extends UpdateCompanion<User> {
     this.passwordHash = const Value.absent(),
     this.role = const Value.absent(),
     this.employeeId = const Value.absent(),
+    this.branchId = const Value.absent(),
+    this.warehouseId = const Value.absent(),
+    this.globalLocationAccess = const Value.absent(),
     this.isActive = const Value.absent(),
     this.securityQuestion = const Value.absent(),
     this.securityAnswerHash = const Value.absent(),
@@ -8578,6 +8767,9 @@ class UsersCompanion extends UpdateCompanion<User> {
     required String passwordHash,
     required String role,
     this.employeeId = const Value.absent(),
+    this.branchId = const Value.absent(),
+    this.warehouseId = const Value.absent(),
+    this.globalLocationAccess = const Value.absent(),
     this.isActive = const Value.absent(),
     this.securityQuestion = const Value.absent(),
     this.securityAnswerHash = const Value.absent(),
@@ -8595,6 +8787,9 @@ class UsersCompanion extends UpdateCompanion<User> {
     Expression<String>? passwordHash,
     Expression<String>? role,
     Expression<int>? employeeId,
+    Expression<String>? branchId,
+    Expression<String>? warehouseId,
+    Expression<bool>? globalLocationAccess,
     Expression<int>? isActive,
     Expression<String>? securityQuestion,
     Expression<String>? securityAnswerHash,
@@ -8608,6 +8803,10 @@ class UsersCompanion extends UpdateCompanion<User> {
       if (passwordHash != null) 'password_hash': passwordHash,
       if (role != null) 'role': role,
       if (employeeId != null) 'employee_id': employeeId,
+      if (branchId != null) 'branch_id': branchId,
+      if (warehouseId != null) 'warehouse_id': warehouseId,
+      if (globalLocationAccess != null)
+        'global_location_access': globalLocationAccess,
       if (isActive != null) 'is_active': isActive,
       if (securityQuestion != null) 'security_question': securityQuestion,
       if (securityAnswerHash != null)
@@ -8624,6 +8823,9 @@ class UsersCompanion extends UpdateCompanion<User> {
     Value<String>? passwordHash,
     Value<String>? role,
     Value<int?>? employeeId,
+    Value<String?>? branchId,
+    Value<String?>? warehouseId,
+    Value<bool>? globalLocationAccess,
     Value<int>? isActive,
     Value<String?>? securityQuestion,
     Value<String?>? securityAnswerHash,
@@ -8637,6 +8839,9 @@ class UsersCompanion extends UpdateCompanion<User> {
       passwordHash: passwordHash ?? this.passwordHash,
       role: role ?? this.role,
       employeeId: employeeId ?? this.employeeId,
+      branchId: branchId ?? this.branchId,
+      warehouseId: warehouseId ?? this.warehouseId,
+      globalLocationAccess: globalLocationAccess ?? this.globalLocationAccess,
       isActive: isActive ?? this.isActive,
       securityQuestion: securityQuestion ?? this.securityQuestion,
       securityAnswerHash: securityAnswerHash ?? this.securityAnswerHash,
@@ -8663,6 +8868,17 @@ class UsersCompanion extends UpdateCompanion<User> {
     }
     if (employeeId.present) {
       map['employee_id'] = Variable<int>(employeeId.value);
+    }
+    if (branchId.present) {
+      map['branch_id'] = Variable<String>(branchId.value);
+    }
+    if (warehouseId.present) {
+      map['warehouse_id'] = Variable<String>(warehouseId.value);
+    }
+    if (globalLocationAccess.present) {
+      map['global_location_access'] = Variable<bool>(
+        globalLocationAccess.value,
+      );
     }
     if (isActive.present) {
       map['is_active'] = Variable<int>(isActive.value);
@@ -8699,6 +8915,9 @@ class UsersCompanion extends UpdateCompanion<User> {
           ..write('passwordHash: $passwordHash, ')
           ..write('role: $role, ')
           ..write('employeeId: $employeeId, ')
+          ..write('branchId: $branchId, ')
+          ..write('warehouseId: $warehouseId, ')
+          ..write('globalLocationAccess: $globalLocationAccess, ')
           ..write('isActive: $isActive, ')
           ..write('securityQuestion: $securityQuestion, ')
           ..write('securityAnswerHash: $securityAnswerHash, ')
@@ -8790,6 +9009,9 @@ class $WarehouseTransfersTable extends WarehouseTransfers
         false,
         type: DriftSqlType.string,
         requiredDuringInsert: true,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES business_warehouses (id) ON DELETE RESTRICT',
+        ),
       );
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
     'currencyId',
@@ -9681,6 +9903,27 @@ class $WarehouseTransferLinesTable extends WarehouseTransferLines
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _requestedOwnedQuantityMeta =
+      const VerificationMeta('requestedOwnedQuantity');
+  @override
+  late final GeneratedColumn<int> requestedOwnedQuantity = GeneratedColumn<int>(
+    'requested_owned_quantity',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _requestedConsignmentQuantityMeta =
+      const VerificationMeta('requestedConsignmentQuantity');
+  @override
+  late final GeneratedColumn<int> requestedConsignmentQuantity =
+      GeneratedColumn<int>(
+        'requested_consignment_quantity',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
     'quantityScale',
   );
@@ -9721,6 +9964,8 @@ class $WarehouseTransferLinesTable extends WarehouseTransferLines
     productId,
     variantId,
     quantity,
+    requestedOwnedQuantity,
+    requestedConsignmentQuantity,
     quantityScale,
     measurementType,
     previewValueCents,
@@ -9773,6 +10018,24 @@ class $WarehouseTransferLinesTable extends WarehouseTransferLines
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('requested_owned_quantity')) {
+      context.handle(
+        _requestedOwnedQuantityMeta,
+        requestedOwnedQuantity.isAcceptableOrUnknown(
+          data['requested_owned_quantity']!,
+          _requestedOwnedQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('requested_consignment_quantity')) {
+      context.handle(
+        _requestedConsignmentQuantityMeta,
+        requestedConsignmentQuantity.isAcceptableOrUnknown(
+          data['requested_consignment_quantity']!,
+          _requestedConsignmentQuantityMeta,
+        ),
+      );
     }
     if (data.containsKey('quantity_scale')) {
       context.handle(
@@ -9840,6 +10103,14 @@ class $WarehouseTransferLinesTable extends WarehouseTransferLines
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      requestedOwnedQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_owned_quantity'],
+      ),
+      requestedConsignmentQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_consignment_quantity'],
+      ),
       quantityScale: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}quantity_scale'],
@@ -9868,6 +10139,11 @@ class WarehouseTransferLine extends DataClass
   final int productId;
   final int variantId;
   final int quantity;
+
+  /// Explicit ownership intent. Both values are null only for drafts created
+  /// before schema 10116; new application flows always persist both values.
+  final int? requestedOwnedQuantity;
+  final int? requestedConsignmentQuantity;
   final int quantityScale;
   final String measurementType;
 
@@ -9879,6 +10155,8 @@ class WarehouseTransferLine extends DataClass
     required this.productId,
     required this.variantId,
     required this.quantity,
+    this.requestedOwnedQuantity,
+    this.requestedConsignmentQuantity,
     required this.quantityScale,
     required this.measurementType,
     required this.previewValueCents,
@@ -9891,6 +10169,14 @@ class WarehouseTransferLine extends DataClass
     map['product_id'] = Variable<int>(productId);
     map['variant_id'] = Variable<int>(variantId);
     map['quantity'] = Variable<int>(quantity);
+    if (!nullToAbsent || requestedOwnedQuantity != null) {
+      map['requested_owned_quantity'] = Variable<int>(requestedOwnedQuantity);
+    }
+    if (!nullToAbsent || requestedConsignmentQuantity != null) {
+      map['requested_consignment_quantity'] = Variable<int>(
+        requestedConsignmentQuantity,
+      );
+    }
     map['quantity_scale'] = Variable<int>(quantityScale);
     map['measurement_type'] = Variable<String>(measurementType);
     map['preview_value_cents'] = Variable<int>(previewValueCents);
@@ -9904,6 +10190,13 @@ class WarehouseTransferLine extends DataClass
       productId: Value(productId),
       variantId: Value(variantId),
       quantity: Value(quantity),
+      requestedOwnedQuantity: requestedOwnedQuantity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedOwnedQuantity),
+      requestedConsignmentQuantity:
+          requestedConsignmentQuantity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(requestedConsignmentQuantity),
       quantityScale: Value(quantityScale),
       measurementType: Value(measurementType),
       previewValueCents: Value(previewValueCents),
@@ -9921,6 +10214,12 @@ class WarehouseTransferLine extends DataClass
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      requestedOwnedQuantity: serializer.fromJson<int?>(
+        json['requestedOwnedQuantity'],
+      ),
+      requestedConsignmentQuantity: serializer.fromJson<int?>(
+        json['requestedConsignmentQuantity'],
+      ),
       quantityScale: serializer.fromJson<int>(json['quantityScale']),
       measurementType: serializer.fromJson<String>(json['measurementType']),
       previewValueCents: serializer.fromJson<int>(json['previewValueCents']),
@@ -9935,6 +10234,10 @@ class WarehouseTransferLine extends DataClass
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int>(variantId),
       'quantity': serializer.toJson<int>(quantity),
+      'requestedOwnedQuantity': serializer.toJson<int?>(requestedOwnedQuantity),
+      'requestedConsignmentQuantity': serializer.toJson<int?>(
+        requestedConsignmentQuantity,
+      ),
       'quantityScale': serializer.toJson<int>(quantityScale),
       'measurementType': serializer.toJson<String>(measurementType),
       'previewValueCents': serializer.toJson<int>(previewValueCents),
@@ -9947,6 +10250,8 @@ class WarehouseTransferLine extends DataClass
     int? productId,
     int? variantId,
     int? quantity,
+    Value<int?> requestedOwnedQuantity = const Value.absent(),
+    Value<int?> requestedConsignmentQuantity = const Value.absent(),
     int? quantityScale,
     String? measurementType,
     int? previewValueCents,
@@ -9956,6 +10261,12 @@ class WarehouseTransferLine extends DataClass
     productId: productId ?? this.productId,
     variantId: variantId ?? this.variantId,
     quantity: quantity ?? this.quantity,
+    requestedOwnedQuantity: requestedOwnedQuantity.present
+        ? requestedOwnedQuantity.value
+        : this.requestedOwnedQuantity,
+    requestedConsignmentQuantity: requestedConsignmentQuantity.present
+        ? requestedConsignmentQuantity.value
+        : this.requestedConsignmentQuantity,
     quantityScale: quantityScale ?? this.quantityScale,
     measurementType: measurementType ?? this.measurementType,
     previewValueCents: previewValueCents ?? this.previewValueCents,
@@ -9971,6 +10282,12 @@ class WarehouseTransferLine extends DataClass
       productId: data.productId.present ? data.productId.value : this.productId,
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      requestedOwnedQuantity: data.requestedOwnedQuantity.present
+          ? data.requestedOwnedQuantity.value
+          : this.requestedOwnedQuantity,
+      requestedConsignmentQuantity: data.requestedConsignmentQuantity.present
+          ? data.requestedConsignmentQuantity.value
+          : this.requestedConsignmentQuantity,
       quantityScale: data.quantityScale.present
           ? data.quantityScale.value
           : this.quantityScale,
@@ -9991,6 +10308,10 @@ class WarehouseTransferLine extends DataClass
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('requestedOwnedQuantity: $requestedOwnedQuantity, ')
+          ..write(
+            'requestedConsignmentQuantity: $requestedConsignmentQuantity, ',
+          )
           ..write('quantityScale: $quantityScale, ')
           ..write('measurementType: $measurementType, ')
           ..write('previewValueCents: $previewValueCents')
@@ -10005,6 +10326,8 @@ class WarehouseTransferLine extends DataClass
     productId,
     variantId,
     quantity,
+    requestedOwnedQuantity,
+    requestedConsignmentQuantity,
     quantityScale,
     measurementType,
     previewValueCents,
@@ -10018,6 +10341,9 @@ class WarehouseTransferLine extends DataClass
           other.productId == this.productId &&
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
+          other.requestedOwnedQuantity == this.requestedOwnedQuantity &&
+          other.requestedConsignmentQuantity ==
+              this.requestedConsignmentQuantity &&
           other.quantityScale == this.quantityScale &&
           other.measurementType == this.measurementType &&
           other.previewValueCents == this.previewValueCents);
@@ -10030,6 +10356,8 @@ class WarehouseTransferLinesCompanion
   final Value<int> productId;
   final Value<int> variantId;
   final Value<int> quantity;
+  final Value<int?> requestedOwnedQuantity;
+  final Value<int?> requestedConsignmentQuantity;
   final Value<int> quantityScale;
   final Value<String> measurementType;
   final Value<int> previewValueCents;
@@ -10040,6 +10368,8 @@ class WarehouseTransferLinesCompanion
     this.productId = const Value.absent(),
     this.variantId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.requestedOwnedQuantity = const Value.absent(),
+    this.requestedConsignmentQuantity = const Value.absent(),
     this.quantityScale = const Value.absent(),
     this.measurementType = const Value.absent(),
     this.previewValueCents = const Value.absent(),
@@ -10051,6 +10381,8 @@ class WarehouseTransferLinesCompanion
     required int productId,
     required int variantId,
     required int quantity,
+    this.requestedOwnedQuantity = const Value.absent(),
+    this.requestedConsignmentQuantity = const Value.absent(),
     required int quantityScale,
     required String measurementType,
     required int previewValueCents,
@@ -10069,6 +10401,8 @@ class WarehouseTransferLinesCompanion
     Expression<int>? productId,
     Expression<int>? variantId,
     Expression<int>? quantity,
+    Expression<int>? requestedOwnedQuantity,
+    Expression<int>? requestedConsignmentQuantity,
     Expression<int>? quantityScale,
     Expression<String>? measurementType,
     Expression<int>? previewValueCents,
@@ -10080,6 +10414,10 @@ class WarehouseTransferLinesCompanion
       if (productId != null) 'product_id': productId,
       if (variantId != null) 'variant_id': variantId,
       if (quantity != null) 'quantity': quantity,
+      if (requestedOwnedQuantity != null)
+        'requested_owned_quantity': requestedOwnedQuantity,
+      if (requestedConsignmentQuantity != null)
+        'requested_consignment_quantity': requestedConsignmentQuantity,
       if (quantityScale != null) 'quantity_scale': quantityScale,
       if (measurementType != null) 'measurement_type': measurementType,
       if (previewValueCents != null) 'preview_value_cents': previewValueCents,
@@ -10093,6 +10431,8 @@ class WarehouseTransferLinesCompanion
     Value<int>? productId,
     Value<int>? variantId,
     Value<int>? quantity,
+    Value<int?>? requestedOwnedQuantity,
+    Value<int?>? requestedConsignmentQuantity,
     Value<int>? quantityScale,
     Value<String>? measurementType,
     Value<int>? previewValueCents,
@@ -10104,6 +10444,10 @@ class WarehouseTransferLinesCompanion
       productId: productId ?? this.productId,
       variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
+      requestedOwnedQuantity:
+          requestedOwnedQuantity ?? this.requestedOwnedQuantity,
+      requestedConsignmentQuantity:
+          requestedConsignmentQuantity ?? this.requestedConsignmentQuantity,
       quantityScale: quantityScale ?? this.quantityScale,
       measurementType: measurementType ?? this.measurementType,
       previewValueCents: previewValueCents ?? this.previewValueCents,
@@ -10129,6 +10473,16 @@ class WarehouseTransferLinesCompanion
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
     }
+    if (requestedOwnedQuantity.present) {
+      map['requested_owned_quantity'] = Variable<int>(
+        requestedOwnedQuantity.value,
+      );
+    }
+    if (requestedConsignmentQuantity.present) {
+      map['requested_consignment_quantity'] = Variable<int>(
+        requestedConsignmentQuantity.value,
+      );
+    }
     if (quantityScale.present) {
       map['quantity_scale'] = Variable<int>(quantityScale.value);
     }
@@ -10152,6 +10506,10 @@ class WarehouseTransferLinesCompanion
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('requestedOwnedQuantity: $requestedOwnedQuantity, ')
+          ..write(
+            'requestedConsignmentQuantity: $requestedConsignmentQuantity, ',
+          )
           ..write('quantityScale: $quantityScale, ')
           ..write('measurementType: $measurementType, ')
           ..write('previewValueCents: $previewValueCents, ')
@@ -16291,7 +16649,7 @@ class ProductBatch extends DataClass implements Insertable<ProductBatch> {
   final String? transferAllocationId;
 
   /// One of: 'purchase' | 'opening' | 'found' | 'sale_return' |
-  ///         'warehouse_transfer'.
+  ///         'warehouse_transfer' | 'distributed_transfer'.
   final String source;
   final DateTime receivedDate;
   final DateTime? expiryDate;
@@ -107044,6 +107402,7 @@ typedef $$BusinessWarehousesTableCreateCompanionBuilder =
       required String branchId,
       required String code,
       Value<String> name,
+      Value<String> locationKind,
       Value<bool> isActive,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -107055,6 +107414,7 @@ typedef $$BusinessWarehousesTableUpdateCompanionBuilder =
       Value<String> branchId,
       Value<String> code,
       Value<String> name,
+      Value<String> locationKind,
       Value<bool> isActive,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -107112,6 +107472,34 @@ final class $$BusinessWarehousesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _businessWarehouseStocksRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WarehouseTransfersTable, List<WarehouseTransfer>>
+  _warehouseTransfersRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.warehouseTransfers,
+    aliasName:
+        'business_warehouses__id__warehouse_transfers__destination_warehouse_id',
+  );
+
+  $$WarehouseTransfersTableProcessedTableManager get warehouseTransfersRefs {
+    final manager =
+        $$WarehouseTransfersTableTableManager(
+          $_db,
+          $_db.warehouseTransfers,
+        ).filter(
+          (f) => f.destinationWarehouseId.id.sqlEquals(
+            $_itemColumn<String>('id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _warehouseTransfersRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -107415,6 +107803,11 @@ class $$BusinessWarehousesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get locationKind => $composableBuilder(
+    column: $table.locationKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnFilters(column),
@@ -107472,6 +107865,31 @@ class $$BusinessWarehousesTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return f(composer);
+  }
+
+  Expression<bool> warehouseTransfersRefs(
+    Expression<bool> Function($$WarehouseTransfersTableFilterComposer f) f,
+  ) {
+    final $$WarehouseTransfersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.warehouseTransfers,
+      getReferencedColumn: (t) => t.destinationWarehouseId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WarehouseTransfersTableFilterComposer(
+            $db: $db,
+            $table: $db.warehouseTransfers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 
@@ -107793,6 +108211,11 @@ class $$BusinessWarehousesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get locationKind => $composableBuilder(
+    column: $table.locationKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -107849,6 +108272,11 @@ class $$BusinessWarehousesTableAnnotationComposer
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
+  GeneratedColumn<String> get locationKind => $composableBuilder(
+    column: $table.locationKind,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isActive =>
       $composableBuilder(column: $table.isActive, builder: (column) => column);
 
@@ -107897,6 +108325,32 @@ class $$BusinessWarehousesTableAnnotationComposer
               }) => $$BusinessWarehouseStocksTableAnnotationComposer(
                 $db: $db,
                 $table: $db.businessWarehouseStocks,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> warehouseTransfersRefs<T extends Object>(
+    Expression<T> Function($$WarehouseTransfersTableAnnotationComposer a) f,
+  ) {
+    final $$WarehouseTransfersTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.warehouseTransfers,
+          getReferencedColumn: (t) => t.destinationWarehouseId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$WarehouseTransfersTableAnnotationComposer(
+                $db: $db,
+                $table: $db.warehouseTransfers,
                 $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
                 joinBuilder: joinBuilder,
                 $removeJoinBuilderFromRootComposer:
@@ -108216,6 +108670,7 @@ class $$BusinessWarehousesTableTableManager
           PrefetchHooks Function({
             bool organizationId,
             bool businessWarehouseStocksRefs,
+            bool warehouseTransfersRefs,
             bool purchasesRefs,
             bool productBatchesRefs,
             bool consignmentInventoryLayersRefs,
@@ -108252,6 +108707,7 @@ class $$BusinessWarehousesTableTableManager
                 Value<String> branchId = const Value.absent(),
                 Value<String> code = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> locationKind = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -108261,6 +108717,7 @@ class $$BusinessWarehousesTableTableManager
                 branchId: branchId,
                 code: code,
                 name: name,
+                locationKind: locationKind,
                 isActive: isActive,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -108272,6 +108729,7 @@ class $$BusinessWarehousesTableTableManager
                 required String branchId,
                 required String code,
                 Value<String> name = const Value.absent(),
+                Value<String> locationKind = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -108281,6 +108739,7 @@ class $$BusinessWarehousesTableTableManager
                 branchId: branchId,
                 code: code,
                 name: name,
+                locationKind: locationKind,
                 isActive: isActive,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -108299,6 +108758,7 @@ class $$BusinessWarehousesTableTableManager
               ({
                 organizationId = false,
                 businessWarehouseStocksRefs = false,
+                warehouseTransfersRefs = false,
                 purchasesRefs = false,
                 productBatchesRefs = false,
                 consignmentInventoryLayersRefs = false,
@@ -108315,6 +108775,7 @@ class $$BusinessWarehousesTableTableManager
                   db: db,
                   explicitlyWatchedTables: [
                     if (businessWarehouseStocksRefs) db.businessWarehouseStocks,
+                    if (warehouseTransfersRefs) db.warehouseTransfers,
                     if (purchasesRefs) db.purchases,
                     if (productBatchesRefs) db.productBatches,
                     if (consignmentInventoryLayersRefs)
@@ -108385,6 +108846,27 @@ class $$BusinessWarehousesTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.warehouseId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (warehouseTransfersRefs)
+                        await $_getPrefetchedData<
+                          BusinessWarehouse,
+                          $BusinessWarehousesTable,
+                          WarehouseTransfer
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessWarehousesTableReferences
+                              ._warehouseTransfersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessWarehousesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).warehouseTransfersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.destinationWarehouseId == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -108642,6 +109124,7 @@ typedef $$BusinessWarehousesTableProcessedTableManager =
       PrefetchHooks Function({
         bool organizationId,
         bool businessWarehouseStocksRefs,
+        bool warehouseTransfersRefs,
         bool purchasesRefs,
         bool productBatchesRefs,
         bool consignmentInventoryLayersRefs,
@@ -123585,6 +124068,9 @@ typedef $$UsersTableCreateCompanionBuilder =
       required String passwordHash,
       required String role,
       Value<int?> employeeId,
+      Value<String?> branchId,
+      Value<String?> warehouseId,
+      Value<bool> globalLocationAccess,
       Value<int> isActive,
       Value<String?> securityQuestion,
       Value<String?> securityAnswerHash,
@@ -123599,6 +124085,9 @@ typedef $$UsersTableUpdateCompanionBuilder =
       Value<String> passwordHash,
       Value<String> role,
       Value<int?> employeeId,
+      Value<String?> branchId,
+      Value<String?> warehouseId,
+      Value<bool> globalLocationAccess,
       Value<int> isActive,
       Value<String?> securityQuestion,
       Value<String?> securityAnswerHash,
@@ -125049,6 +125538,21 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
 
   ColumnFilters<int> get employeeId => $composableBuilder(
     column: $table.employeeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get branchId => $composableBuilder(
+    column: $table.branchId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get warehouseId => $composableBuilder(
+    column: $table.warehouseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get globalLocationAccess => $composableBuilder(
+    column: $table.globalLocationAccess,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -126750,6 +127254,21 @@ class $$UsersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get branchId => $composableBuilder(
+    column: $table.branchId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get warehouseId => $composableBuilder(
+    column: $table.warehouseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get globalLocationAccess => $composableBuilder(
+    column: $table.globalLocationAccess,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get isActive => $composableBuilder(
     column: $table.isActive,
     builder: (column) => ColumnOrderings(column),
@@ -126806,6 +127325,19 @@ class $$UsersTableAnnotationComposer
 
   GeneratedColumn<int> get employeeId => $composableBuilder(
     column: $table.employeeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get branchId =>
+      $composableBuilder(column: $table.branchId, builder: (column) => column);
+
+  GeneratedColumn<String> get warehouseId => $composableBuilder(
+    column: $table.warehouseId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get globalLocationAccess => $composableBuilder(
+    column: $table.globalLocationAccess,
     builder: (column) => column,
   );
 
@@ -128574,6 +129106,9 @@ class $$UsersTableTableManager
                 Value<String> passwordHash = const Value.absent(),
                 Value<String> role = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
+                Value<String?> branchId = const Value.absent(),
+                Value<String?> warehouseId = const Value.absent(),
+                Value<bool> globalLocationAccess = const Value.absent(),
                 Value<int> isActive = const Value.absent(),
                 Value<String?> securityQuestion = const Value.absent(),
                 Value<String?> securityAnswerHash = const Value.absent(),
@@ -128586,6 +129121,9 @@ class $$UsersTableTableManager
                 passwordHash: passwordHash,
                 role: role,
                 employeeId: employeeId,
+                branchId: branchId,
+                warehouseId: warehouseId,
+                globalLocationAccess: globalLocationAccess,
                 isActive: isActive,
                 securityQuestion: securityQuestion,
                 securityAnswerHash: securityAnswerHash,
@@ -128600,6 +129138,9 @@ class $$UsersTableTableManager
                 required String passwordHash,
                 required String role,
                 Value<int?> employeeId = const Value.absent(),
+                Value<String?> branchId = const Value.absent(),
+                Value<String?> warehouseId = const Value.absent(),
+                Value<bool> globalLocationAccess = const Value.absent(),
                 Value<int> isActive = const Value.absent(),
                 Value<String?> securityQuestion = const Value.absent(),
                 Value<String?> securityAnswerHash = const Value.absent(),
@@ -128612,6 +129153,9 @@ class $$UsersTableTableManager
                 passwordHash: passwordHash,
                 role: role,
                 employeeId: employeeId,
+                branchId: branchId,
+                warehouseId: warehouseId,
+                globalLocationAccess: globalLocationAccess,
                 isActive: isActive,
                 securityQuestion: securityQuestion,
                 securityAnswerHash: securityAnswerHash,
@@ -130235,6 +130779,28 @@ final class $$WarehouseTransfersTableReferences
     );
   }
 
+  static $BusinessWarehousesTable _destinationWarehouseIdTable(
+    _$AppDatabase db,
+  ) => db.businessWarehouses.createAlias(
+    'warehouse_transfers__destination_warehouse_id__business_warehouses__id',
+  );
+
+  $$BusinessWarehousesTableProcessedTableManager get destinationWarehouseId {
+    final $_column = $_itemColumn<String>('destination_warehouse_id')!;
+
+    final manager = $$BusinessWarehousesTableTableManager(
+      $_db,
+      $_db.businessWarehouses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _destinationWarehouseIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
       .createAlias('warehouse_transfers__currency_id__currencies__id');
 
@@ -130425,11 +130991,6 @@ class $$WarehouseTransfersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get destinationWarehouseId => $composableBuilder(
-    column: $table.destinationWarehouseId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get requestKey => $composableBuilder(
     column: $table.requestKey,
     builder: (column) => ColumnFilters(column),
@@ -130503,6 +131064,29 @@ class $$WarehouseTransfersTableFilterComposer
           }) => $$BusinessContextsTableFilterComposer(
             $db: $db,
             $table: $db.businessContexts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$BusinessWarehousesTableFilterComposer get destinationWarehouseId {
+    final $$BusinessWarehousesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.destinationWarehouseId,
+      referencedTable: $db.businessWarehouses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessWarehousesTableFilterComposer(
+            $db: $db,
+            $table: $db.businessWarehouses,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -130718,11 +131302,6 @@ class $$WarehouseTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get destinationWarehouseId => $composableBuilder(
-    column: $table.destinationWarehouseId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get requestKey => $composableBuilder(
     column: $table.requestKey,
     builder: (column) => ColumnOrderings(column),
@@ -130805,6 +131384,29 @@ class $$WarehouseTransfersTableOrderingComposer
     return composer;
   }
 
+  $$BusinessWarehousesTableOrderingComposer get destinationWarehouseId {
+    final $$BusinessWarehousesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.destinationWarehouseId,
+      referencedTable: $db.businessWarehouses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessWarehousesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businessWarehouses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableOrderingComposer get currencyId {
     final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -130869,11 +131471,6 @@ class $$WarehouseTransfersTableAnnotationComposer
 
   GeneratedColumn<String> get sourceWarehouseId => $composableBuilder(
     column: $table.sourceWarehouseId,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get destinationWarehouseId => $composableBuilder(
-    column: $table.destinationWarehouseId,
     builder: (column) => column,
   );
 
@@ -130946,6 +131543,30 @@ class $$WarehouseTransfersTableAnnotationComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return composer;
+  }
+
+  $$BusinessWarehousesTableAnnotationComposer get destinationWarehouseId {
+    final $$BusinessWarehousesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.destinationWarehouseId,
+          referencedTable: $db.businessWarehouses,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$BusinessWarehousesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.businessWarehouses,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return composer;
   }
 
@@ -131148,6 +131769,7 @@ class $$WarehouseTransfersTableTableManager
           PrefetchHooks Function({
             bool organizationId,
             bool databaseId,
+            bool destinationWarehouseId,
             bool currencyId,
             bool createdBy,
             bool warehouseTransferLinesRefs,
@@ -131259,6 +131881,7 @@ class $$WarehouseTransfersTableTableManager
               ({
                 organizationId = false,
                 databaseId = false,
+                destinationWarehouseId = false,
                 currencyId = false,
                 createdBy = false,
                 warehouseTransferLinesRefs = false,
@@ -131322,6 +131945,21 @@ class $$WarehouseTransfersTableTableManager
                                         $$WarehouseTransfersTableReferences
                                             ._databaseIdTable(db)
                                             .databaseId,
+                                  )
+                                  as T;
+                        }
+                        if (destinationWarehouseId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.destinationWarehouseId,
+                                    referencedTable:
+                                        $$WarehouseTransfersTableReferences
+                                            ._destinationWarehouseIdTable(db),
+                                    referencedColumn:
+                                        $$WarehouseTransfersTableReferences
+                                            ._destinationWarehouseIdTable(db)
+                                            .id,
                                   )
                                   as T;
                         }
@@ -131488,6 +132126,7 @@ typedef $$WarehouseTransfersTableProcessedTableManager =
       PrefetchHooks Function({
         bool organizationId,
         bool databaseId,
+        bool destinationWarehouseId,
         bool currencyId,
         bool createdBy,
         bool warehouseTransferLinesRefs,
@@ -131504,6 +132143,8 @@ typedef $$WarehouseTransferLinesTableCreateCompanionBuilder =
       required int productId,
       required int variantId,
       required int quantity,
+      Value<int?> requestedOwnedQuantity,
+      Value<int?> requestedConsignmentQuantity,
       required int quantityScale,
       required String measurementType,
       required int previewValueCents,
@@ -131516,6 +132157,8 @@ typedef $$WarehouseTransferLinesTableUpdateCompanionBuilder =
       Value<int> productId,
       Value<int> variantId,
       Value<int> quantity,
+      Value<int?> requestedOwnedQuantity,
+      Value<int?> requestedConsignmentQuantity,
       Value<int> quantityScale,
       Value<String> measurementType,
       Value<int> previewValueCents,
@@ -131634,6 +132277,16 @@ class $$WarehouseTransferLinesTableFilterComposer
 
   ColumnFilters<int> get quantity => $composableBuilder(
     column: $table.quantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get requestedOwnedQuantity => $composableBuilder(
+    column: $table.requestedOwnedQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get requestedConsignmentQuantity => $composableBuilder(
+    column: $table.requestedConsignmentQuantity,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -131770,6 +132423,16 @@ class $$WarehouseTransferLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get requestedOwnedQuantity => $composableBuilder(
+    column: $table.requestedOwnedQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get requestedConsignmentQuantity => $composableBuilder(
+    column: $table.requestedConsignmentQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get quantityScale => $composableBuilder(
     column: $table.quantityScale,
     builder: (column) => ColumnOrderings(column),
@@ -131869,6 +132532,16 @@ class $$WarehouseTransferLinesTableAnnotationComposer
 
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
+
+  GeneratedColumn<int> get requestedOwnedQuantity => $composableBuilder(
+    column: $table.requestedOwnedQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get requestedConsignmentQuantity => $composableBuilder(
+    column: $table.requestedConsignmentQuantity,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get quantityScale => $composableBuilder(
     column: $table.quantityScale,
@@ -132034,6 +132707,8 @@ class $$WarehouseTransferLinesTableTableManager
                 Value<int> productId = const Value.absent(),
                 Value<int> variantId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int?> requestedOwnedQuantity = const Value.absent(),
+                Value<int?> requestedConsignmentQuantity = const Value.absent(),
                 Value<int> quantityScale = const Value.absent(),
                 Value<String> measurementType = const Value.absent(),
                 Value<int> previewValueCents = const Value.absent(),
@@ -132044,6 +132719,8 @@ class $$WarehouseTransferLinesTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                requestedOwnedQuantity: requestedOwnedQuantity,
+                requestedConsignmentQuantity: requestedConsignmentQuantity,
                 quantityScale: quantityScale,
                 measurementType: measurementType,
                 previewValueCents: previewValueCents,
@@ -132056,6 +132733,8 @@ class $$WarehouseTransferLinesTableTableManager
                 required int productId,
                 required int variantId,
                 required int quantity,
+                Value<int?> requestedOwnedQuantity = const Value.absent(),
+                Value<int?> requestedConsignmentQuantity = const Value.absent(),
                 required int quantityScale,
                 required String measurementType,
                 required int previewValueCents,
@@ -132066,6 +132745,8 @@ class $$WarehouseTransferLinesTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                requestedOwnedQuantity: requestedOwnedQuantity,
+                requestedConsignmentQuantity: requestedConsignmentQuantity,
                 quantityScale: quantityScale,
                 measurementType: measurementType,
                 previewValueCents: previewValueCents,

@@ -124,6 +124,13 @@ const _kAllDefaultItems = [
     ownerOnly: true,
   ),
   DashboardItemData(
+    id: 'warehouse_transfers',
+    icon: LucideIcons.arrowLeftRight,
+    titleKey: 'dashboard.warehouse_transfers',
+    color: Color(0xFFEF6C00),
+    route: '/warehouse-transfers',
+  ),
+  DashboardItemData(
     id: 'consignment_center',
     icon: LucideIcons.handshake,
     titleKey: 'dashboard.consignment_center',
@@ -299,6 +306,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     // local-only repository on the client device.
     return allowed.where((item) {
       if (item.id == 'cashier_shifts') return user.role == UserRole.cashier;
+      if (item.id == 'warehouse_transfers') {
+        return user.role == UserRole.owner ||
+            user.role == UserRole.manager ||
+            user.role == UserRole.warehouseClerk;
+      }
+      if (item.id == 'sales_returns') {
+        return lan.remoteUser?.permissions.contains(Permissions.handleReturns) == true;
+      }
       if (item.id == 'purchases') {
         final permissions = lan.remoteUser?.permissions ?? const <String>[];
         return permissions.contains(Permissions.viewPurchases) ||
@@ -323,7 +338,6 @@ class _DashboardScreenState extends State<DashboardScreen>
           : '/sales';
     }
     if (item.id == 'cashier_shifts') return '/client-session';
-    if (item.id == 'purchases') return '/purchases/returns';
     return item.route;
   }
 

@@ -258,6 +258,10 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
   @override
   Future<int> getTotalInventoryValueCents() async {
     final db = _accountingDao.attachedDatabase;
+    // This value reconciles against the organization-wide 1200 Inventory GL
+    // control account. It must therefore include every warehouse that belongs
+    // to the local organization, not only business_contexts.warehouse_id.
+    // Location reports deliberately remain warehouse-scoped elsewhere.
     // ── Phase 15.2 — Batch ledger is SoT only for FIFO/batch products ───
     //
     // Pre-Phase-15 this was `Σ(variant.stock × variant.cost_cents)` for
@@ -305,10 +309,18 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
               CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
             ) AS INTEGER)
           )
-          FROM ${WarehouseBatchScope.primaryBatches} b
+          FROM product_batches b
           INNER JOIN products p ON p.id = b.product_id
           WHERE b.is_active = 1
             AND p.track_inventory = 1
+            AND EXISTS (
+              SELECT 1
+              FROM business_document_locations bl
+              INNER JOIN business_contexts c
+                ON c.id = 1 AND c.organization_id = bl.organization_id
+              WHERE bl.source_table = 'product_batches'
+                AND bl.source_id = b.id
+            )
             AND NOT EXISTS (
               SELECT 1 FROM consignment_inventory_layers cl
               WHERE cl.batch_id = b.id AND cl.status != 'voided'
@@ -326,13 +338,22 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             ) AS INTEGER)
           )
           FROM product_variants v
-          INNER JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
+          INNER JOIN business_warehouse_stocks ws ON ws.variant_id = v.id
+          INNER JOIN business_warehouses w ON w.id = ws.warehouse_id
+          INNER JOIN business_contexts c
+            ON c.id = 1 AND c.organization_id = w.organization_id
           INNER JOIN products p ON p.id = v.product_id
           WHERE p.track_inventory = 1
             AND (NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                      OR p.costing_method = 'fifo')
              OR NOT EXISTS (
-               SELECT 1 FROM ${WarehouseBatchScope.primaryBatches} b
+               SELECT 1
+               FROM product_batches b
+               INNER JOIN business_document_locations bl
+                 ON bl.source_table = 'product_batches'
+                AND bl.source_id = b.id
+                AND bl.organization_id = c.organization_id
+                AND bl.warehouse_id = ws.warehouse_id
                WHERE b.variant_id = v.id AND b.is_active = 1
              ))
         ), 0)
@@ -354,7 +375,13 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                  OR p.costing_method = 'fifo')
             OR NOT EXISTS (
-              SELECT 1 FROM ${WarehouseBatchScope.primaryBatches} b
+              SELECT 1
+              FROM product_batches b
+              INNER JOIN business_document_locations bl
+                ON bl.source_table = 'product_batches'
+               AND bl.source_id = b.id
+              INNER JOIN business_contexts c
+                ON c.id = 1 AND c.organization_id = bl.organization_id
               WHERE b.product_id = p.id AND b.is_active = 1
             )
           )
@@ -366,6 +393,7 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             db.productVariants,
             db.productBatches,
             db.consignmentInventoryLayers,
+            db.businessDocumentLocations,
             ...WarehouseBatchScope.dependencies(db),
             ...WarehouseStockScope.dependencies(db),
           },

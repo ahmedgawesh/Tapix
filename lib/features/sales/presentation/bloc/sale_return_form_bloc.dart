@@ -328,8 +328,7 @@ class SaleReturnDispositionChanged extends SaleReturnFormEvent {
   List<Object?> get props => [dispositionType];
 }
 
-class SaleReturnConsignmentLiabilityChanged
-    extends SaleReturnFormEvent {
+class SaleReturnConsignmentLiabilityChanged extends SaleReturnFormEvent {
   const SaleReturnConsignmentLiabilityChanged({
     required this.responsibility,
     this.reason,
@@ -389,17 +388,13 @@ class SaleReturnFormBloc
     on<SaleReturnItemReasonChanged>(_onItemReasonChanged);
     on<SaleReturnReasonChanged>(_onReasonChanged);
     on<SaleReturnDispositionChanged>(_onDispositionChanged);
-    on<SaleReturnConsignmentLiabilityChanged>(
-      _onConsignmentLiabilityChanged,
-    );
+    on<SaleReturnConsignmentLiabilityChanged>(_onConsignmentLiabilityChanged);
     on<SaleReturnRefundMethodChanged>(_onRefundMethodChanged);
     on<SaleReturnDueDateChanged>(_onDueDateChanged);
     on<SaleReturnFormSubmitted>(_onSubmitted);
   }
 
-  bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+  bool get _isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
   Future<SaleReturnFormState> _loadRemoteState(int saleId) async {
     final details = await _lan!.fetchRemoteReturnableSale(saleId);

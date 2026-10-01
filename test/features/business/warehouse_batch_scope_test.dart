@@ -291,13 +291,18 @@ void main() {
   });
 
   test(
-    'earlier foreign batch cannot enter FEFO, audit or accounting valuation',
+    'secondary warehouse enters organization valuation but not primary FEFO or audit',
     () async {
       final valuation = JournalLocalDatasourceImpl(AccountingDao(db));
       final before = await valuation.getTotalInventoryValueCents();
       final other = await opening();
       await moveToSecondary(other);
-      expect(await valuation.getTotalInventoryValueCents(), before);
+      // The 1200 Inventory control account is organization-wide. A layer in
+      // another warehouse of the same organization must remain in its value,
+      // while operational FEFO and batch audit stay scoped to the primary
+      // warehouse. This product uses a 1000 quantity scale, hence the new
+      // layer contributes round(100 * 9999 / 1000) = 1000 cents.
+      expect(await valuation.getTotalInventoryValueCents(), before + 1000);
       final listed = await BatchAuditDao(
         db,
       ).getBatchesForProduct(productId: product);

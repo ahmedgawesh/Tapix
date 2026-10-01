@@ -12,8 +12,9 @@ class WarehouseInventoryReader {
     DatabaseAccessor<AppDatabase> dao,
     WarehouseOperationScope scope,
     int productId,
-    int? variantId,
-  ) async {
+    int? variantId, {
+    bool allowMissingBalance = false,
+  }) async {
     await scope.validate(dao.attachedDatabase);
     final candidates = await dao
         .customSelect(
@@ -42,7 +43,16 @@ class WarehouseInventoryReader {
           ],
         )
         .getSingleOrNull();
-    if (row == null) throw StateError('Document warehouse balance is missing');
+    if (row == null) {
+      if (!allowMissingBalance) {
+        throw StateError('Document warehouse balance is missing');
+      }
+      return (
+        variantId: candidates.single.read<int>('id'),
+        quantity: 0,
+        unitCostCents: 0,
+      );
+    }
     return (
       variantId: candidates.single.read<int>('id'),
       quantity: row.read<int>('quantity'),

@@ -29,6 +29,7 @@ class _Service extends Fake implements WarehouseSetupService {
       branchId: 'branch',
       code: 'W2',
       name: 'Warehouse Two',
+      locationKind: 'warehouse',
       isActive: true,
       createdAt: DateTime(2026),
     ),

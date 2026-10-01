@@ -1,6 +1,26 @@
 import '../../promotions/promotion_sale_snapshot.dart';
 import 'lan_models.dart';
 
+int _requiredTransportInt(Map<String, dynamic> json, String field) {
+  final value = json[field];
+  if (value is! int) {
+    throw FormatException('$field must be an integer.');
+  }
+  return value;
+}
+
+int? _optionalTransportInt(Map<String, dynamic> json, String field) {
+  final value = json[field];
+  if (value == null) return null;
+  if (value is! int) {
+    throw FormatException('$field must be an integer.');
+  }
+  return value;
+}
+
+int _transportIntOrZero(Map<String, dynamic> json, String field) =>
+    _optionalTransportInt(json, field) ?? 0;
+
 class LanCatalogVariant {
   final int id;
   final int productId;
@@ -341,12 +361,20 @@ class LanCustomerCheckout {
   final String currencyCode;
   final int balanceCents;
   final int pointsBalance;
+  final bool redemptionEnabled;
+  final int pointValueCents;
+  final int minRedemptionPoints;
+  final int maxRedemptionPercentBps;
   const LanCustomerCheckout({
     required this.customerId,
     required this.currencyId,
     required this.currencyCode,
     required this.balanceCents,
     required this.pointsBalance,
+    this.redemptionEnabled = false,
+    this.pointValueCents = 0,
+    this.minRedemptionPoints = 0,
+    this.maxRedemptionPercentBps = 0,
   });
   Map<String, dynamic> toJson() => {
     'customerId': customerId,
@@ -354,6 +382,10 @@ class LanCustomerCheckout {
     'currencyCode': currencyCode,
     'balanceCents': balanceCents,
     'pointsBalance': pointsBalance,
+    'redemptionEnabled': redemptionEnabled,
+    'pointValueCents': pointValueCents,
+    'minRedemptionPoints': minRedemptionPoints,
+    'maxRedemptionPercentBps': maxRedemptionPercentBps,
   };
   factory LanCustomerCheckout.fromJson(Map<String, dynamic> json) =>
       LanCustomerCheckout(
@@ -361,7 +393,14 @@ class LanCustomerCheckout {
         currencyId: (json['currencyId'] as num).toInt(),
         currencyCode: json['currencyCode'] as String,
         balanceCents: (json['balanceCents'] as num).toInt(),
-        pointsBalance: (json['pointsBalance'] as num).toInt(),
+        pointsBalance: _requiredTransportInt(json, 'pointsBalance'),
+        redemptionEnabled: json['redemptionEnabled'] == true,
+        pointValueCents: _transportIntOrZero(json, 'pointValueCents'),
+        minRedemptionPoints: _transportIntOrZero(json, 'minRedemptionPoints'),
+        maxRedemptionPercentBps: _transportIntOrZero(
+          json,
+          'maxRedemptionPercentBps',
+        ),
       );
 }
 
@@ -533,6 +572,7 @@ class LanCatalogPage {
   final String? receiptHeaderText;
   final String? receiptFooterText;
   final bool enablePharmacyFeatures;
+  final bool useSupplierProductCodes;
   final bool enablePromotions;
   final List<Map<String, dynamic>> promotionRules;
   final List<LanCatalogProduct> promotionProducts;
@@ -560,6 +600,7 @@ class LanCatalogPage {
     this.receiptHeaderText,
     this.receiptFooterText,
     this.enablePharmacyFeatures = false,
+    this.useSupplierProductCodes = false,
     this.enablePromotions = false,
     this.promotionRules = const [],
     this.promotionProducts = const [],
@@ -598,6 +639,7 @@ class LanCatalogPage {
     'receiptHeaderText': receiptHeaderText,
     'receiptFooterText': receiptFooterText,
     'enablePharmacyFeatures': enablePharmacyFeatures,
+    'useSupplierProductCodes': useSupplierProductCodes,
     'enablePromotions': enablePromotions,
     'promotionRules': promotionRules,
     'promotionProducts': promotionProducts
@@ -645,6 +687,7 @@ class LanCatalogPage {
           ? json['receiptFooterText']?.toString() ?? ''
           : null,
       enablePharmacyFeatures: json['enablePharmacyFeatures'] == true,
+      useSupplierProductCodes: json['useSupplierProductCodes'] == true,
       enablePromotions: json['enablePromotions'] == true,
       promotionRules: (json['promotionRules'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -2412,6 +2455,605 @@ class LanPurchaseReturnResult {
       );
 }
 
+class LanPurchaseSummary {
+  final int id;
+  final String purchaseNumber;
+  final int supplierId;
+  final String? supplierName;
+  final String? supplierPhone;
+  final int subtotalCents;
+  final int discountCents;
+  final int taxCents;
+  final int totalCents;
+  final int paidAmountCents;
+  final int currencyId;
+  final String status;
+  final String? paymentMethod;
+  final String? supplierInvoiceRef;
+  final String? notes;
+  final DateTime purchaseDate;
+  final DateTime? dueDate;
+  final bool taxInclusiveAtPost;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const LanPurchaseSummary({
+    required this.id,
+    required this.purchaseNumber,
+    required this.supplierId,
+    this.supplierName,
+    this.supplierPhone,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
+    required this.totalCents,
+    required this.paidAmountCents,
+    required this.currencyId,
+    required this.status,
+    this.paymentMethod,
+    this.supplierInvoiceRef,
+    this.notes,
+    required this.purchaseDate,
+    this.dueDate,
+    required this.taxInclusiveAtPost,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'purchaseNumber': purchaseNumber,
+    'supplierId': supplierId,
+    'supplierName': supplierName,
+    'supplierPhone': supplierPhone,
+    'subtotalCents': subtotalCents,
+    'discountCents': discountCents,
+    'taxCents': taxCents,
+    'totalCents': totalCents,
+    'paidAmountCents': paidAmountCents,
+    'currencyId': currencyId,
+    'status': status,
+    'paymentMethod': paymentMethod,
+    'supplierInvoiceRef': supplierInvoiceRef,
+    'notes': notes,
+    'purchaseDate': purchaseDate.toUtc().toIso8601String(),
+    'dueDate': dueDate?.toUtc().toIso8601String(),
+    'taxInclusiveAtPost': taxInclusiveAtPost,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+  };
+
+  factory LanPurchaseSummary.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseSummary(
+        id: (json['id'] as num).toInt(),
+        purchaseNumber: json['purchaseNumber']?.toString() ?? '',
+        supplierId: (json['supplierId'] as num).toInt(),
+        supplierName: json['supplierName']?.toString(),
+        supplierPhone: json['supplierPhone']?.toString(),
+        subtotalCents: (json['subtotalCents'] as num?)?.toInt() ?? 0,
+        discountCents: (json['discountCents'] as num?)?.toInt() ?? 0,
+        taxCents: (json['taxCents'] as num?)?.toInt() ?? 0,
+        totalCents: (json['totalCents'] as num?)?.toInt() ?? 0,
+        paidAmountCents: (json['paidAmountCents'] as num?)?.toInt() ?? 0,
+        currencyId: (json['currencyId'] as num?)?.toInt() ?? 1,
+        status: json['status']?.toString() ?? 'draft',
+        paymentMethod: json['paymentMethod']?.toString(),
+        supplierInvoiceRef: json['supplierInvoiceRef']?.toString(),
+        notes: json['notes']?.toString(),
+        purchaseDate: DateTime.parse(json['purchaseDate'].toString()),
+        dueDate: json['dueDate'] == null
+            ? null
+            : DateTime.parse(json['dueDate'].toString()),
+        taxInclusiveAtPost: json['taxInclusiveAtPost'] == true,
+        createdAt: DateTime.parse(json['createdAt'].toString()),
+        updatedAt: DateTime.parse(json['updatedAt'].toString()),
+      );
+}
+
+class LanPurchaseDetailLine {
+  final int id;
+  final int purchaseId;
+  final int productId;
+  final String productName;
+  final int? variantId;
+  final String? variantSku;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
+  final bool supplierIdentityRequested;
+  final int? supplierIdentityId;
+  final String? supplierSourceSku;
+  final int quantity;
+  final int quantityScale;
+  final String measurementType;
+  final int unitCostCents;
+  final int subtotalCents;
+  final int discountCents;
+  final int taxCents;
+  final int totalCents;
+  final int? originalCostCents;
+  final int? originalPriceCents;
+  final int? originalWholesalePriceCents;
+  final int? newSellPriceCents;
+  final int? newWholesalePriceCents;
+  final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
+  final DateTime createdAt;
+
+  const LanPurchaseDetailLine({
+    required this.id,
+    required this.purchaseId,
+    required this.productId,
+    required this.productName,
+    this.variantId,
+    this.variantSku,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
+    required this.supplierIdentityRequested,
+    this.supplierIdentityId,
+    this.supplierSourceSku,
+    required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.unitCostCents,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
+    required this.totalCents,
+    this.originalCostCents,
+    this.originalPriceCents,
+    this.originalWholesalePriceCents,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
+    this.expiryDate,
+    this.manufacturerLotNumber,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'purchaseId': purchaseId,
+    'productId': productId,
+    'productName': productName,
+    'variantId': variantId,
+    'variantSku': variantSku,
+    'colorName': colorName,
+    'colorHex': colorHex,
+    'sizeName': sizeName,
+    'supplierIdentityRequested': supplierIdentityRequested,
+    'supplierIdentityId': supplierIdentityId,
+    'supplierSourceSku': supplierSourceSku,
+    'quantity': quantity,
+    'quantityScale': quantityScale,
+    'measurementType': measurementType,
+    'unitCostCents': unitCostCents,
+    'subtotalCents': subtotalCents,
+    'discountCents': discountCents,
+    'taxCents': taxCents,
+    'totalCents': totalCents,
+    'originalCostCents': originalCostCents,
+    'originalPriceCents': originalPriceCents,
+    'originalWholesalePriceCents': originalWholesalePriceCents,
+    'newSellPriceCents': newSellPriceCents,
+    'newWholesalePriceCents': newWholesalePriceCents,
+    'expiryDate': expiryDate?.toUtc().toIso8601String(),
+    'manufacturerLotNumber': manufacturerLotNumber,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
+
+  factory LanPurchaseDetailLine.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseDetailLine(
+        id: (json['id'] as num).toInt(),
+        purchaseId: (json['purchaseId'] as num).toInt(),
+        productId: (json['productId'] as num).toInt(),
+        productName: json['productName']?.toString() ?? '',
+        variantId: (json['variantId'] as num?)?.toInt(),
+        variantSku: json['variantSku']?.toString(),
+        colorName: json['colorName']?.toString(),
+        colorHex: json['colorHex']?.toString(),
+        sizeName: json['sizeName']?.toString(),
+        supplierIdentityRequested: json['supplierIdentityRequested'] == true,
+        supplierIdentityId: (json['supplierIdentityId'] as num?)?.toInt(),
+        supplierSourceSku: json['supplierSourceSku']?.toString(),
+        quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+        quantityScale: (json['quantityScale'] as num?)?.toInt() ?? 1,
+        measurementType: json['measurementType']?.toString() ?? 'piece',
+        unitCostCents: (json['unitCostCents'] as num?)?.toInt() ?? 0,
+        subtotalCents: (json['subtotalCents'] as num?)?.toInt() ?? 0,
+        discountCents: (json['discountCents'] as num?)?.toInt() ?? 0,
+        taxCents: (json['taxCents'] as num?)?.toInt() ?? 0,
+        totalCents: (json['totalCents'] as num?)?.toInt() ?? 0,
+        originalCostCents: (json['originalCostCents'] as num?)?.toInt(),
+        originalPriceCents: (json['originalPriceCents'] as num?)?.toInt(),
+        originalWholesalePriceCents:
+            (json['originalWholesalePriceCents'] as num?)?.toInt(),
+        newSellPriceCents: (json['newSellPriceCents'] as num?)?.toInt(),
+        newWholesalePriceCents: (json['newWholesalePriceCents'] as num?)
+            ?.toInt(),
+        expiryDate: json['expiryDate'] == null
+            ? null
+            : DateTime.parse(json['expiryDate'].toString()),
+        manufacturerLotNumber: json['manufacturerLotNumber']?.toString(),
+        createdAt: DateTime.parse(json['createdAt'].toString()),
+      );
+}
+
+class LanPurchaseDetails {
+  final LanPurchaseSummary purchase;
+  final List<LanPurchaseDetailLine> lines;
+  final List<LanPurchaseReturnSummary> returns;
+  final int? supplierBalanceCents;
+  final String currencyCode;
+  final String currencySymbol;
+  final int currencyDecimalDigits;
+  final bool currencySymbolAfter;
+
+  const LanPurchaseDetails({
+    required this.purchase,
+    required this.lines,
+    this.returns = const [],
+    this.supplierBalanceCents,
+    required this.currencyCode,
+    required this.currencySymbol,
+    required this.currencyDecimalDigits,
+    required this.currencySymbolAfter,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'purchase': purchase.toJson(),
+    'lines': lines.map((line) => line.toJson()).toList(),
+    'returns': returns.map((value) => value.toJson()).toList(),
+    'supplierBalanceCents': supplierBalanceCents,
+    'currencyCode': currencyCode,
+    'currencySymbol': currencySymbol,
+    'currencyDecimalDigits': currencyDecimalDigits,
+    'currencySymbolAfter': currencySymbolAfter,
+  };
+
+  factory LanPurchaseDetails.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseDetails(
+        purchase: LanPurchaseSummary.fromJson(
+          json['purchase'] as Map<String, dynamic>,
+        ),
+        lines: (json['lines'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanPurchaseDetailLine.fromJson)
+            .toList(growable: false),
+        returns: (json['returns'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanPurchaseReturnSummary.fromJson)
+            .toList(growable: false),
+        supplierBalanceCents: (json['supplierBalanceCents'] as num?)?.toInt(),
+        currencyCode: json['currencyCode']?.toString() ?? 'USD',
+        currencySymbol: json['currencySymbol']?.toString() ?? r'$',
+        currencyDecimalDigits:
+            (json['currencyDecimalDigits'] as num?)?.toInt() ?? 2,
+        currencySymbolAfter: json['currencySymbolAfter'] == true,
+      );
+}
+
+class LanPurchaseDashboardStats {
+  final int totalCount;
+  final int draftCount;
+  final int postedCount;
+  final int totalPayableCents;
+  final int totalPaidCents;
+  final int overdueCount;
+  final int returnsCount;
+
+  const LanPurchaseDashboardStats({
+    required this.totalCount,
+    required this.draftCount,
+    required this.postedCount,
+    required this.totalPayableCents,
+    required this.totalPaidCents,
+    required this.overdueCount,
+    required this.returnsCount,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'totalCount': totalCount,
+    'draftCount': draftCount,
+    'postedCount': postedCount,
+    'totalPayableCents': totalPayableCents,
+    'totalPaidCents': totalPaidCents,
+    'overdueCount': overdueCount,
+    'returnsCount': returnsCount,
+  };
+
+  factory LanPurchaseDashboardStats.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseDashboardStats(
+        totalCount: (json['totalCount'] as num?)?.toInt() ?? 0,
+        draftCount: (json['draftCount'] as num?)?.toInt() ?? 0,
+        postedCount: (json['postedCount'] as num?)?.toInt() ?? 0,
+        totalPayableCents: (json['totalPayableCents'] as num?)?.toInt() ?? 0,
+        totalPaidCents: (json['totalPaidCents'] as num?)?.toInt() ?? 0,
+        overdueCount: (json['overdueCount'] as num?)?.toInt() ?? 0,
+        returnsCount: (json['returnsCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class LanPurchasesPage {
+  final List<LanPurchaseSummary> purchases;
+  final LanPurchaseDashboardStats stats;
+  final Set<int> purchaseIdsWithReturns;
+  final Map<int, List<String>> productSearchTerms;
+  final String currencyCode;
+  final String currencySymbol;
+  final int currencyDecimalDigits;
+  final bool currencySymbolAfter;
+
+  const LanPurchasesPage({
+    required this.purchases,
+    required this.stats,
+    this.purchaseIdsWithReturns = const {},
+    this.productSearchTerms = const {},
+    required this.currencyCode,
+    required this.currencySymbol,
+    required this.currencyDecimalDigits,
+    required this.currencySymbolAfter,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'purchases': purchases.map((value) => value.toJson()).toList(),
+    'stats': stats.toJson(),
+    'purchaseIdsWithReturns': purchaseIdsWithReturns.toList(),
+    'productSearchTerms': productSearchTerms.map(
+      (key, value) => MapEntry(key.toString(), value),
+    ),
+    'currencyCode': currencyCode,
+    'currencySymbol': currencySymbol,
+    'currencyDecimalDigits': currencyDecimalDigits,
+    'currencySymbolAfter': currencySymbolAfter,
+  };
+
+  factory LanPurchasesPage.fromJson(Map<String, dynamic> json) {
+    final rawTerms = json['productSearchTerms'];
+    return LanPurchasesPage(
+      purchases: (json['purchases'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(LanPurchaseSummary.fromJson)
+          .toList(growable: false),
+      stats: LanPurchaseDashboardStats.fromJson(
+        json['stats'] as Map<String, dynamic>? ?? const {},
+      ),
+      purchaseIdsWithReturns:
+          (json['purchaseIdsWithReturns'] as List<dynamic>? ?? const [])
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .toSet(),
+      productSearchTerms: rawTerms is Map<String, dynamic>
+          ? rawTerms.map(
+              (key, value) => MapEntry(
+                int.parse(key),
+                (value as List<dynamic>? ?? const [])
+                    .map((term) => term.toString())
+                    .toList(growable: false),
+              ),
+            )
+          : const {},
+      currencyCode: json['currencyCode']?.toString() ?? 'USD',
+      currencySymbol: json['currencySymbol']?.toString() ?? r'$',
+      currencyDecimalDigits:
+          (json['currencyDecimalDigits'] as num?)?.toInt() ?? 2,
+      currencySymbolAfter: json['currencySymbolAfter'] == true,
+    );
+  }
+}
+
+class LanPurchaseLineRequest {
+  final int productId;
+  final int? variantId;
+  final int quantity;
+  final int unitCostCents;
+  final String discountType;
+  final int discountValue;
+  final bool supplierIdentityRequested;
+  final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
+  final int? newSellPriceCents;
+  final int? newWholesalePriceCents;
+
+  const LanPurchaseLineRequest({
+    required this.productId,
+    this.variantId,
+    required this.quantity,
+    required this.unitCostCents,
+    this.discountType = 'none',
+    this.discountValue = 0,
+    this.supplierIdentityRequested = false,
+    this.expiryDate,
+    this.manufacturerLotNumber,
+    this.newSellPriceCents,
+    this.newWholesalePriceCents,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'variantId': variantId,
+    'quantity': quantity,
+    'unitCostCents': unitCostCents,
+    'discountType': discountType,
+    'discountValue': discountValue,
+    'supplierIdentityRequested': supplierIdentityRequested,
+    'expiryDate': expiryDate?.toUtc().toIso8601String(),
+    'manufacturerLotNumber': manufacturerLotNumber,
+    'newSellPriceCents': newSellPriceCents,
+    'newWholesalePriceCents': newWholesalePriceCents,
+  };
+
+  factory LanPurchaseLineRequest.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseLineRequest(
+        productId: _requiredTransportInt(json, 'productId'),
+        variantId: _optionalTransportInt(json, 'variantId'),
+        quantity: _requiredTransportInt(json, 'quantity'),
+        unitCostCents: _requiredTransportInt(json, 'unitCostCents'),
+        discountType: json['discountType']?.toString() ?? 'none',
+        discountValue: _transportIntOrZero(json, 'discountValue'),
+        supplierIdentityRequested: json['supplierIdentityRequested'] == true,
+        expiryDate: json['expiryDate'] == null
+            ? null
+            : DateTime.parse(json['expiryDate'].toString()),
+        manufacturerLotNumber: json['manufacturerLotNumber']?.toString(),
+        newSellPriceCents: _optionalTransportInt(json, 'newSellPriceCents'),
+        newWholesalePriceCents: _optionalTransportInt(
+          json,
+          'newWholesalePriceCents',
+        ),
+      );
+}
+
+class LanPurchaseRequest {
+  final String idempotencyKey;
+  final int supplierId;
+  final String paymentMethod;
+  final int? paidAmountCents;
+  final String? supplierInvoiceRef;
+  final String? notes;
+  final DateTime? purchaseDate;
+  final DateTime? dueDate;
+  final String overallDiscountType;
+  final int overallDiscountValue;
+  final String? expectedPricingFingerprint;
+  final List<LanPurchaseLineRequest> lines;
+  final List<LanCheckoutPaymentRequest> payments;
+
+  const LanPurchaseRequest({
+    required this.idempotencyKey,
+    required this.supplierId,
+    required this.paymentMethod,
+    this.paidAmountCents,
+    this.supplierInvoiceRef,
+    this.notes,
+    this.purchaseDate,
+    this.dueDate,
+    this.overallDiscountType = 'none',
+    this.overallDiscountValue = 0,
+    this.expectedPricingFingerprint,
+    required this.lines,
+    this.payments = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'idempotencyKey': idempotencyKey,
+    'supplierId': supplierId,
+    'paymentMethod': paymentMethod,
+    'paidAmountCents': paidAmountCents,
+    'supplierInvoiceRef': supplierInvoiceRef,
+    'notes': notes,
+    'purchaseDate': purchaseDate?.toUtc().toIso8601String(),
+    'dueDate': dueDate?.toUtc().toIso8601String(),
+    'overallDiscountType': overallDiscountType,
+    'overallDiscountValue': overallDiscountValue,
+    'expectedPricingFingerprint': expectedPricingFingerprint,
+    'lines': lines.map((line) => line.toJson()).toList(),
+    'payments': payments.map((payment) => payment.toJson()).toList(),
+  };
+
+  factory LanPurchaseRequest.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseRequest(
+        idempotencyKey: json['idempotencyKey']?.toString() ?? '',
+        supplierId: _requiredTransportInt(json, 'supplierId'),
+        paymentMethod: json['paymentMethod']?.toString() ?? 'credit',
+        paidAmountCents: _optionalTransportInt(json, 'paidAmountCents'),
+        supplierInvoiceRef: json['supplierInvoiceRef']?.toString(),
+        notes: json['notes']?.toString(),
+        purchaseDate: json['purchaseDate'] == null
+            ? null
+            : DateTime.parse(json['purchaseDate'].toString()),
+        dueDate: json['dueDate'] == null
+            ? null
+            : DateTime.parse(json['dueDate'].toString()),
+        overallDiscountType: json['overallDiscountType']?.toString() ?? 'none',
+        overallDiscountValue: _transportIntOrZero(json, 'overallDiscountValue'),
+        expectedPricingFingerprint: json['expectedPricingFingerprint']
+            ?.toString(),
+        lines: (json['lines'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanPurchaseLineRequest.fromJson)
+            .toList(growable: false),
+        payments: (json['payments'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanCheckoutPaymentRequest.fromJson)
+            .toList(growable: false),
+      );
+}
+
+class LanPurchaseResult {
+  final int purchaseId;
+  final String purchaseNumber;
+  final int subtotalCents;
+  final int discountCents;
+  final int taxCents;
+  final int totalCents;
+  final int paidAmountCents;
+  final String status;
+  final bool duplicate;
+
+  const LanPurchaseResult({
+    required this.purchaseId,
+    required this.purchaseNumber,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
+    required this.totalCents,
+    required this.paidAmountCents,
+    required this.status,
+    this.duplicate = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'purchaseId': purchaseId,
+    'purchaseNumber': purchaseNumber,
+    'subtotalCents': subtotalCents,
+    'discountCents': discountCents,
+    'taxCents': taxCents,
+    'totalCents': totalCents,
+    'paidAmountCents': paidAmountCents,
+    'status': status,
+    'duplicate': duplicate,
+  };
+
+  factory LanPurchaseResult.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseResult(
+        purchaseId: (json['purchaseId'] as num).toInt(),
+        purchaseNumber: json['purchaseNumber']?.toString() ?? '',
+        subtotalCents: (json['subtotalCents'] as num?)?.toInt() ?? 0,
+        discountCents: (json['discountCents'] as num?)?.toInt() ?? 0,
+        taxCents: (json['taxCents'] as num?)?.toInt() ?? 0,
+        totalCents: (json['totalCents'] as num?)?.toInt() ?? 0,
+        paidAmountCents: (json['paidAmountCents'] as num?)?.toInt() ?? 0,
+        status: json['status']?.toString() ?? 'draft',
+        duplicate: json['duplicate'] == true,
+      );
+}
+
+class LanPurchaseVoidResult {
+  final int purchaseId;
+  final String status;
+  final bool duplicate;
+
+  const LanPurchaseVoidResult({
+    required this.purchaseId,
+    required this.status,
+    this.duplicate = false,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'purchaseId': purchaseId,
+    'status': status,
+    'duplicate': duplicate,
+  };
+
+  factory LanPurchaseVoidResult.fromJson(Map<String, dynamic> json) =>
+      LanPurchaseVoidResult(
+        purchaseId: (json['purchaseId'] as num).toInt(),
+        status: json['status']?.toString() ?? 'voided',
+        duplicate: json['duplicate'] == true,
+      );
+}
+
 class LanSaleLineRequest {
   final int productId;
   final int? variantId;
@@ -2449,15 +3091,15 @@ class LanSaleLineRequest {
 
   factory LanSaleLineRequest.fromJson(Map<String, dynamic> json) {
     return LanSaleLineRequest(
-      productId: (json['productId'] as num).toInt(),
-      variantId: (json['variantId'] as num?)?.toInt(),
-      supplierIdentityId: (json['supplierIdentityId'] as num?)?.toInt(),
+      productId: _requiredTransportInt(json, 'productId'),
+      variantId: _optionalTransportInt(json, 'variantId'),
+      supplierIdentityId: _optionalTransportInt(json, 'supplierIdentityId'),
       consignmentLayerId: json['consignmentLayerId']?.toString(),
-      quantity: (json['quantity'] as num).toInt(),
+      quantity: _requiredTransportInt(json, 'quantity'),
       priceTier: json['priceTier']?.toString() ?? 'retail',
-      salespersonId: (json['salespersonId'] as num?)?.toInt(),
+      salespersonId: _optionalTransportInt(json, 'salespersonId'),
       discountType: json['discountType']?.toString() ?? 'none',
-      discountValue: (json['discountValue'] as num?)?.toInt() ?? 0,
+      discountValue: _transportIntOrZero(json, 'discountValue'),
     );
   }
 }
@@ -2503,7 +3145,7 @@ class LanCheckoutPaymentRequest {
 
     return LanCheckoutPaymentRequest(
       method: json['method']?.toString() ?? '',
-      amountCents: (json['amountCents'] as num?)?.toInt() ?? 0,
+      amountCents: _transportIntOrZero(json, 'amountCents'),
       reference: json['reference']?.toString(),
       bankName: json['bankName']?.toString(),
       issueDate: parseDate(json['issueDate']),
@@ -2520,6 +3162,10 @@ class LanSaleRequest {
   final String paymentMethod;
   final int? paidAmountCents;
   final String? notes;
+  final int overallDiscountCents;
+  final int loyaltyPointsToRedeem;
+  final int loyaltyValueCents;
+  final String? expectedPricingFingerprint;
   final String? belowCostOverrideReason;
   final List<LanSaleLineRequest> lines;
   final List<LanCheckoutPaymentRequest> payments;
@@ -2531,6 +3177,10 @@ class LanSaleRequest {
     required this.paymentMethod,
     this.paidAmountCents,
     this.notes,
+    this.overallDiscountCents = 0,
+    this.loyaltyPointsToRedeem = 0,
+    this.loyaltyValueCents = 0,
+    this.expectedPricingFingerprint,
     this.belowCostOverrideReason,
     required this.lines,
     this.payments = const [],
@@ -2543,6 +3193,12 @@ class LanSaleRequest {
     'paymentMethod': paymentMethod,
     'paidAmountCents': paidAmountCents,
     'notes': notes,
+    if (loyaltyPointsToRedeem != 0)
+      'loyaltyPointsToRedeem': loyaltyPointsToRedeem,
+    if (loyaltyValueCents != 0) 'loyaltyValueCents': loyaltyValueCents,
+    if (overallDiscountCents != 0) 'overallDiscountCents': overallDiscountCents,
+    if (expectedPricingFingerprint != null)
+      'expectedPricingFingerprint': expectedPricingFingerprint,
     'belowCostOverrideReason': belowCostOverrideReason,
     'lines': lines.map((value) => value.toJson()).toList(),
     'payments': payments.map((value) => value.toJson()).toList(),
@@ -2551,11 +3207,16 @@ class LanSaleRequest {
   factory LanSaleRequest.fromJson(Map<String, dynamic> json) {
     return LanSaleRequest(
       idempotencyKey: json['idempotencyKey']?.toString() ?? '',
-      customerId: (json['customerId'] as num?)?.toInt(),
-      salespersonId: (json['salespersonId'] as num?)?.toInt(),
+      customerId: _optionalTransportInt(json, 'customerId'),
+      salespersonId: _optionalTransportInt(json, 'salespersonId'),
       paymentMethod: json['paymentMethod']?.toString() ?? 'cash',
-      paidAmountCents: (json['paidAmountCents'] as num?)?.toInt(),
+      paidAmountCents: _optionalTransportInt(json, 'paidAmountCents'),
       notes: json['notes']?.toString(),
+      loyaltyPointsToRedeem: _transportIntOrZero(json, 'loyaltyPointsToRedeem'),
+      loyaltyValueCents: _transportIntOrZero(json, 'loyaltyValueCents'),
+      overallDiscountCents: _transportIntOrZero(json, 'overallDiscountCents'),
+      expectedPricingFingerprint: json['expectedPricingFingerprint']
+          ?.toString(),
       belowCostOverrideReason: json['belowCostOverrideReason']?.toString(),
       lines: (json['lines'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -2576,6 +3237,10 @@ class LanSaleRequest {
       paymentMethod: paymentMethod,
       paidAmountCents: paidAmountCents,
       notes: notes,
+      loyaltyPointsToRedeem: loyaltyPointsToRedeem,
+      loyaltyValueCents: loyaltyValueCents,
+      overallDiscountCents: overallDiscountCents,
+      expectedPricingFingerprint: expectedPricingFingerprint,
       belowCostOverrideReason:
           belowCostOverrideReason ?? this.belowCostOverrideReason,
       lines: lines,
@@ -3209,7 +3874,53 @@ abstract interface class LanMasterBusinessGateway {
   });
 }
 
-/// Versioned LAN contract for same-branch warehouse transfers.
+/// Optional execution boundary implemented by the production gateway.
+///
+/// The LAN server resolves the device's stored assignment and runs each
+/// business operation inside this boundary. A legacy/test gateway may omit it
+/// only for a device assigned to the server's primary warehouse.
+abstract interface class LanWarehouseScopedBusinessGateway {
+  Future<T> runForWarehouse<T>(
+    String warehouseId,
+    Future<T> Function() operation,
+  );
+}
+
+/// Optional purchase-invoice contract used by branch and warehouse devices.
+/// Supplier balances and the general ledger remain owned by the branch
+/// database; [LanWarehouseScopedBusinessGateway.runForWarehouse] changes only
+/// the inventory posting location.
+abstract interface class LanPurchaseInvoiceGateway {
+  Future<LanPurchasesPage> fetchPurchases({required int limit});
+
+  Future<LanPurchaseDetails?> fetchPurchaseDetails({required int purchaseId});
+
+  Future<LanPurchaseResult> createPurchase({
+    required LanRemoteUser actor,
+    required LanPurchaseRequest request,
+  });
+
+  Future<LanPurchaseResult> postPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  });
+
+  Future<LanPurchaseVoidResult> voidPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  });
+
+  Future<bool> deletePurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  });
+
+  Future<Map<String, dynamic>?> inspectPurchaseVoidImpact({
+    required int purchaseId,
+  });
+}
+
+/// Versioned LAN contract for transfers between company stock locations.
 ///
 /// It is deliberately separate from [LanMasterBusinessGateway] so older test
 /// and integration gateways remain valid. The server advertises the matching
@@ -3273,19 +3984,35 @@ class LanWarehouseTransferWarehouse {
     required this.id,
     required this.code,
     required this.name,
+    this.branchName = '',
+    this.isBranchLocation = false,
+    this.canSource = true,
   });
 
   final String id;
   final String code;
   final String name;
+  final String branchName;
+  final bool isBranchLocation;
+  final bool canSource;
 
-  Map<String, dynamic> toJson() => {'id': id, 'code': code, 'name': name};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'code': code,
+    'name': name,
+    'branchName': branchName,
+    'isBranchLocation': isBranchLocation,
+    'canSource': canSource,
+  };
 
   factory LanWarehouseTransferWarehouse.fromJson(Map<String, dynamic> json) =>
       LanWarehouseTransferWarehouse(
         id: json['id']?.toString() ?? '',
         code: json['code']?.toString() ?? '',
         name: json['name']?.toString() ?? '',
+        branchName: json['branchName']?.toString() ?? '',
+        isBranchLocation: json['isBranchLocation'] == true,
+        canSource: json['canSource'] != false,
       );
 }
 
@@ -3381,24 +4108,43 @@ class LanWarehouseTransferLineRequest {
     required this.productId,
     required this.variantId,
     required this.quantity,
+    this.ownedQuantity,
+    this.consignmentQuantity,
   });
 
   final int productId;
   final int variantId;
   final int quantity;
+  final int? ownedQuantity;
+  final int? consignmentQuantity;
 
   Map<String, dynamic> toJson() => {
     'productId': productId,
     'variantId': variantId,
     'quantity': quantity,
+    if (ownedQuantity != null) 'ownedQuantity': ownedQuantity,
+    if (consignmentQuantity != null) 'consignmentQuantity': consignmentQuantity,
   };
 
-  factory LanWarehouseTransferLineRequest.fromJson(Map<String, dynamic> json) =>
-      LanWarehouseTransferLineRequest(
-        productId: (json['productId'] as num).toInt(),
-        variantId: (json['variantId'] as num).toInt(),
-        quantity: (json['quantity'] as num).toInt(),
-      );
+  factory LanWarehouseTransferLineRequest.fromJson(Map<String, dynamic> json) {
+    final quantity = (json['quantity'] as num).toInt();
+    final owned = (json['ownedQuantity'] as num?)?.toInt();
+    final consignment = (json['consignmentQuantity'] as num?)?.toInt();
+    if ((owned == null) != (consignment == null) ||
+        owned != null &&
+            (owned < 0 ||
+                consignment! < 0 ||
+                owned + consignment != quantity)) {
+      throw const FormatException('Transfer ownership quantities are invalid.');
+    }
+    return LanWarehouseTransferLineRequest(
+      productId: (json['productId'] as num).toInt(),
+      variantId: (json['variantId'] as num).toInt(),
+      quantity: quantity,
+      ownedQuantity: owned,
+      consignmentQuantity: consignment,
+    );
+  }
 }
 
 class LanWarehouseTransferCreateRequest {

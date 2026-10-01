@@ -78,16 +78,17 @@ class WarehouseTransferPreflight {
     required WarehouseOperationScope destination,
     required List<WarehouseTransferRequestLine> lines,
   }) => db.transaction(() async {
+    // The operator must control the source. The destination is a routing
+    // choice inside the same organization and will be authorized independently
+    // by its receiver when stock is accepted.
     await authorizeWarehouse(source.warehouseId);
-    await authorizeWarehouse(destination.warehouseId);
     await source.validate(db);
     await destination.validate(db);
     if (source.warehouseId == destination.warehouseId ||
-        source.branchId != destination.branchId ||
         source.organizationId != destination.organizationId ||
         source.databaseId != destination.databaseId) {
       throw StateError(
-        'Transfer requires distinct warehouses of the local branch',
+        'Transfer requires distinct warehouses in the same organization',
       );
     }
     if (lines.isEmpty || lines.length > 500) {
@@ -121,6 +122,7 @@ class WarehouseTransferPreflight {
         destination,
         line.productId,
         from.variantId,
+        allowMissingBalance: true,
       );
       if (!seen.add(from.variantId)) {
         throw ArgumentError('Duplicate transfer variant');
@@ -162,17 +164,45 @@ class WarehouseTransferPreflight {
             ],
           )
           .get();
-      if (ownershipRows.length != 2) {
-        throw StateError('Transfer warehouse ownership balance is missing');
+      final sourceOwnershipRows = ownershipRows
+          .where(
+            (row) => row.read<String>('warehouse_id') == source.warehouseId,
+          )
+          .toList(growable: false);
+      if (sourceOwnershipRows.length != 1) {
+        throw StateError('Transfer source ownership balance is missing');
       }
-      final sourceOwnership = ownershipRows.singleWhere(
-        (row) => row.read<String>('warehouse_id') == source.warehouseId,
-      );
+      final sourceOwnership = sourceOwnershipRows.single;
       final sourceSupplierOwned = sourceOwnership.read<int>(
         'supplier_owned_quantity',
       );
       if (sourceSupplierOwned < 0 || sourceSupplierOwned > from.quantity) {
         throw StateError('Invalid supplier-owned source balance');
+      }
+      final destinationOwnershipRows = ownershipRows
+          .where(
+            (row) =>
+                row.read<String>('warehouse_id') == destination.warehouseId,
+          )
+          .toList(growable: false);
+      if (destinationOwnershipRows.length > 1) {
+        throw StateError('Duplicate transfer destination ownership balance');
+      }
+      if (destinationOwnershipRows.isNotEmpty) {
+        final destinationOwnership = destinationOwnershipRows.single;
+        final destinationQuantity = destinationOwnership.read<int>('quantity');
+        final destinationSupplierOwned = destinationOwnership.read<int>(
+          'supplier_owned_quantity',
+        );
+        final destinationCost = destinationOwnership.read<int>(
+          'unit_cost_cents',
+        );
+        if (destinationQuantity < 0 ||
+            destinationSupplierOwned < 0 ||
+            destinationSupplierOwned > destinationQuantity ||
+            destinationCost < 0) {
+          throw StateError('Invalid transfer destination balance');
+        }
       }
       final layers = <WarehouseTransferLayer>[];
       final state = <Object?>[

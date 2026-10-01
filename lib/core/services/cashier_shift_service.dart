@@ -352,6 +352,47 @@ class CashierShiftService {
     });
   }
 
+  Future<Map<String, int>> _saleInitialTender(Sale sale) async {
+    final rows = await (db.select(
+      db.salePayments,
+    )..where((p) => p.saleId.equals(sale.id))).get();
+    if (rows.isEmpty) {
+      return {sale.paymentMethod: sale.paidAmountCents.toBigInt().toInt()};
+    }
+    final totals = <String, int>{};
+    for (final p in rows.where((p) => p.cashierShiftId == null)) {
+      totals.update(
+        p.paymentMethod,
+        (v) => v + p.amountCents.toBigInt().toInt(),
+        ifAbsent: () => p.amountCents.toBigInt().toInt(),
+      );
+    }
+    return totals;
+  }
+
+  Future<Map<String, int>> _returnTender(
+    String source,
+    int id,
+    String method,
+    int total,
+  ) async {
+    if (method != 'mixed') return {method: total};
+    final rows = await db
+        .customSelect(
+          "SELECT transaction_type, SUM(amount_cents) amount FROM customer_transactions WHERE reference_type=? AND reference_id=? AND transaction_type IN ('return_settlement_cash','return_settlement_card','return_settlement_bank_transfer','return_settlement_mobile','return_settlement_loyalty') GROUP BY transaction_type",
+          variables: [Variable.withString(source), Variable.withInt(id)],
+        )
+        .get();
+    return {
+      for (final row in rows)
+        row
+            .read<String>('transaction_type')
+            .substring('return_settlement_'.length): row.read<int>(
+          'amount',
+        ),
+    };
+  }
+
   Future<CashierShiftSummary> getSummary(int shiftId) async {
     final shift = await (db.select(
       db.cashierShifts,
@@ -378,9 +419,17 @@ class CashierShiftService {
                   r.cashierShiftId.equals(shiftId) & r.status.equals('posted'),
             ))
             .get();
-    final payments = await (db.select(
-      db.salePayments,
-    )..where((p) => p.cashierShiftId.equals(shiftId))).get();
+    final payments =
+        await (db.select(db.salePayments)..where(
+              (p) =>
+                  p.cashierShiftId.equals(shiftId) &
+                  p.saleId.isInQuery(
+                    db.selectOnly(db.sales)
+                      ..addColumns([db.sales.id])
+                      ..where(db.sales.status.equals('completed')),
+                  ),
+            ))
+            .get();
 
     final localSales = sales.where((e) => e.currencyId == currencyId).toList();
     final localLinked = linkedReturns
@@ -397,12 +446,11 @@ class CashierShiftService {
     final receivedByMethod = <String, int>{};
     final refundedByMethod = <String, int>{};
     for (final sale in localSales) {
-      final paid = amount(sale.paidAmountCents);
-      if (paid > 0) {
+      for (final entry in (await _saleInitialTender(sale)).entries) {
         receivedByMethod.update(
-          sale.paymentMethod,
-          (v) => v + paid,
-          ifAbsent: () => paid,
+          entry.key,
+          (v) => v + entry.value,
+          ifAbsent: () => entry.value,
         );
       }
     }
@@ -415,20 +463,32 @@ class CashierShiftService {
       );
     }
     for (final ret in localLinked) {
-      final refund = amount(ret.totalCents);
-      refundedByMethod.update(
+      for (final entry in (await _returnTender(
+        'sale_return',
+        ret.id,
         ret.refundMethod,
-        (v) => v + refund,
-        ifAbsent: () => refund,
-      );
+        amount(ret.totalCents),
+      )).entries) {
+        refundedByMethod.update(
+          entry.key,
+          (v) => v + entry.value,
+          ifAbsent: () => entry.value,
+        );
+      }
     }
     for (final ret in localAdjustments) {
-      final refund = amount(ret.totalCents);
-      refundedByMethod.update(
+      for (final entry in (await _returnTender(
+        'sale_return_adjustment',
+        ret.id,
         ret.refundMethod,
-        (v) => v + refund,
-        ifAbsent: () => refund,
-      );
+        amount(ret.totalCents),
+      )).entries) {
+        refundedByMethod.update(
+          entry.key,
+          (v) => v + entry.value,
+          ifAbsent: () => entry.value,
+        );
+      }
     }
     final methods = {
       ...receivedByMethod.keys,
@@ -502,14 +562,13 @@ class CashierShiftService {
     final saleById = {for (final sale in sales) sale.id: sale};
     for (final sale in sales) {
       final c = currencyById[sale.currencyId];
-      final paid = sale.paidAmountCents.toBigInt().toInt();
       rows.add(
         ShiftTransactionView(
           kind: ShiftTransactionKind.sale,
           sourceId: sale.id,
           documentNumber: sale.invoiceNumber,
           amountCents: sale.totalCents.toBigInt().toInt(),
-          cashImpactCents: sale.paymentMethod == 'cash' ? paid : 0,
+          cashImpactCents: (await _saleInitialTender(sale))['cash'] ?? 0,
           paymentMethod: sale.paymentMethod,
           currencyCode: c?.code ?? '',
           currencySymbol: c?.symbol ?? '',
@@ -530,7 +589,14 @@ class CashierShiftService {
           sourceId: ret.id,
           documentNumber: ret.returnNumber,
           amountCents: value,
-          cashImpactCents: ret.refundMethod == 'cash' ? -value : 0,
+          cashImpactCents:
+              -((await _returnTender(
+                    'sale_return',
+                    ret.id,
+                    ret.refundMethod,
+                    value,
+                  ))['cash'] ??
+                  0),
           paymentMethod: ret.refundMethod,
           currencyCode: c?.code ?? '',
           currencySymbol: c?.symbol ?? '',
@@ -551,7 +617,14 @@ class CashierShiftService {
           sourceId: ret.id,
           documentNumber: ret.returnNumber,
           amountCents: value,
-          cashImpactCents: ret.refundMethod == 'cash' ? -value : 0,
+          cashImpactCents:
+              -((await _returnTender(
+                    'sale_return_adjustment',
+                    ret.id,
+                    ret.refundMethod,
+                    value,
+                  ))['cash'] ??
+                  0),
           paymentMethod: ret.refundMethod,
           currencyCode: c?.code ?? '',
           currencySymbol: c?.symbol ?? '',
@@ -560,9 +633,17 @@ class CashierShiftService {
         ),
       );
     }
-    final payments = await (db.select(
-      db.salePayments,
-    )..where((p) => p.cashierShiftId.equals(shiftId))).get();
+    final payments =
+        await (db.select(db.salePayments)..where(
+              (p) =>
+                  p.cashierShiftId.equals(shiftId) &
+                  p.saleId.isInQuery(
+                    db.selectOnly(db.sales)
+                      ..addColumns([db.sales.id])
+                      ..where(db.sales.status.equals('completed')),
+                  ),
+            ))
+            .get();
     for (final payment in payments) {
       final c = currencyById[payment.currencyId];
       final parent =

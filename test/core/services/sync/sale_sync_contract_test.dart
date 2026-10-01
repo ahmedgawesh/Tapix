@@ -119,7 +119,9 @@ Future<int> _sell(
   required int variantId,
   required String key,
   String? consignmentLayerId,
+  int? employeeId,
 }) => fixture.sales.createSale(
+  employeeId: employeeId,
   currencyId: fixture.currencyId,
   subtotalCents: Decimal.fromInt(2000),
   discountCents: Decimal.fromInt(100),
@@ -183,6 +185,17 @@ Future<int> _returnOne(
   );
 }
 
+Future<int> _salesperson(_Fixture fixture, {int rateBps = 100}) => fixture.db
+    .into(fixture.db.employees)
+    .insert(
+      EmployeesCompanion.insert(
+        name: 'Synchronized salesperson',
+        currencyId: fixture.currencyId,
+        commissionType: const Value('percentage'),
+        defaultCommissionRateBps: Value(rateBps),
+      ),
+    );
+
 void main() {
   test('single-branch sale does not create a cloud outbox event', () async {
     final fixture = await _fixture();
@@ -244,6 +257,52 @@ void main() {
       expect(payload['contract'], 'sale.posted');
       expect(payload['totalMinor'], 2090);
       expect(payload['actorRef']['localId'], fixture.userId);
+    },
+  );
+
+  test(
+    'sale and linked return serialize salesperson commission as integer bps',
+    () async {
+      final fixture = await _fixture();
+      addTearDown(fixture.db.close);
+      await OfflineSyncEventStore(fixture.db).activateWriterRecording(
+        enrollmentId: '21212121-2121-4121-8121-212121212121',
+      );
+      final employeeId = await _salesperson(fixture, rateBps: 125);
+      final ids = await _product(fixture, name: 'Commissioned sync item');
+      final saleId = await _sell(
+        fixture,
+        productId: ids.$1,
+        variantId: ids.$2,
+        employeeId: employeeId,
+        key: 'sale-sync-commission-integer',
+      );
+      await _returnOne(
+        fixture,
+        saleId: saleId,
+        key: 'sale-return-sync-commission-integer',
+      );
+
+      final rows = await fixture.db
+          .customSelect(
+            'SELECT event_type,payload_json FROM sync_outbox_events '
+            "WHERE event_type IN ('sale.posted.v1','sale_return.posted.v1') "
+            'ORDER BY local_sequence',
+          )
+          .get();
+      expect(rows, hasLength(2));
+      for (final row in rows) {
+        final payload =
+            jsonDecode(row.read<String>('payload_json'))
+                as Map<String, dynamic>;
+        final commissions = payload['commissions'] as List<dynamic>;
+        expect(commissions, isNotEmpty);
+        for (final value in commissions) {
+          final rate = (value as Map<String, dynamic>)['rateBps'];
+          expect(rate, isA<int>());
+          expect(rate, 125);
+        }
+      }
     },
   );
 
@@ -348,6 +407,90 @@ void main() {
     },
   );
 
+  test('voiding a posted sale appends one immutable void event', () async {
+    final fixture = await _fixture();
+    addTearDown(fixture.db.close);
+    await OfflineSyncEventStore(fixture.db).activateWriterRecording(
+      enrollmentId: '31313131-3131-4131-8131-313131313131',
+    );
+    final ids = await _product(fixture, name: 'Voided online sale');
+    final saleId = await _sell(
+      fixture,
+      productId: ids.$1,
+      variantId: ids.$2,
+      key: 'sale-sync-void-source',
+    );
+
+    await fixture.sales.voidSale(saleId, actorUserId: fixture.userId);
+
+    final rows = await fixture.db
+        .customSelect(
+          'SELECT event_type,payload_json FROM sync_outbox_events '
+          'ORDER BY local_sequence',
+        )
+        .get();
+    expect(rows.map((row) => row.read<String>('event_type')), [
+      'sale.posted.v1',
+      'sale.voided.v1',
+    ]);
+    final payload =
+        jsonDecode(rows.last.read<String>('payload_json'))
+            as Map<String, dynamic>;
+    expect(payload['contract'], 'sale.voided');
+    expect(payload['sourceDocumentRef']['localId'], saleId);
+    expect(payload['actorRef']['localId'], fixture.userId);
+    expect(payload['voidedAt'], isNotEmpty);
+  });
+
+  test(
+    'voiding a posted return appends its tombstone and audit metadata',
+    () async {
+      final fixture = await _fixture();
+      addTearDown(fixture.db.close);
+      await OfflineSyncEventStore(fixture.db).activateWriterRecording(
+        enrollmentId: '32323232-3232-4232-8232-323232323232',
+      );
+      final ids = await _product(fixture, name: 'Voided online return');
+      final saleId = await _sell(
+        fixture,
+        productId: ids.$1,
+        variantId: ids.$2,
+        key: 'sale-sync-return-void-source',
+      );
+      final returnId = await _returnOne(
+        fixture,
+        saleId: saleId,
+        key: 'sale-sync-return-to-void',
+      );
+
+      await fixture.sales.voidSaleReturn(returnId);
+
+      final rows = await fixture.db
+          .customSelect(
+            'SELECT event_type,payload_json FROM sync_outbox_events '
+            'ORDER BY local_sequence',
+          )
+          .get();
+      expect(rows.map((row) => row.read<String>('event_type')), [
+        'sale.posted.v1',
+        'sale_return.posted.v1',
+        'sale_return.voided.v1',
+      ]);
+      final payload =
+          jsonDecode(rows.last.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      expect(payload['contract'], 'sale_return.voided');
+      expect(payload['sourceDocumentRef']['localId'], returnId);
+      expect(payload['originalSaleRef']['localId'], saleId);
+      final stored = await (fixture.db.select(
+        fixture.db.saleReturns,
+      )..where((row) => row.id.equals(returnId))).getSingle();
+      expect(stored.status, 'voided');
+      expect(stored.voidedBy, fixture.userId);
+      expect(stored.voidedAt, isNotNull);
+    },
+  );
+
   test('damaged linked return never advertises sellable stock', () async {
     final fixture = await _fixture();
     addTearDown(fixture.db.close);
@@ -391,6 +534,7 @@ void main() {
       final fixture = await _fixture();
       addTearDown(fixture.db.close);
       final ids = await _product(fixture, name: 'Consignment sync item');
+      final employeeId = await _salesperson(fixture, rateBps: 100);
       final supplierId = await fixture.db
           .into(fixture.db.suppliers)
           .insert(
@@ -460,6 +604,7 @@ void main() {
         variantId: ids.$2,
         key: 'sale-sync-consignment-source',
         consignmentLayerId: layer.id,
+        employeeId: employeeId,
       );
       await _returnOne(
         fixture,
@@ -478,6 +623,12 @@ void main() {
       final line =
           (payload['items'] as List<dynamic>).single as Map<String, dynamic>;
       expect(line['consignmentQuantityScaled'], 1);
+      final commissions = payload['commissions'] as List<dynamic>;
+      expect(commissions, isNotEmpty);
+      expect(
+        (commissions.single as Map<String, dynamic>)['rateBps'],
+        isA<int>(),
+      );
       final reversal =
           (line['consignmentReversals'] as List<dynamic>).single
               as Map<String, dynamic>;

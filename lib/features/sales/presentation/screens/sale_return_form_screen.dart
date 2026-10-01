@@ -793,9 +793,11 @@ class _SaleReturnFormViewState extends State<_SaleReturnFormView> {
                 );
               }).toList(),
             ),
-            if (const {'write_off', 'damaged', 'scrap'}.contains(
-              state.dispositionType,
-            )) ...[
+            if (const {
+              'write_off',
+              'damaged',
+              'scrap',
+            }.contains(state.dispositionType)) ...[
               const SizedBox(height: 14),
               Divider(color: cs.outlineVariant),
               const SizedBox(height: 8),
@@ -815,23 +817,23 @@ class _SaleReturnFormViewState extends State<_SaleReturnFormView> {
               const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
-                children: const ['supplier', 'company'].map((value) {
-                  final selected =
-                      state.consignmentLiabilityResponsibility == value;
-                  return ChoiceChip(
-                    label: Text(
-                      'sales.consignment_liability_$value'.tr(),
-                    ),
-                    selected: selected,
-                    onSelected: (_) =>
-                        context.read<SaleReturnFormBloc>().add(
-                          SaleReturnConsignmentLiabilityChanged(
-                            responsibility: value,
-                            reason: state.consignmentLiabilityReason,
-                          ),
-                        ),
-                  );
-                }).toList(growable: false),
+                children: const ['supplier', 'company']
+                    .map((value) {
+                      final selected =
+                          state.consignmentLiabilityResponsibility == value;
+                      return ChoiceChip(
+                        label: Text('sales.consignment_liability_$value'.tr()),
+                        selected: selected,
+                        onSelected: (_) =>
+                            context.read<SaleReturnFormBloc>().add(
+                              SaleReturnConsignmentLiabilityChanged(
+                                responsibility: value,
+                                reason: state.consignmentLiabilityReason,
+                              ),
+                            ),
+                      );
+                    })
+                    .toList(growable: false),
               ),
               const SizedBox(height: 10),
               TextFormField(
@@ -839,17 +841,14 @@ class _SaleReturnFormViewState extends State<_SaleReturnFormView> {
                 maxLength: 500,
                 decoration: InputDecoration(
                   labelText: 'sales.consignment_liability_reason'.tr(),
-                  helperText:
-                      'sales.consignment_liability_reason_help'.tr(),
+                  helperText: 'sales.consignment_liability_reason_help'.tr(),
                 ),
-                onChanged: (value) =>
-                    context.read<SaleReturnFormBloc>().add(
-                      SaleReturnConsignmentLiabilityChanged(
-                        responsibility:
-                            state.consignmentLiabilityResponsibility,
-                        reason: value,
-                      ),
-                    ),
+                onChanged: (value) => context.read<SaleReturnFormBloc>().add(
+                  SaleReturnConsignmentLiabilityChanged(
+                    responsibility: state.consignmentLiabilityResponsibility,
+                    reason: value,
+                  ),
+                ),
               ),
             ],
           ],

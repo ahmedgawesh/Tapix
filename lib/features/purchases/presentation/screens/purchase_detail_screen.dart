@@ -10,6 +10,9 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/lan_void_impact_codec.dart';
+import '../services/lan_purchase_entity_mapper.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../../core/widgets/void_impact_dialog.dart';
@@ -36,6 +39,30 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   List<PurchaseItemEntity> _items = [];
   List<PurchaseReturnEntity> _returns = [];
   bool _loading = true;
+  bool _acting = false;
+  String? _loadError;
+  LanPurchaseDetails? _remoteDetails;
+
+  bool get _isRemote =>
+      sl.isRegistered<LanNetworkService>() &&
+      sl<LanNetworkService>().snapshot.mode == LanMode.client;
+
+  bool _remotePermission(String permission) =>
+      sl<LanNetworkService>().remoteUser?.permissions.contains(permission) ==
+      true;
+
+  String _errorMessage(Object error) {
+    if (error is LanBusinessException) {
+      final key = switch (error.code) {
+        'authentication_required' => 'purchases.remote_session_required',
+        'lan_capability_required' => 'purchases.remote_update_required',
+        'remote_request_failed' => 'purchases.remote_connection_failed',
+        _ => null,
+      };
+      return key == null ? error.message : key.tr();
+    }
+    return error.toString();
+  }
 
   @override
   void initState() {
@@ -44,23 +71,44 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   }
 
   Future<void> _loadPurchase() async {
-    final repo = sl<PurchaseRepository>();
-    final purchase = await repo.getPurchaseById(widget.purchaseId);
-
-    // Repair legacy supplier accounting for already-posted purchases (idempotent).
-    if (purchase != null && purchase.status == 'posted') {
-      await sl<AppDatabase>().purchaseDao
-          .ensureSupplierAccountingForPostedPurchase(widget.purchaseId);
-    }
-
-    final items = await repo.getPurchaseItems(widget.purchaseId);
-    final returns = await repo.getPurchaseReturns(widget.purchaseId);
-    if (mounted) {
+    try {
+      PurchaseEntity? purchase;
+      List<PurchaseItemEntity> items;
+      List<PurchaseReturnEntity> returns;
+      if (_isRemote) {
+        final details = await sl<LanNetworkService>()
+            .fetchRemotePurchaseDetails(widget.purchaseId);
+        purchase = lanPurchaseEntity(details.purchase);
+        items = details.lines
+            .map(lanPurchaseItemEntity)
+            .toList(growable: false);
+        returns = details.returns
+            .map(lanPurchaseReturnEntity)
+            .toList(growable: false);
+        _remoteDetails = details;
+      } else {
+        final repo = sl<PurchaseRepository>();
+        purchase = await repo.getPurchaseById(widget.purchaseId);
+        if (purchase != null && purchase.status == 'posted') {
+          await sl<AppDatabase>().purchaseDao
+              .ensureSupplierAccountingForPostedPurchase(widget.purchaseId);
+        }
+        items = await repo.getPurchaseItems(widget.purchaseId);
+        returns = await repo.getPurchaseReturns(widget.purchaseId);
+      }
+      if (!mounted) return;
       setState(() {
         _purchase = purchase;
         _items = items;
         _returns = returns;
         _loading = false;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadError = _errorMessage(error);
       });
     }
   }
@@ -78,7 +126,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       );
     }
 
-    if (_purchase == null) {
+    if (_purchase == null || _loadError != null) {
       return Scaffold(
         appBar: AppBar(title: Text('purchases.title'.tr())),
         body: Center(
@@ -88,9 +136,16 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
               Text(
-                'purchases.not_found'.tr(),
+                _loadError ?? 'purchases.not_found'.tr(),
                 style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
               ),
+              if (_loadError != null)
+                TextButton.icon(
+                  onPressed: _loadPurchase,
+                  icon: const Icon(LucideIcons.refreshCw),
+                  label: Text('common.retry'.tr()),
+                ),
             ],
           ),
         ),
@@ -131,8 +186,22 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
 
   List<Widget> _buildActions(PurchaseEntity purchase, ColorScheme colorScheme) {
     final actions = <Widget>[];
+    if (_acting) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(12),
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      ];
+    }
+    final canManage =
+        !_isRemote || _remotePermission(Permissions.managePurchases);
 
-    if (purchase.isDraft) {
+    if (purchase.isDraft && canManage) {
       actions.add(
         FilledButton.tonalIcon(
           onPressed: () => _handleAction('post', context),
@@ -146,15 +215,16 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           icon: const Icon(LucideIcons.moreVertical),
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'edit',
-              child: ListTile(
-                leading: const Icon(LucideIcons.edit3),
-                title: Text('purchases.edit'.tr()),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
+            if (!_isRemote)
+              PopupMenuItem(
+                value: 'edit',
+                child: ListTile(
+                  leading: const Icon(LucideIcons.edit3),
+                  title: Text('purchases.edit'.tr()),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
-            ),
             PopupMenuItem(
               value: 'delete',
               child: ListTile(
@@ -174,21 +244,24 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
 
     if (purchase.isPosted) {
       // Check if user has edit permission
-      final authState = context.read<AuthBloc>().state;
+      final authState = _isRemote ? null : context.read<AuthBloc>().state;
       final canEdit =
+          !_isRemote &&
           authState is AuthAuthenticated &&
           sl<PermissionService>().hasPermission(
             authState.user,
             Permissions.editTransactions,
           );
 
-      actions.add(
-        FilledButton.tonalIcon(
-          onPressed: () => _handleAction('return', context),
-          icon: const Icon(LucideIcons.undo2, size: 16),
-          label: Text('purchases.create_return'.tr()),
-        ),
-      );
+      if (canManage) {
+        actions.add(
+          FilledButton.tonalIcon(
+            onPressed: () => _handleAction('return', context),
+            icon: const Icon(LucideIcons.undo2, size: 16),
+            label: Text('purchases.create_return'.tr()),
+          ),
+        );
+      }
       actions.add(const SizedBox(width: 4));
       actions.add(
         PopupMenuButton<String>(
@@ -223,28 +296,33 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            PopupMenuItem(
-              value: 'print_labels',
-              child: ListTile(
-                leading: const Icon(LucideIcons.scanLine),
-                title: Text('purchases.print_labels'.tr()),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'void',
-              child: ListTile(
-                leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                title: Text(
-                  'purchases.void_purchase'.tr(),
-                  style: TextStyle(color: colorScheme.error),
+            if (!_isRemote)
+              PopupMenuItem(
+                value: 'print_labels',
+                child: ListTile(
+                  leading: const Icon(LucideIcons.scanLine),
+                  title: Text('purchases.print_labels'.tr()),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
               ),
-            ),
+            if (canManage &&
+                (!_isRemote || _remotePermission(Permissions.voidTransactions)))
+              const PopupMenuDivider(),
+            if (canManage &&
+                (!_isRemote || _remotePermission(Permissions.voidTransactions)))
+              PopupMenuItem(
+                value: 'void',
+                child: ListTile(
+                  leading: Icon(LucideIcons.ban, color: colorScheme.error),
+                  title: Text(
+                    'purchases.void_purchase'.tr(),
+                    style: TextStyle(color: colorScheme.error),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
           ],
         ),
       );
@@ -1292,31 +1370,39 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 14, color: valueColor ?? cs.onSurfaceVariant),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: style?.copyWith(
-                color: isBold ? null : cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        Text(
-          value,
-          style:
-              (isBold
-                      ? theme.textTheme.titleMedium
-                      : theme.textTheme.bodyMedium)
-                  ?.copyWith(
-                    color: valueColor,
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+        Expanded(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 14, color: valueColor ?? cs.onSurfaceVariant),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  style: style?.copyWith(
+                    color: isBold ? null : cs.onSurfaceVariant,
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style:
+                (isBold
+                        ? theme.textTheme.titleMedium
+                        : theme.textTheme.bodyMedium)
+                    ?.copyWith(
+                      color: valueColor,
+                      fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                    ),
+          ),
         ),
       ],
     );
@@ -1570,254 +1656,291 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   // ACTIONS
   // ═══════════════════════════════════════════════════════
   void _handleAction(String action, BuildContext context) async {
-    final repo = sl<PurchaseRepository>();
+    final repo = _isRemote ? null : sl<PurchaseRepository>();
+    final lan = _isRemote ? sl<LanNetworkService>() : null;
     final messenger = ScaffoldMessenger.of(context);
     final errorColor = Theme.of(context).colorScheme.error;
     final router = GoRouter.of(context);
 
-    switch (action) {
-      case 'post':
-        try {
-          await repo.postPurchase(widget.purchaseId);
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('purchases.posted_success'.tr()),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          _loadPurchase();
-        } catch (e) {
-          debugPrint('[PurchaseDetailScreen] postPurchase failed: $e');
-          if (!mounted) return;
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(e.toString()),
-              backgroundColor: errorColor,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
-        break;
-      case 'edit':
-        router.push('/purchases/${widget.purchaseId}/edit');
-        break;
-      case 'edit_posted':
-        // Navigate to purchase form for editing a posted purchase
-        router.push('/purchases/${widget.purchaseId}/edit?posted=true');
-        break;
-      case 'void':
-        // Check if PIN is required for void/refund
-        final voidSettings = context.read<AppSettingsBloc>().state.settings;
-        if (voidSettings.requirePinForVoidRefund) {
-          final pinOk = await showPinVerificationDialog(context);
-          if (!pinOk || !context.mounted) return;
-        }
-        if (!context.mounted) return;
-        // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
-        // Surfaces entangled adjustment returns, projected negative stock,
-        // and estimated GL impact (AP/Inventory) BEFORE the void runs.
-        final report = await VoidImpactAnalyzer(
-          sl<AppDatabase>(),
-        ).analyzePurchaseVoid(widget.purchaseId);
-        if (!context.mounted) return;
-        final confirmed = await VoidImpactDialog.show(context, report);
-        if (confirmed) {
+    if (_acting) return;
+    setState(() => _acting = true);
+    try {
+      switch (action) {
+        case 'post':
           try {
-            await repo.voidPurchase(widget.purchaseId);
+            if (lan != null) {
+              await lan.postRemotePurchase(widget.purchaseId);
+            } else {
+              await repo!.postPurchase(widget.purchaseId);
+            }
             if (!mounted) return;
             messenger.showSnackBar(
               SnackBar(
-                content: Text('purchases.voided_success'.tr()),
+                content: Text('purchases.posted_success'.tr()),
                 behavior: SnackBarBehavior.floating,
               ),
             );
             _loadPurchase();
-          } on VoidBlockedByImpactException catch (e) {
-            // Defensive: blocker added between analyze and execute.
-            if (!context.mounted) return;
-            await VoidImpactDialog.show(context, e.report);
           } catch (e) {
-            debugPrint('[PurchaseDetailScreen] voidPurchase failed: $e');
+            debugPrint('[PurchaseDetailScreen] postPurchase failed: $e');
             if (!mounted) return;
-            final errorMsg = e.toString().replaceFirst('Exception: ', '');
-            if (!context.mounted) return;
-            showDialog<void>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                icon: Icon(
-                  LucideIcons.alertTriangle,
-                  color: errorColor,
-                  size: 32,
-                ),
-                title: Text('purchases.void_failed_title'.tr()),
-                content: Text(errorMsg),
-                actions: [
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: Text('common.ok'.tr()),
-                  ),
-                ],
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: errorColor,
+                behavior: SnackBarBehavior.floating,
               ),
             );
           }
-        }
-        break;
-      case 'delete':
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('purchases.delete_confirm_title'.tr()),
-            content: Text('purchases.delete_confirm_message'.tr()),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: Text('common.cancel'.tr()),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(backgroundColor: errorColor),
-                child: Text('purchases.delete'.tr()),
-              ),
-            ],
+          break;
+        case 'edit':
+          router.push('/purchases/${widget.purchaseId}/edit');
+          break;
+        case 'edit_posted':
+          // Navigate to purchase form for editing a posted purchase
+          router.push('/purchases/${widget.purchaseId}/edit?posted=true');
+          break;
+        case 'void':
+          // Check if PIN is required for void/refund
+          final voidSettings = context.read<AppSettingsBloc>().state.settings;
+          if (voidSettings.requirePinForVoidRefund) {
+            final pinOk = await showPinVerificationDialog(context);
+            if (!pinOk || !context.mounted) return;
+          }
+          if (!context.mounted) return;
+          // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
+          // Surfaces entangled adjustment returns, projected negative stock,
+          // and estimated GL impact (AP/Inventory) BEFORE the void runs.
+          final report = lan != null
+              ? lanVoidImpactFromJson(
+                  await lan.fetchRemotePurchaseVoidImpact(widget.purchaseId),
+                )
+              : await VoidImpactAnalyzer(
+                  sl<AppDatabase>(),
+                ).analyzePurchaseVoid(widget.purchaseId);
+          if (!context.mounted) return;
+          final confirmed = await VoidImpactDialog.show(context, report);
+          if (confirmed) {
+            try {
+              if (lan != null) {
+                await lan.voidRemotePurchase(widget.purchaseId);
+              } else {
+                await repo!.voidPurchase(widget.purchaseId);
+              }
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('purchases.voided_success'.tr()),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              _loadPurchase();
+            } on VoidBlockedByImpactException catch (e) {
+              // Defensive: blocker added between analyze and execute.
+              if (!context.mounted) return;
+              await VoidImpactDialog.show(context, e.report);
+            } catch (e) {
+              debugPrint('[PurchaseDetailScreen] voidPurchase failed: $e');
+              if (!mounted) return;
+              final errorMsg = e.toString().replaceFirst('Exception: ', '');
+              if (!context.mounted) return;
+              showDialog<void>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  icon: Icon(
+                    LucideIcons.alertTriangle,
+                    color: errorColor,
+                    size: 32,
+                  ),
+                  title: Text('purchases.void_failed_title'.tr()),
+                  content: Text(errorMsg),
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text('common.ok'.tr()),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+          break;
+        case 'delete':
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text('purchases.delete_confirm_title'.tr()),
+              content: Text('purchases.delete_confirm_message'.tr()),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('common.cancel'.tr()),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: FilledButton.styleFrom(backgroundColor: errorColor),
+                  child: Text('purchases.delete'.tr()),
+                ),
+              ],
+            ),
+          );
+          if (confirmed == true) {
+            try {
+              if (lan != null) {
+                await lan.deleteRemotePurchase(widget.purchaseId);
+              } else {
+                await repo!.deletePurchase(widget.purchaseId);
+              }
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('purchases.deleted_success'.tr()),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+              router.pop();
+            } catch (e) {
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: errorColor,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+          break;
+        case 'print':
+          if (_purchase != null) {
+            try {
+              await PurchasePdfService.printPurchaseInvoice(
+                context: context,
+                purchase: _purchase!,
+                items: _items,
+                supplierBalanceCents: _remoteDetails?.supplierBalanceCents,
+              );
+            } catch (e) {
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: errorColor,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+          break;
+        case 'share':
+          if (_purchase != null) {
+            try {
+              await PurchasePdfService.sharePurchaseInvoice(
+                context: context,
+                purchase: _purchase!,
+                items: _items,
+                supplierBalanceCents: _remoteDetails?.supplierBalanceCents,
+              );
+            } catch (e) {
+              if (!mounted) return;
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(e.toString()),
+                  backgroundColor: errorColor,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          }
+          break;
+        case 'print_labels':
+          // Navigate to barcode design screen with invoice data for label printing
+          if (_items.isNotEmpty && _purchase != null) {
+            final lines = <InvoiceLinePrintData>[];
+            for (final item in _items) {
+              // Use variant barcode or generate a fallback
+              final barcode =
+                  item.variantSku ?? '${item.variantId ?? item.productId}';
+              // Try to get the actual barcode from the variant
+              String? actualBarcode;
+              if (item.variantId != null) {
+                final variant = await sl<ProductVariantRepository>()
+                    .getVariantById(item.variantId!);
+                actualBarcode = variant?.barcode;
+              }
+              if (actualBarcode == null || actualBarcode.trim().isEmpty) {
+                // Skip items without barcodes
+                continue;
+              }
+              // Use variant selling price (not purchase cost price) for barcode labels
+              int sellingPriceCents;
+              int? wholesalePriceCents;
+              if (item.variantId != null) {
+                final variantForPrice = await sl<ProductVariantRepository>()
+                    .getVariantById(item.variantId!);
+                sellingPriceCents =
+                    variantForPrice?.priceCents.toBigInt().toInt() ?? 0;
+                wholesalePriceCents = variantForPrice?.wholesalePriceCents
+                    ?.toBigInt()
+                    .toInt();
+              } else {
+                final productForPrice = await sl<ProductRepository>()
+                    .getProductById(item.productId);
+                sellingPriceCents =
+                    productForPrice?.priceCents.toBigInt().toInt() ?? 0;
+                wholesalePriceCents = productForPrice?.wholesalePriceCents
+                    ?.toBigInt()
+                    .toInt();
+              }
+              lines.add(
+                InvoiceLinePrintData(
+                  variantId: item.variantId ?? item.productId,
+                  quantity: item.quantity,
+                  productName: item.productName ?? 'Product #${item.productId}',
+                  colorName: item.colorName,
+                  sizeName: item.sizeName,
+                  barcode: actualBarcode,
+                  sku: item.variantSku ?? barcode,
+                  unitPriceCents: sellingPriceCents,
+                  sellingPriceCents: sellingPriceCents,
+                  wholesalePriceCents: wholesalePriceCents,
+                  isActive: true,
+                ),
+              );
+            }
+            final invoiceData = InvoicePrintData(
+              lines: lines,
+              invoiceType: 'purchase',
+              invoiceId: _purchase!.id,
+              invoiceNumber: _purchase!.purchaseNumber,
+              invoiceDate: _purchase!.purchaseDate,
+            );
+            router.push(
+              '/products/barcode-design',
+              extra: {'invoiceData': invoiceData},
+            );
+          }
+          break;
+        case 'return':
+          // In-invoice button always creates a LINKED return for this invoice.
+          // Adjustment (unlinked) returns are created from the Returns list.
+          await context.push(
+            '/purchases/returns/new?purchaseId=${widget.purchaseId}',
+          );
+          if (mounted) await _loadPurchase();
+          break;
+      }
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(_errorMessage(error)),
+            backgroundColor: errorColor,
           ),
         );
-        if (confirmed == true) {
-          try {
-            await repo.deletePurchase(widget.purchaseId);
-            if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text('purchases.deleted_success'.tr()),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-            router.pop();
-          } catch (e) {
-            if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(e.toString()),
-                backgroundColor: errorColor,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-        break;
-      case 'print':
-        if (_purchase != null) {
-          try {
-            await PurchasePdfService.printPurchaseInvoice(
-              context: context,
-              purchase: _purchase!,
-              items: _items,
-            );
-          } catch (e) {
-            if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(e.toString()),
-                backgroundColor: errorColor,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-        break;
-      case 'share':
-        if (_purchase != null) {
-          try {
-            await PurchasePdfService.sharePurchaseInvoice(
-              context: context,
-              purchase: _purchase!,
-              items: _items,
-            );
-          } catch (e) {
-            if (!mounted) return;
-            messenger.showSnackBar(
-              SnackBar(
-                content: Text(e.toString()),
-                backgroundColor: errorColor,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        }
-        break;
-      case 'print_labels':
-        // Navigate to barcode design screen with invoice data for label printing
-        if (_items.isNotEmpty && _purchase != null) {
-          final lines = <InvoiceLinePrintData>[];
-          for (final item in _items) {
-            // Use variant barcode or generate a fallback
-            final barcode =
-                item.variantSku ?? '${item.variantId ?? item.productId}';
-            // Try to get the actual barcode from the variant
-            String? actualBarcode;
-            if (item.variantId != null) {
-              final variant = await sl<ProductVariantRepository>()
-                  .getVariantById(item.variantId!);
-              actualBarcode = variant?.barcode;
-            }
-            if (actualBarcode == null || actualBarcode.trim().isEmpty) {
-              // Skip items without barcodes
-              continue;
-            }
-            // Use variant selling price (not purchase cost price) for barcode labels
-            int sellingPriceCents;
-            int? wholesalePriceCents;
-            if (item.variantId != null) {
-              final variantForPrice = await sl<ProductVariantRepository>()
-                  .getVariantById(item.variantId!);
-              sellingPriceCents =
-                  variantForPrice?.priceCents.toBigInt().toInt() ?? 0;
-              wholesalePriceCents = variantForPrice?.wholesalePriceCents
-                  ?.toBigInt()
-                  .toInt();
-            } else {
-              final productForPrice = await sl<ProductRepository>()
-                  .getProductById(item.productId);
-              sellingPriceCents =
-                  productForPrice?.priceCents.toBigInt().toInt() ?? 0;
-              wholesalePriceCents = productForPrice?.wholesalePriceCents
-                  ?.toBigInt()
-                  .toInt();
-            }
-            lines.add(
-              InvoiceLinePrintData(
-                variantId: item.variantId ?? item.productId,
-                quantity: item.quantity,
-                productName: item.productName ?? 'Product #${item.productId}',
-                colorName: item.colorName,
-                sizeName: item.sizeName,
-                barcode: actualBarcode,
-                sku: item.variantSku ?? barcode,
-                unitPriceCents: sellingPriceCents,
-                sellingPriceCents: sellingPriceCents,
-                wholesalePriceCents: wholesalePriceCents,
-                isActive: true,
-              ),
-            );
-          }
-          final invoiceData = InvoicePrintData(
-            lines: lines,
-            invoiceType: 'purchase',
-            invoiceId: _purchase!.id,
-            invoiceNumber: _purchase!.purchaseNumber,
-            invoiceDate: _purchase!.purchaseDate,
-          );
-          router.push(
-            '/products/barcode-design',
-            extra: {'invoiceData': invoiceData},
-          );
-        }
-        break;
-      case 'return':
-        // In-invoice button always creates a LINKED return for this invoice.
-        // Adjustment (unlinked) returns are created from the Returns list.
-        context.push('/purchases/returns/new?purchaseId=${widget.purchaseId}');
-        break;
+      }
+    } finally {
+      if (mounted) setState(() => _acting = false);
     }
   }
 }

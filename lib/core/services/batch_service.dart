@@ -185,6 +185,45 @@ class BatchService {
     );
   }
 
+  /// Recreates a tracked lot received from an independently owned branch
+  /// database. The source batch cannot be referenced by a local foreign key,
+  /// so immutable cross-database provenance is stored in
+  /// `distributed_transfer_batch_links` by the caller.
+  static Future<int> createBatchFromDistributedTransfer(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int productId,
+    required int variantId,
+    required String transferAllocationId,
+    int? supplierId,
+    required int quantity,
+    required int unitCostCents,
+    required DateTime receivedDate,
+    DateTime? expiryDate,
+    String? manufacturerLotNumber,
+    WarehouseOperationScope? scope,
+  }) async {
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
+    if (transferAllocationId.length != 36) {
+      throw ArgumentError.value(transferAllocationId, 'transferAllocationId');
+    }
+    return _insertBatch(
+      dao,
+      productId: productId,
+      variantId: variantId,
+      batchNumber:
+          'DTR-${transferAllocationId.substring(0, 8)}-${DateTime.now().microsecondsSinceEpoch}',
+      purchaseItemId: null,
+      supplierId: supplierId,
+      source: 'distributed_transfer',
+      receivedDate: receivedDate,
+      expiryDate: expiryDate,
+      manufacturerLotNumber: manufacturerLotNumber,
+      receivedQuantity: quantity,
+      unitCostCents: unitCostCents,
+      scope: scope,
+    );
+  }
+
   /// Move only the still-owned quantity into a new valuation layer. The old
   /// layer keeps its original cost for historical sale returns and reversals.
   static Future<int> revalueRemainingBatch(
@@ -907,6 +946,89 @@ class BatchService {
       unitCostCents: row.read<int>('unit_cost_cents'),
       transferAllocationId: transferAllocationId,
       notes: 'Recalled transfer allocation $transferAllocationId',
+    );
+    return expectedQuantity;
+  });
+
+  /// Restores the exact FIFO/lot row removed by a cross-database transfer.
+  /// The sidecar allocation owns idempotency; the batch ledger deliberately
+  /// carries no local warehouse-transfer FK because the destination document
+  /// lives in another database.
+  static Future<int> restoreDistributedTransferConsumption(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int consumptionId,
+    required int expectedBatchId,
+    required int expectedQuantity,
+    required String allocationId,
+    required WarehouseOperationScope scope,
+  }) => dao.attachedDatabase.transaction(() async {
+    await scope.validate(dao.attachedDatabase);
+    final linked = await dao
+        .customSelect(
+          '''SELECT 1 AS found FROM distributed_transfer_outbound_batch_links
+          WHERE allocation_id=? AND consumption_id=?''',
+          variables: [
+            Variable.withString(allocationId),
+            Variable.withInt(consumptionId),
+          ],
+        )
+        .getSingleOrNull();
+    final row = await dao
+        .customSelect(
+          '''SELECT batch_id,quantity,unit_cost_cents FROM batch_consumptions
+          WHERE id=? AND direction='out'
+            AND consumption_type='distributed_transfer_dispatch' ''',
+          variables: [Variable.withInt(consumptionId)],
+        )
+        .getSingleOrNull();
+    if (linked == null ||
+        row == null ||
+        row.read<int>('batch_id') != expectedBatchId ||
+        row.read<int>('quantity') != expectedQuantity) {
+      throw StateError('Distributed transfer batch evidence is incomplete');
+    }
+    final replay = await dao
+        .customSelect(
+          '''SELECT 1 AS found FROM batch_consumptions
+          WHERE batch_id=? AND direction='in'
+            AND consumption_type='distributed_transfer_recall'
+            AND notes=? LIMIT 1''',
+          variables: [
+            Variable.withInt(expectedBatchId),
+            Variable.withString('Distributed transfer recall $allocationId'),
+          ],
+        )
+        .getSingleOrNull();
+    if (replay != null) {
+      throw StateError('Distributed transfer batch was already recalled');
+    }
+    await WarehouseBatchScope.requireBatch(
+      dao.attachedDatabase,
+      expectedBatchId,
+      scope: scope,
+    );
+    final changed = await dao.customUpdate(
+      'UPDATE product_batches SET remaining_quantity=remaining_quantity+?,'
+      'updated_at=? WHERE id=? AND remaining_quantity+?<=received_quantity',
+      variables: [
+        Variable.withInt(expectedQuantity),
+        Variable.withString(DateTime.now().toUtc().toIso8601String()),
+        Variable.withInt(expectedBatchId),
+        Variable.withInt(expectedQuantity),
+      ],
+      updates: {dao.attachedDatabase.productBatches},
+    );
+    if (changed != 1) {
+      throw StateError('Distributed transfer batch cannot accept the recall');
+    }
+    await _insertConsumption(
+      dao,
+      batchId: expectedBatchId,
+      consumptionType: 'distributed_transfer_recall',
+      direction: 'in',
+      quantity: expectedQuantity,
+      unitCostCents: row.read<int>('unit_cost_cents'),
+      notes: 'Distributed transfer recall $allocationId',
     );
     return expectedQuantity;
   });

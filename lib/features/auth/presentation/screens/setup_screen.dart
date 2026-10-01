@@ -119,7 +119,83 @@ class _SetupScreenState extends State<SetupScreen> {
                         ),
                         textAlign: TextAlign.center,
                       ).tr(),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      Card(
+                        color: colorScheme.primaryContainer.withValues(
+                          alpha: 0.45,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    LucideIcons.network,
+                                    color: colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'auth.existing_company_device_title'
+                                              .tr(),
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'auth.existing_company_device_desc'
+                                              .tr(),
+                                          style: theme.textTheme.bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton.icon(
+                                onPressed: () =>
+                                    context.push('/device-connect'),
+                                icon: const Icon(LucideIcons.link),
+                                label: Text('auth.connect_company_device'.tr()),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    context.push('/branch-connect'),
+                                icon: const Icon(Icons.account_tree_outlined),
+                                label: Text(
+                                  'auth.join_independent_branch'.tr(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider()),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              'auth.create_new_company_here'.tr(),
+                              style: theme.textTheme.labelLarge,
+                            ),
+                          ),
+                          const Expanded(child: Divider()),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
                       Card(
                         color: colorScheme.surfaceContainerHighest,
                         child: Padding(
@@ -293,15 +369,6 @@ class _SetupScreenState extends State<SetupScreen> {
                         },
                       ),
                       const SizedBox(height: 32),
-                      OutlinedButton.icon(
-                        onPressed: () => context.push('/device-connect'),
-                        icon: const Icon(LucideIcons.network),
-                        label: Text('auth.connect_instead_of_owner'.tr()),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
                       BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
                         builder: (context, state) {
                           final isLoading = state is AuthLoading;

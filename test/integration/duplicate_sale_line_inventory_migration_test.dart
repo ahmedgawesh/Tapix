@@ -141,7 +141,7 @@ void main() {
       );
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
-      expect(migrated.schemaVersion, 10115);
+      expect(migrated.schemaVersion, 10119);
 
       final lines = await (migrated.select(
         migrated.saleItems,

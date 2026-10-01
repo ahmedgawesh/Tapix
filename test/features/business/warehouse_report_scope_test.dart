@@ -90,7 +90,8 @@ void main() {
     }
   }
 
-  test('secondary warehouse cannot inflate local stock or valuation', () async {
+  test('location report stays local while 1200 reconciliation includes every '
+      'organization warehouse', () async {
     final variant = await seed();
     final scope = await BusinessFoundationRepository(db).getScope();
     final other = const Uuid().v4();
@@ -114,9 +115,65 @@ void main() {
             unitCostCents: const Value(9000),
           ),
         );
+
+    // Warehouse reports answer "what is here?" and stay scoped to the
+    // selected location.
     expect((await report()).totalStockUnits, 12);
-    expect(await accounting(), 9612);
+
+    // Account 1200 is an organization-wide control account, so its health
+    // reconciliation must include the secondary warehouse as well.
+    expect(await accounting(), 9612 + (999 * 9000));
   });
+
+  test(
+    'simple FIFO product batch in a secondary warehouse is valued once',
+    () async {
+      await seed();
+      final scope = await BusinessFoundationRepository(db).getScope();
+      final other = const Uuid().v4();
+      await db
+          .into(db.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: other,
+              organizationId: scope.organizationId,
+              branchId: scope.branchId,
+              code: 'SECOND-FIFO',
+            ),
+          );
+
+      final productId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              name: 'Simple FIFO in secondary warehouse',
+              hasVariants: const Value(false),
+              costingMethod: const Value('fifo'),
+              inventoryTrackingType: const Value('batch'),
+              stockQuantity: const Value(3),
+              costCents: Decimal.fromInt(500),
+              priceCents: Decimal.fromInt(750),
+            ),
+          );
+      await db
+          .into(db.productBatches)
+          .insert(
+            ProductBatchesCompanion.insert(
+              warehouseId: Value(other),
+              productId: productId,
+              batchNumber: 'SECONDARY-SIMPLE-FIFO',
+              receivedQuantity: 3,
+              remainingQuantity: 3,
+              unitCostCents: Decimal.fromInt(500),
+            ),
+          );
+
+      // Existing primary stock = 9,612 cents. The secondary batch contributes
+      // 1,500 cents exactly once; the compatibility product total must not be
+      // counted again merely because the batch is outside the current warehouse.
+      expect(await accounting(), 11112);
+    },
+  );
 
   test('disabled warehouse remains visible in stock and accounting', () async {
     await seed();

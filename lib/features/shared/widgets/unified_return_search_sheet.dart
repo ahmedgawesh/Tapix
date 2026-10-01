@@ -67,8 +67,7 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
   final _currencyService = sl<CurrencyService>();
   final _lan = sl<LanNetworkService>();
 
-  bool get _isRemoteClient =>
-      _lan.snapshot.mode == LanMode.client && _lan.hasRemoteUserSession;
+  bool get _isRemoteClient => _lan.snapshot.mode == LanMode.client;
 
   List<InvoiceSearchResult> _invoices = [];
   List<ProductSearchResult> _products = [];

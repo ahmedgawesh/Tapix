@@ -110,6 +110,22 @@ class BranchTaxPolicyStore {
     return _save(scope, BranchTaxPolicy.fromLegacy(settings), 1);
   });
 
+  /// Initializes a newly enrolled branch from the coordinator's authoritative
+  /// policy. Replays are idempotent; a different existing policy is never
+  /// overwritten silently.
+  Future<BranchTaxPolicySnapshot> initializeExact(BranchTaxPolicy policy) =>
+      _db.transaction(() async {
+        final scope = await LocalBranchScope.read(_db);
+        final existing = await _read(scope);
+        if (existing != null) {
+          if (!existing.policy.hasSameValues(policy)) {
+            throw StateError('Branch tax policy is already bound differently.');
+          }
+          return existing;
+        }
+        return _save(scope, policy, 1);
+      });
+
   /// Call within the posting transaction to reject a stale preview token.
   Future<void> assertCurrent(BranchTaxPolicySnapshot expected) async {
     if (!identical(expected._database, _db)) {

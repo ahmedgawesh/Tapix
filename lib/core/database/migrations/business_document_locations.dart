@@ -41,21 +41,24 @@ String _journalOrigin(String alias) =>
           ELSE 'sales' END
         AND l.source_id = COALESCE(event.sale_return_id, event.sale_return_adjustment_id, event.sale_id)))
   UNION ALL
-  SELECT t.organization_id, t.branch_id, t.source_warehouse_id
+  SELECT w.organization_id, w.branch_id, w.id
   FROM warehouse_transfer_dispatches d
   JOIN warehouse_transfers t ON t.id=d.transfer_id
+  JOIN business_warehouses w ON w.id=t.source_warehouse_id
   WHERE $alias.source_table='warehouse_transfer_dispatches'
     AND d.id=$alias.source_id
   UNION ALL
-  SELECT t.organization_id, t.branch_id, t.destination_warehouse_id
+  SELECT w.organization_id, w.branch_id, w.id
   FROM warehouse_transfer_receipts r
   JOIN warehouse_transfers t ON t.id=r.transfer_id
+  JOIN business_warehouses w ON w.id=t.destination_warehouse_id
   WHERE $alias.source_table='warehouse_transfer_receipts'
     AND r.id=$alias.source_id
   UNION ALL
-  SELECT t.organization_id, t.branch_id, t.source_warehouse_id
+  SELECT w.organization_id, w.branch_id, w.id
   FROM warehouse_transfer_recalls recall
   JOIN warehouse_transfers t ON t.id=recall.transfer_id
+  JOIN business_warehouses w ON w.id=t.source_warehouse_id
   WHERE $alias.source_table='warehouse_transfer_recalls'
     AND recall.id=$alias.source_id
 )""";
@@ -126,11 +129,13 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
           : table == 'purchase_returns'
           ? "(SELECT l.warehouse_id FROM business_document_locations l WHERE l.source_table = 'purchases' AND l.source_id = NEW.purchase_id)"
           : 'warehouse_id';
+      final locationBranch =
+          '(SELECT w.branch_id FROM business_warehouses w WHERE w.id = $destination)';
       final routeGuard = routed
           ? """
         SELECT CASE WHEN NEW.warehouse_id IS NOT NULL AND NOT EXISTS (
           SELECT 1 FROM business_warehouses w JOIN business_contexts c
-            ON c.organization_id = w.organization_id AND c.branch_id = w.branch_id
+            ON c.organization_id = w.organization_id
           JOIN business_branches b ON b.id = w.branch_id AND b.organization_id = w.organization_id
           WHERE c.id = 1 AND w.id = NEW.warehouse_id AND w.is_active = 1 AND b.is_active = 1)
           THEN RAISE(ABORT, 'Invalid inventory warehouse') END;
@@ -141,7 +146,7 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
         SELECT CASE WHEN NEW.source_table = 'inventory_adjustments' AND NOT EXISTS (
           SELECT 1 FROM inventory_adjustments a JOIN business_document_locations l
             ON l.source_table = 'inventory_adjustments' AND l.source_id = a.id
-          JOIN business_contexts c ON c.organization_id = l.organization_id AND c.branch_id = l.branch_id
+          JOIN business_contexts c ON c.organization_id = l.organization_id
           WHERE c.id = 1 AND a.id = NEW.source_id )
           THEN RAISE(ABORT, 'Inventory journal source or currency mismatch') END;
       """
@@ -150,7 +155,7 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
           ? """
           SELECT CASE WHEN NEW.warehouse_id IS NOT NULL AND NOT EXISTS (
             SELECT 1 FROM business_warehouses w JOIN business_contexts c
-              ON c.organization_id = w.organization_id AND c.branch_id = w.branch_id
+              ON c.organization_id = w.organization_id
             JOIN business_branches b ON b.id = w.branch_id AND b.organization_id = w.organization_id
             WHERE c.id = 1 AND w.id = NEW.warehouse_id AND w.is_active = 1 AND b.is_active = 1)
             THEN RAISE(ABORT, 'Invalid batch warehouse') END;
@@ -162,7 +167,9 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
               JOIN business_contexts c ON c.id = 1
               WHERE pi.id = NEW.purchase_item_id AND pi.product_id = NEW.product_id
                 AND (pi.variant_id IS NULL OR pi.variant_id = NEW.variant_id)
-                AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id
+                AND l.organization_id = c.organization_id
+                AND l.branch_id = (SELECT branch_id FROM business_warehouses
+                  WHERE id = NEW.warehouse_id)
                 AND l.warehouse_id = NEW.warehouse_id)
             AND NOT (
               NEW.source = 'warehouse_transfer'
@@ -205,7 +212,7 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
           INSERT INTO business_document_locations
             (document_id, source_table, source_id, organization_id, branch_id,
              warehouse_id, origin_database_id)
-          SELECT $_uuidSql, '$table', NEW.id, organization_id, branch_id,
+          SELECT $_uuidSql, '$table', NEW.id, organization_id, $locationBranch,
                  $destination, database_id FROM business_contexts WHERE id = 1;
         END
       ''');
@@ -256,56 +263,62 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
       CREATE TRIGGER business_location_primary_only
       BEFORE INSERT ON business_document_locations
       WHEN NOT EXISTS (
-        SELECT 1 FROM business_contexts c WHERE c.id = 1
-          AND c.organization_id = NEW.organization_id AND c.branch_id = NEW.branch_id
+        SELECT 1 FROM business_contexts c
+        JOIN business_warehouses selected ON selected.id = NEW.warehouse_id
+          AND selected.organization_id = c.organization_id
+          AND selected.branch_id = NEW.branch_id AND selected.is_active = 1
+        JOIN business_branches selected_branch ON selected_branch.id = selected.branch_id
+          AND selected_branch.organization_id = selected.organization_id
+          AND selected_branch.is_active = 1
+        WHERE c.id = 1 AND c.organization_id = NEW.organization_id
           AND c.database_id = NEW.origin_database_id
           AND (c.warehouse_id = NEW.warehouse_id OR (
             NEW.source_table = 'sale_return_adjustments' AND EXISTS (
               SELECT 1 FROM sale_return_adjustments p JOIN business_warehouses w ON w.id = p.warehouse_id
               WHERE p.id = NEW.source_id AND w.id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id AND w.is_active = 1)) OR (
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id AND w.is_active = 1)) OR (
             NEW.source_table = 'purchase_return_adjustments' AND EXISTS (
               SELECT 1 FROM purchase_return_adjustments p JOIN business_warehouses w ON w.id = p.warehouse_id
               WHERE p.id = NEW.source_id AND w.id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id AND w.is_active = 1)) OR (
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id AND w.is_active = 1)) OR (
             NEW.source_table = 'sales' AND EXISTS (
               SELECT 1 FROM sales p JOIN business_warehouses w ON w.id = p.warehouse_id
               WHERE p.id = NEW.source_id AND w.id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id AND w.is_active = 1)) OR (
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id AND w.is_active = 1)) OR (
             NEW.source_table = 'sale_returns' AND EXISTS (
               SELECT 1 FROM sale_returns r JOIN business_document_locations l
                 ON l.source_table = 'sales' AND l.source_id = r.sale_id
               WHERE r.id = NEW.source_id AND l.warehouse_id = NEW.warehouse_id
-                AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id)) OR (
+                AND l.organization_id = c.organization_id AND l.branch_id = NEW.branch_id)) OR (
             NEW.source_table = 'purchases' AND EXISTS (
               SELECT 1 FROM purchases p JOIN business_warehouses w ON w.id = p.warehouse_id
               WHERE p.id = NEW.source_id AND w.id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id AND w.is_active = 1)) OR (
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id AND w.is_active = 1)) OR (
             NEW.source_table = 'purchase_returns' AND EXISTS (
               SELECT 1 FROM purchase_returns r JOIN business_document_locations l
                 ON l.source_table = 'purchases' AND l.source_id = r.purchase_id
               WHERE r.id = NEW.source_id AND l.warehouse_id = NEW.warehouse_id
-                AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id)) OR (
+                AND l.organization_id = c.organization_id AND l.branch_id = NEW.branch_id)) OR (
             NEW.source_table = 'product_batches' AND EXISTS (
               SELECT 1 FROM product_batches pb JOIN business_warehouses w ON w.id = pb.warehouse_id
               JOIN business_branches b ON b.id = w.branch_id AND b.organization_id = w.organization_id
               WHERE pb.id = NEW.source_id AND pb.warehouse_id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id
                 AND w.is_active = 1 AND b.is_active = 1)) OR (
             NEW.source_table = 'inventory_adjustments' AND EXISTS (
               SELECT 1 FROM inventory_adjustments a JOIN business_warehouses w ON w.id = a.warehouse_id
               WHERE a.id = NEW.source_id AND a.warehouse_id = NEW.warehouse_id
-                AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id AND w.is_active = 1)) OR (
+                AND w.organization_id = c.organization_id AND w.branch_id = NEW.branch_id AND w.is_active = 1)) OR (
             NEW.source_table = 'journal_entries' AND EXISTS (
               SELECT 1 FROM journal_entries j JOIN business_document_locations l
                 ON l.source_table = 'journal_entries' AND l.source_id = j.reversed_entry_id
               WHERE j.id = NEW.source_id AND l.warehouse_id = NEW.warehouse_id
-                AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id)) OR (
+                AND l.organization_id = c.organization_id AND l.branch_id = NEW.branch_id)) OR (
             NEW.source_table = 'journal_entries' AND EXISTS (
               SELECT 1 FROM journal_entries j WHERE j.id = NEW.source_id AND EXISTS (
                 SELECT 1 FROM ${_journalOrigin('j')} l WHERE l.warehouse_id = NEW.warehouse_id
-                  AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id)))))
-      BEGIN SELECT RAISE(ABORT, 'Only the primary warehouse is operational'); END
+                  AND l.organization_id = c.organization_id AND l.branch_id = NEW.branch_id)))))
+      BEGIN SELECT RAISE(ABORT, 'Document warehouse is outside the organization or source route'); END
     ''');
     await db.customStatement('''
       CREATE TRIGGER business_location_sale_adjustment_batch_immutable

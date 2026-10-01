@@ -435,9 +435,7 @@ class SaleAdjReturnFormBloc
   final LanNetworkService? _lan;
   final AppSettingsService? _settings;
 
-  bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+  bool get _isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
   SaleAdjReturnFormBloc(
     this._dao,

@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
+import '../services/lan_purchase_entity_mapper.dart';
 
 // ==================== STATE ====================
 
@@ -16,6 +18,10 @@ class PurchasesHubData {
   final Set<int> purchaseIdsWithReturns;
   final Map<int, List<String>> productSearchTerms;
   final Set<int> productMatchedPurchaseIds;
+  final String? currencyCode;
+  final String? currencySymbol;
+  final int? currencyDecimalDigits;
+  final bool currencySymbolAfter;
 
   static const int searchResultLimit = 20;
 
@@ -27,6 +33,10 @@ class PurchasesHubData {
     this.purchaseIdsWithReturns = const {},
     this.productSearchTerms = const {},
     this.productMatchedPurchaseIds = const {},
+    this.currencyCode,
+    this.currencySymbol,
+    this.currencyDecimalDigits,
+    this.currencySymbolAfter = false,
   });
 
   List<PurchaseEntity> get filteredPurchases {
@@ -128,6 +138,7 @@ class PurchaseDeleteRequested extends PurchasesEvent {
 
 class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
   final PurchaseRepository _repository;
+  final LanNetworkService? _lan;
   String? _searchQuery;
   String? _statusFilter;
 
@@ -140,7 +151,10 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
   StreamSubscription<Set<int>>? _returnIdsSub;
   StreamSubscription<Map<int, List<String>>>? _productTermsSub;
 
-  PurchasesBloc(this._repository) : super(const RealtimeLoading()) {
+  PurchasesBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(const RealtimeLoading()) {
+    if (isRemoteClient) return;
     _statsSub = _repository.watchDashboardStats().listen((stats) {
       _latestStats = stats;
       _emitCombined();
@@ -157,6 +171,8 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     });
   }
 
+  bool get isRemoteClient => _lan?.snapshot.mode == LanMode.client;
+
   @override
   void registerEventHandlers() {
     on<PurchasesSearchRequested>(_onSearch);
@@ -168,6 +184,11 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
 
   @override
   Stream<PurchasesHubData> get dataStream {
+    if (isRemoteClient) {
+      return Stream.fromFuture(
+        _lan!.fetchRemotePurchases(),
+      ).map(_remotePageToData);
+    }
     return _repository.watchAllPurchases().map((purchases) {
       _latestPurchases = purchases;
       final terms = _productSearchTerms ?? const {};
@@ -195,6 +216,43 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
         ),
       );
     });
+  }
+
+  PurchasesHubData _remotePageToData(LanPurchasesPage page) {
+    final purchases = page.purchases
+        .map(lanPurchaseEntity)
+        .toList(growable: false);
+    final remoteStats = page.stats;
+    final stats = PurchaseDashboardStats(
+      totalCount: remoteStats.totalCount,
+      draftCount: remoteStats.draftCount,
+      postedCount: remoteStats.postedCount,
+      totalPayableCents: remoteStats.totalPayableCents,
+      totalPaidCents: remoteStats.totalPaidCents,
+      overdueCount: remoteStats.overdueCount,
+      returnsCount: remoteStats.returnsCount,
+    );
+    _latestPurchases = purchases;
+    _latestStats = stats;
+    _returnPurchaseIds = page.purchaseIdsWithReturns;
+    _productSearchTerms = page.productSearchTerms;
+    return PurchasesHubData(
+      purchases: purchases,
+      stats: stats,
+      searchQuery: _searchQuery,
+      statusFilter: _statusFilter,
+      purchaseIdsWithReturns: page.purchaseIdsWithReturns,
+      productSearchTerms: page.productSearchTerms,
+      currencyCode: page.currencyCode,
+      currencySymbol: page.currencySymbol,
+      currencyDecimalDigits: page.currencyDecimalDigits,
+      currencySymbolAfter: page.currencySymbolAfter,
+      productMatchedPurchaseIds: PurchasesHubData.computeProductMatchedIds(
+        purchases,
+        _searchQuery,
+        page.productSearchTerms,
+      ),
+    );
   }
 
   void _emitCombined() {
@@ -239,6 +297,10 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
             statusFilter: _statusFilter,
             purchaseIdsWithReturns: data.purchaseIdsWithReturns,
             productSearchTerms: terms,
+            currencyCode: data.currencyCode,
+            currencySymbol: data.currencySymbol,
+            currencyDecimalDigits: data.currencyDecimalDigits,
+            currencySymbolAfter: data.currencySymbolAfter,
             productMatchedPurchaseIds:
                 PurchasesHubData.computeProductMatchedIds(
                   data.purchases,
@@ -268,6 +330,10 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
             statusFilter: _statusFilter,
             purchaseIdsWithReturns: data.purchaseIdsWithReturns,
             productSearchTerms: terms,
+            currencyCode: data.currencyCode,
+            currencySymbol: data.currencySymbol,
+            currencyDecimalDigits: data.currencyDecimalDigits,
+            currencySymbolAfter: data.currencySymbolAfter,
             productMatchedPurchaseIds:
                 PurchasesHubData.computeProductMatchedIds(
                   data.purchases,
@@ -285,7 +351,12 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     Emitter<RealtimeState<PurchasesHubData>> emit,
   ) async {
     try {
-      await _repository.postPurchase(event.purchaseId);
+      if (isRemoteClient) {
+        await _lan!.postRemotePurchase(event.purchaseId);
+        refresh();
+      } else {
+        await _repository.postPurchase(event.purchaseId);
+      }
     } catch (e) {
       emit(RealtimeError(error: e, previousData: currentData));
     }
@@ -296,7 +367,12 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     Emitter<RealtimeState<PurchasesHubData>> emit,
   ) async {
     try {
-      await _repository.voidPurchase(event.purchaseId);
+      if (isRemoteClient) {
+        await _lan!.voidRemotePurchase(event.purchaseId);
+        refresh();
+      } else {
+        await _repository.voidPurchase(event.purchaseId);
+      }
     } catch (e) {
       emit(RealtimeError(error: e, previousData: currentData));
     }
@@ -307,7 +383,12 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     Emitter<RealtimeState<PurchasesHubData>> emit,
   ) async {
     try {
-      await _repository.deletePurchase(event.purchaseId);
+      if (isRemoteClient) {
+        await _lan!.deleteRemotePurchase(event.purchaseId);
+        refresh();
+      } else {
+        await _repository.deletePurchase(event.purchaseId);
+      }
     } catch (e) {
       emit(RealtimeError(error: e, previousData: currentData));
     }

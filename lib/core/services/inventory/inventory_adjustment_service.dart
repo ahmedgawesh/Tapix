@@ -14,6 +14,9 @@ import '../batch_service.dart';
 import '../journal_entry_service.dart';
 import '../price_history_service.dart';
 import '../stock_service.dart';
+import '../sync/inventory_adjustment_sync_contract.dart';
+import '../sync/offline_sync_event_store.dart';
+import '../sync/sync_entity_identity_store.dart';
 import 'costing_strategy.dart';
 import 'product_cost_service.dart';
 
@@ -97,16 +100,22 @@ class InventoryAdjustmentService {
   final InventoryAdjustmentDao _dao;
   final JournalEntryService _journal;
   final CostingStrategy _costing;
+  final OfflineSyncEventStore? _syncEvents;
+  final SyncEntityIdentityStore? _syncIdentities;
 
   InventoryAdjustmentService({
     required AppDatabase db,
     required InventoryAdjustmentDao dao,
     required JournalEntryService journal,
     CostingStrategy? costing,
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
   }) : _db = db,
        _dao = dao,
        _journal = journal,
-       _costing = costing ?? const WeightedAverageCostingStrategy();
+       _costing = costing ?? const WeightedAverageCostingStrategy(),
+       _syncEvents = syncEvents,
+       _syncIdentities = syncIdentities;
 
   /// Perform an inventory adjustment. Returns the created adjustment + its
   /// posted journal entry id.
@@ -216,7 +225,10 @@ class InventoryAdjustmentService {
     }
 
     // Everything below runs in a single DB transaction.
-    return _db.transaction<InventoryAdjustmentResult>(() async {
+    final eventStore = _syncEvents ?? OfflineSyncEventStore(_db);
+    return eventStore.transaction<InventoryAdjustmentResult>((
+      syncTransaction,
+    ) async {
       final operationScope =
           scope ?? await WarehouseOperationScope.resolve(_db);
       await operationScope.validate(_db);
@@ -806,6 +818,24 @@ class InventoryAdjustmentService {
         'journal=$journalEntryId reason="$trimmedReason"',
         name: 'InventoryAdjustmentService',
       );
+
+      if (await syncTransaction.isWriterRecordingEnabled()) {
+        final adjustment = await (_db.select(
+          _db.inventoryAdjustments,
+        )..where((row) => row.id.equals(adjustmentId))).getSingle();
+        final payload = await InventoryAdjustmentSyncContractBuilder(
+          _db,
+          _syncIdentities ?? SyncEntityIdentityStore(_db),
+        ).buildPosted(adjustment: adjustment);
+        await syncTransaction.appendOnce(
+          producerKey: 'inventory_adjustment:posted:$adjustmentId',
+          eventType: 'inventory_adjustment.posted.v1',
+          aggregateType: 'inventory_adjustment',
+          aggregateId: payload['documentId']! as String,
+          occurredAt: adjustment.createdAt,
+          payload: payload,
+        );
+      }
 
       return InventoryAdjustmentResult(
         adjustmentId: adjustmentId,

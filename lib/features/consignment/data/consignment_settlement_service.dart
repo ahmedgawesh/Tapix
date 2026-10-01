@@ -8,6 +8,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/services/balance_service.dart';
 import '../../../core/services/document_number_service.dart';
 import '../../../core/services/journal_entry_service.dart';
+import '../../../core/services/sync/consignment_sync_recorder.dart';
 import 'consignment_module_service.dart';
 
 /// Converts immutable consignment obligation events into reviewed supplier AP.
@@ -238,6 +239,37 @@ class ConsignmentSettlementService {
             updatedAt: Value(now),
           ),
         );
+        final items = await getStatementItems(statement.id);
+        await ConsignmentSyncRecorder(_db).record(
+          eventType: 'consignment_settlement.posted.v1',
+          contract: 'consignment_settlement.posted',
+          documentType: 'consignment_settlement',
+          localDocumentId: statement.id,
+          action: 'posted',
+          occurredAt: now,
+          supplierId: statement.supplierId,
+          currencyId: statement.currencyId,
+          agreementId: statement.agreementId,
+          values: {
+            'statementNumber': statement.statementNumber,
+            'periodStart': statement.periodStart.toUtc().toIso8601String(),
+            'periodEnd': statement.periodEnd.toUtc().toIso8601String(),
+            'obligationSubtotalMinor': statement.obligationSubtotalCents,
+            'taxMinor': statement.taxCents,
+            'totalMinor': statement.totalCents,
+            'dueDate': statement.dueDate.toUtc().toIso8601String(),
+          },
+          lines: [
+            for (final item in items)
+              {
+                'sourceLedger': item.sourceLedger,
+                'sourceEventId': item.eventId,
+                'signedQuantity': item.signedQuantity,
+                'signedAmountMinor': item.signedAmountCents,
+                'occurredAt': item.occurredAt.toUtc().toIso8601String(),
+              },
+          ],
+        );
         return _requireStatement(statement.id);
       });
 
@@ -342,6 +374,24 @@ class ConsignmentSettlementService {
         updatedAt: Value(DateTime.now().toUtc()),
       ),
     );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_payment.posted.v1',
+      contract: 'consignment_payment.posted',
+      documentType: 'consignment_settlement_payment',
+      localDocumentId: paymentId,
+      action: 'posted',
+      occurredAt: timestamp,
+      supplierId: statement.supplierId,
+      currencyId: statement.currencyId,
+      agreementId: statement.agreementId,
+      values: {
+        'statementId': statement.id,
+        'statementNumber': statement.statementNumber,
+        'amountMinor': amountCents,
+        'paymentMethod': method,
+        'reference': cleanReference,
+      },
+    );
     return (_db.select(
       _db.consignmentSettlementPayments,
     )..where((p) => p.id.equals(paymentId))).getSingle();
@@ -420,6 +470,24 @@ class ConsignmentSettlementService {
         status: Value(paid == 0 ? 'posted' : 'partially_paid'),
         updatedAt: Value(now),
       ),
+    );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_payment.reversed.v1',
+      contract: 'consignment_payment.reversed',
+      documentType: 'consignment_settlement_payment',
+      localDocumentId: payment.id,
+      action: 'reversed',
+      occurredAt: now,
+      supplierId: statement.supplierId,
+      currencyId: statement.currencyId,
+      agreementId: statement.agreementId,
+      values: {
+        'statementId': statement.id,
+        'statementNumber': statement.statementNumber,
+        'amountMinor': payment.amountCents,
+        'paymentMethod': payment.paymentMethod,
+        'reason': cleanReason,
+      },
     );
     return (_db.select(
       _db.consignmentSettlementPayments,
@@ -513,6 +581,32 @@ class ConsignmentSettlementService {
         'unassigned',
       );
     }
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_settlement.voided.v1',
+      contract: 'consignment_settlement.voided',
+      documentType: 'consignment_settlement',
+      localDocumentId: statement.id,
+      action: 'voided',
+      occurredAt: now,
+      supplierId: statement.supplierId,
+      currencyId: statement.currencyId,
+      agreementId: statement.agreementId,
+      values: {
+        'statementNumber': statement.statementNumber,
+        'reason': cleanReason,
+        'totalMinor': statement.totalCents,
+      },
+      lines: [
+        for (final item in items)
+          {
+            'sourceLedger': item.sourceLedger,
+            'sourceEventId': item.eventId,
+            'signedQuantity': item.signedQuantity,
+            'signedAmountMinor': item.signedAmountCents,
+            'occurredAt': item.occurredAt.toUtc().toIso8601String(),
+          },
+      ],
+    );
     return _requireStatement(statement.id);
   });
 

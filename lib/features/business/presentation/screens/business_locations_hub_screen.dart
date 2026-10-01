@@ -1,13 +1,16 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/database/app_database.dart' show BusinessWarehouse;
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../settings/presentation/screens/lan_network_settings_screen.dart';
 import '../../data/online_branches_entitlement.dart';
 import '../../data/online_branches_purchase_service.dart';
+import '../../data/lan_branch_enrollment_service.dart';
 import '../../data/warehouse_setup_service.dart';
 import '../../data/warehouse_transfer_application_service.dart';
+import 'business_branch_setup_screen.dart';
+import 'company_branch_monitor_screen.dart';
 import 'warehouse_reports_screen.dart';
 import 'warehouse_setup_screen.dart';
 import 'warehouse_transfer_screen.dart';
@@ -19,12 +22,18 @@ class BusinessLocationsHubScreen extends StatefulWidget {
     this.transferService,
     this.onlineEntitlement,
     this.purchaseService,
+    this.networkService,
+    this.syncHealthLoader,
+    this.syncRunner,
   });
 
   final WarehouseSetupService? setupService;
   final WarehouseTransferApplicationService? transferService;
   final OnlineBranchesEntitlement? onlineEntitlement;
   final OnlineBranchesPurchaseService? purchaseService;
+  final LanNetworkService? networkService;
+  final Future<LanBranchSyncHealthSnapshot> Function()? syncHealthLoader;
+  final Future<LanBranchSyncRunResult> Function()? syncRunner;
 
   @override
   State<BusinessLocationsHubScreen> createState() =>
@@ -41,15 +50,67 @@ class _BusinessLocationsHubScreenState
       widget.onlineEntitlement ?? sl<OnlineBranchesEntitlement>();
   late final OnlineBranchesPurchaseService _purchases =
       widget.purchaseService ?? sl<OnlineBranchesPurchaseService>();
+  late final LanNetworkService _network =
+      widget.networkService ?? sl<LanNetworkService>();
 
   OnlineBranchesEntitlementSnapshot? _entitlement;
   bool _loadingEntitlement = true;
   bool _purchaseBusy = false;
+  LanBranchSyncHealthSnapshot? _syncHealth;
+  bool _syncBusy = false;
 
   @override
   void initState() {
     super.initState();
     _loadEntitlement();
+    _loadSyncHealth();
+  }
+
+  Future<void> _loadSyncHealth() async {
+    if (mounted) setState(() => _syncBusy = true);
+    try {
+      final snapshot =
+          await (widget.syncHealthLoader?.call() ??
+              _network.inspectIndependentBranchSync());
+      if (mounted) setState(() => _syncHealth = snapshot);
+    } catch (_) {
+      if (mounted) setState(() => _syncHealth = null);
+    } finally {
+      if (mounted) setState(() => _syncBusy = false);
+    }
+  }
+
+  Future<void> _syncNow() async {
+    if (_syncBusy || _syncHealth?.configured != true) return;
+    setState(() => _syncBusy = true);
+    try {
+      final result =
+          await (widget.syncRunner?.call() ??
+              _network.synchronizeIndependentBranchOnce());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'business_locations.sync_health.completed'.tr(
+                namedArgs: {
+                  'uploaded': '${result.uploaded}',
+                  'downloaded': '${result.downloaded}',
+                },
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      _showMessage('business_locations.sync_health.failed');
+    } finally {
+      if (mounted) setState(() => _syncBusy = false);
+      await _loadSyncHealth();
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([_loadEntitlement(), _loadSyncHealth()]);
   }
 
   Future<void> _loadEntitlement() async {
@@ -159,52 +220,26 @@ class _BusinessLocationsHubScreenState
   }
 
   Future<void> _openReports() async {
-    List<BusinessWarehouse> warehouses;
+    List<WarehouseReportLocation> locations;
     try {
-      warehouses = await _setup.warehouses();
+      locations = await _setup.reportLocations();
     } catch (_) {
-      warehouses = const [];
+      locations = const [];
     }
     if (!mounted) return;
-    if (warehouses.isEmpty) {
+    if (locations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('business_locations.no_report_warehouses'.tr())),
       );
       return;
     }
-    BusinessWarehouse? selected;
-    if (warehouses.length == 1) {
-      selected = warehouses.single;
-    } else {
-      selected = await showModalBottomSheet<BusinessWarehouse>(
-        context: context,
-        showDragHandle: true,
-        builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            children: [
-              Text(
-                'business_locations.choose_report_warehouse'.tr(),
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              for (final warehouse in warehouses)
-                ListTile(
-                  leading: const Icon(Icons.warehouse_outlined),
-                  title: Text(
-                    warehouse.name.isEmpty ? warehouse.code : warehouse.name,
-                  ),
-                  subtitle: Text(warehouse.code),
-                  onTap: () => Navigator.pop(context, warehouse),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    if (!mounted || selected == null) return;
-    _open(WarehouseReportsScreen(service: _setup, warehouseId: selected.id));
+    final selected = locations.first;
+    _open(
+      WarehouseReportsScreen(
+        service: _setup,
+        warehouseId: selected.warehouse.id,
+      ),
+    );
   }
 
   @override
@@ -215,7 +250,7 @@ class _BusinessLocationsHubScreenState
         title: Text('business_locations.title'.tr()),
         actions: [
           IconButton(
-            onPressed: _loadingEntitlement ? null : _loadEntitlement,
+            onPressed: _loadingEntitlement || _syncBusy ? null : _refreshAll,
             tooltip: 'business_locations.refresh_license'.tr(),
             icon: const Icon(Icons.refresh),
           ),
@@ -238,6 +273,38 @@ class _BusinessLocationsHubScreenState
                   sliver: SliverToBoxAdapter(child: _PrimaryWarehouseNotice()),
                 ),
                 SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Card(
+                      child: ExpansionTile(
+                        leading: const Icon(Icons.help_outline),
+                        title: Text(
+                          'business_locations.setup_guide.title'.tr(),
+                        ),
+                        childrenPadding: const EdgeInsets.all(16),
+                        children: [
+                          for (var step = 0; step < 8; step++)
+                            ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: CircleAvatar(child: Text('${step + 1}')),
+                              title: Text(
+                                'business_locations.setup_guide.steps.$step.title'
+                                    .tr(),
+                              ),
+                              subtitle: Text(
+                                'business_locations.setup_guide.steps.$step.body'
+                                    .tr(),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                SliverPadding(
                   padding: const EdgeInsets.all(16),
                   sliver: SliverLayoutBuilder(
                     builder: (context, constraints) {
@@ -252,9 +319,30 @@ class _BusinessLocationsHubScreenState
                           crossAxisCount: columns,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
-                          mainAxisExtent: 190,
+                          mainAxisExtent: 210,
                         ),
                         delegate: SliverChildListDelegate.fixed([
+                          _ActionCard(
+                            icon: Icons.store_mall_directory_outlined,
+                            title: 'business_locations.branches'.tr(),
+                            body: 'business_locations.branches_help'.tr(),
+                            onTap: () => _open(
+                              BusinessBranchSetupScreen(
+                                service: _setup,
+                                enrollmentService:
+                                    sl<LanBranchEnrollmentService>(),
+                                lanService: sl<LanNetworkService>(),
+                              ),
+                            ),
+                          ),
+                          _ActionCard(
+                            icon: Icons.monitor_heart_outlined,
+                            title: 'business_locations.company_monitor'.tr(),
+                            body: 'business_locations.company_monitor_help'
+                                .tr(),
+                            onTap: () =>
+                                _open(const CompanyBranchMonitorScreen()),
+                          ),
                           _ActionCard(
                             icon: Icons.warehouse_outlined,
                             title: 'business_locations.warehouses'.tr(),
@@ -291,6 +379,17 @@ class _BusinessLocationsHubScreenState
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                   sliver: SliverToBoxAdapter(
+                    child: _LanSyncHealthCard(
+                      loading: _syncBusy,
+                      snapshot: _syncHealth,
+                      onSync: _syncNow,
+                      onSettings: () => _open(const LanNetworkSettingsScreen()),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  sliver: SliverToBoxAdapter(
                     child: _OnlineAddOnCard(
                       loading: _loadingEntitlement,
                       purchaseBusy: _purchaseBusy,
@@ -309,6 +408,155 @@ class _BusinessLocationsHubScreenState
       ),
     );
   }
+}
+
+class _LanSyncHealthCard extends StatelessWidget {
+  const _LanSyncHealthCard({
+    required this.loading,
+    required this.snapshot,
+    required this.onSync,
+    required this.onSettings,
+  });
+
+  final bool loading;
+  final LanBranchSyncHealthSnapshot? snapshot;
+  final VoidCallback onSync;
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final health = snapshot;
+    final roleKey = health?.configured == true
+        ? 'branch_server'
+        : health?.coordinator == true
+        ? 'coordinator'
+        : 'standalone';
+    final hasProblem =
+        health == null ||
+        (health.deadLetters > 0) ||
+        (health.configured && health.lastError != null);
+    final color = hasProblem
+        ? theme.colorScheme.errorContainer
+        : theme.colorScheme.surfaceContainerHigh;
+    final onColor = hasProblem
+        ? theme.colorScheme.onErrorContainer
+        : theme.colorScheme.onSurface;
+    return Card(
+      color: color,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.sync_lock_outlined, color: onColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'business_locations.sync_health.title'.tr(),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: onColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (loading)
+                  const SizedBox.square(
+                    dimension: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'business_locations.sync_health.roles.$roleKey'.tr(),
+              style: TextStyle(color: onColor),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _HealthChip(
+                  label: 'business_locations.sync_health.pending'.tr(
+                    namedArgs: {'count': '${health?.pendingDeliveries ?? 0}'},
+                  ),
+                ),
+                _HealthChip(
+                  label: 'business_locations.sync_health.dead'.tr(
+                    namedArgs: {'count': '${health?.deadLetters ?? 0}'},
+                  ),
+                ),
+                if (health?.coordinator == true)
+                  _HealthChip(
+                    label: 'business_locations.sync_health.writers'.tr(
+                      namedArgs: {
+                        'count': '${health?.activeBranchWriters ?? 0}',
+                      },
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              health?.lastSuccessAt == null
+                  ? 'business_locations.sync_health.never'.tr()
+                  : 'business_locations.sync_health.last_success'.tr(
+                      namedArgs: {
+                        'time': DateFormat.yMd().add_Hm().format(
+                          health!.lastSuccessAt!,
+                        ),
+                      },
+                    ),
+              style: theme.textTheme.bodySmall?.copyWith(color: onColor),
+            ),
+            if (health?.lastError != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'business_locations.sync_health.retry_note'.tr(),
+                style: theme.textTheme.bodySmall?.copyWith(color: onColor),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'business_locations.sync_health.offline_note'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(color: onColor),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (health?.configured == true)
+                  FilledButton.icon(
+                    onPressed: loading ? null : onSync,
+                    icon: const Icon(Icons.sync),
+                    label: Text('business_locations.sync_health.sync_now'.tr()),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: loading ? null : onSettings,
+                  icon: const Icon(Icons.settings_ethernet),
+                  label: Text(
+                    'business_locations.sync_health.network_settings'.tr(),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HealthChip extends StatelessWidget {
+  const _HealthChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Chip(label: Text(label));
 }
 
 class _LocalOperationsHeader extends StatelessWidget {

@@ -67,6 +67,8 @@ class _Fixture {
 Future<_Fixture> _fixture({
   bool withOpeningStock = true,
   bool withOnlineSync = true,
+  bool crossBranch = false,
+  bool withDestinationBalance = true,
 }) async {
   final db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
   final source = await WarehouseOperationScope.resolve(db);
@@ -111,30 +113,47 @@ Future<_Fixture> _fixture({
         ),
       );
   const destinationId = '66666666-6666-4666-8666-666666666666';
+  const destinationBranchId = '77777777-7777-4777-8777-777777777777';
+  if (crossBranch) {
+    await db
+        .into(db.businessBranches)
+        .insert(
+          BusinessBranchesCompanion.insert(
+            id: destinationBranchId,
+            organizationId: source.organizationId,
+            code: 'BRANCH-2',
+            name: const Value('Second branch'),
+          ),
+        );
+  }
   await db
       .into(db.businessWarehouses)
       .insert(
         BusinessWarehousesCompanion.insert(
           id: destinationId,
           organizationId: source.organizationId,
-          branchId: source.branchId,
+          branchId: crossBranch ? destinationBranchId : source.branchId,
           code: 'DST',
           name: const Value('Destination'),
         ),
       );
-  await db
-      .into(db.businessWarehouseStocks)
-      .insert(
-        BusinessWarehouseStocksCompanion.insert(
+  if (withDestinationBalance) {
+    await db
+        .into(db.businessWarehouseStocks)
+        .insert(
+          BusinessWarehouseStocksCompanion.insert(
+            warehouseId: destinationId,
+            variantId: variant,
+            unitCostCents: const Value(0),
+          ),
+        );
+  }
+  final destination = crossBranch
+      ? await WarehouseOperationScope.resolveForOrganization(
+          db,
           warehouseId: destinationId,
-          variantId: variant,
-          unitCostCents: const Value(0),
-        ),
-      );
-  final destination = await WarehouseOperationScope.resolve(
-    db,
-    warehouseId: destinationId,
-  );
+        )
+      : await WarehouseOperationScope.resolve(db, warehouseId: destinationId);
   await BranchCurrencyPolicyStore(db).bind('USD');
 
   final preflight = WarehouseTransferPreflight(
@@ -179,6 +198,8 @@ Future<_Fixture> _fixture({
 Future<WarehouseTransferDraft> _draft(
   _Fixture fixture, {
   int quantity = 2,
+  int? ownedQuantity,
+  int? consignmentQuantity,
 }) async {
   final preview = await fixture.preflight.preview(
     source: fixture.source,
@@ -194,6 +215,14 @@ Future<WarehouseTransferDraft> _draft(
   return fixture.repository.create(
     requestKey: const Uuid().v4(),
     preview: preview,
+    ownershipByVariant: ownedQuantity == null && consignmentQuantity == null
+        ? const {}
+        : {
+            fixture.variant: WarehouseTransferOwnershipIntent(
+              ownedQuantity: ownedQuantity!,
+              consignmentQuantity: consignmentQuantity!,
+            ),
+          },
   );
 }
 
@@ -214,6 +243,49 @@ Future<int> _stock(
 }
 
 void main() {
+  test(
+    'first local transfer lazily creates destination balance on receipt',
+    () async {
+      final fixture = await _fixture(withDestinationBalance: false);
+      addTearDown(fixture.db.close);
+      final draft = await _draft(fixture);
+      final dispatched = await fixture.dispatch.dispatch(
+        transferId: draft.header.id,
+        requestKey: const Uuid().v4(),
+      );
+
+      expect(
+        await (fixture.db.select(fixture.db.businessWarehouseStocks)..where(
+              (row) =>
+                  row.warehouseId.equals(fixture.destination.warehouseId) &
+                  row.variantId.equals(fixture.variant),
+            ))
+            .getSingleOrNull(),
+        isNull,
+      );
+
+      await fixture.receipt.receive(
+        transferId: draft.header.id,
+        requestKey: const Uuid().v4(),
+        items: [
+          WarehouseTransferReceiptRequestItem(
+            allocationId: dispatched.allocations.single.id,
+            acceptedQuantity: 2,
+          ),
+        ],
+      );
+
+      expect(
+        await _stock(
+          fixture.db,
+          fixture.destination.warehouseId,
+          fixture.variant,
+        ),
+        2,
+      );
+    },
+  );
+
   test(
     'single-branch and LAN-only operation does not accumulate cloud outbox',
     () async {
@@ -350,6 +422,113 @@ void main() {
       expect(origin['quantityScaled'], 2);
       expect(origin['originKind'], 'unknown');
       expect(origin['sourceQuality'], 'unverified');
+    },
+  );
+
+  test(
+    'central transfer posts and receives across branches without party balances',
+    () async {
+      final fixture = await _fixture(crossBranch: true);
+      addTearDown(fixture.db.close);
+      final supplierBalancesBefore = await fixture.db
+          .customSelect(
+            'SELECT COALESCE(SUM(balance_cents),0) AS total FROM suppliers',
+          )
+          .map((row) => row.read<int>('total'))
+          .getSingle();
+      final customerBalancesBefore = await fixture.db
+          .customSelect(
+            'SELECT COALESCE(SUM(balance_cents),0) AS total FROM customers',
+          )
+          .map((row) => row.read<int>('total'))
+          .getSingle();
+
+      final draft = await _draft(fixture, quantity: 2);
+      expect(draft.header.branchId, fixture.source.branchId);
+      expect(fixture.destination.branchId, isNot(fixture.source.branchId));
+      final dispatched = await fixture.dispatch.dispatch(
+        transferId: draft.header.id,
+        requestKey: const Uuid().v4(),
+      );
+      final received = await fixture.receipt.receive(
+        transferId: draft.header.id,
+        requestKey: const Uuid().v4(),
+        items: [
+          WarehouseTransferReceiptRequestItem(
+            allocationId: dispatched.allocations.single.id,
+            acceptedQuantity: 2,
+          ),
+        ],
+      );
+
+      expect(received.transfer.status, 'completed');
+      expect(
+        await _stock(fixture.db, fixture.source.warehouseId, fixture.variant),
+        3,
+      );
+      expect(
+        await _stock(
+          fixture.db,
+          fixture.destination.warehouseId,
+          fixture.variant,
+        ),
+        2,
+      );
+      final locations = await fixture.db.customSelect(
+        '''SELECT j.entry_type,l.branch_id,l.warehouse_id
+               FROM journal_entries j
+               JOIN business_document_locations l
+                 ON l.source_table='journal_entries' AND l.source_id=j.id
+               WHERE j.source_table IN(
+                 'warehouse_transfer_dispatches','warehouse_transfer_receipts')
+               ORDER BY j.id''',
+      ).get();
+      expect(locations, hasLength(2));
+      expect(
+        locations.first.read<String>('warehouse_id'),
+        fixture.source.warehouseId,
+      );
+      expect(
+        locations.first.read<String>('branch_id'),
+        fixture.source.branchId,
+      );
+      expect(
+        locations.last.read<String>('warehouse_id'),
+        fixture.destination.warehouseId,
+      );
+      expect(
+        locations.last.read<String>('branch_id'),
+        fixture.destination.branchId,
+      );
+      final imbalance = await fixture.db
+          .customSelect(
+            '''SELECT COALESCE(SUM(debit_cents-credit_cents),0) AS imbalance
+               FROM journal_entry_lines l JOIN journal_entries j
+                 ON j.id=l.journal_entry_id
+               WHERE j.source_table IN(
+                 'warehouse_transfer_dispatches','warehouse_transfer_receipts')''',
+          )
+          .map((row) => row.read<int>('imbalance'))
+          .getSingle();
+      expect(imbalance, 0);
+      expect(
+        await fixture.db
+            .customSelect(
+              'SELECT COALESCE(SUM(balance_cents),0) AS total FROM suppliers',
+            )
+            .map((row) => row.read<int>('total'))
+            .getSingle(),
+        supplierBalancesBefore,
+      );
+      expect(
+        await fixture.db
+            .customSelect(
+              'SELECT COALESCE(SUM(balance_cents),0) AS total FROM customers',
+            )
+            .map((row) => row.read<int>('total'))
+            .getSingle(),
+        customerBalancesBefore,
+      );
     },
   );
 
@@ -602,6 +781,31 @@ void main() {
       expect(report.rows.single.recalledQuantity, 3);
       expect(report.rows.single.inTransitQuantity, 0);
       expect(report.rows.single.sources.single.quality, 'unknown');
+
+      final authorized = <String>{};
+      final aggregate =
+          await WarehouseTransferReportingService(
+            fixture.db,
+            authorizeWarehouse: (warehouseId) async {
+              authorized.add(warehouseId);
+            },
+          ).reportForWarehouses(
+            warehouseIds: {
+              fixture.source.warehouseId,
+              fixture.destination.warehouseId,
+            },
+            reportId: 'whole-branch',
+            from: DateTime.utc(2026, 9, 23),
+            toExclusive: DateTime.utc(2026, 9, 26),
+          );
+      expect(authorized, {
+        fixture.source.warehouseId,
+        fixture.destination.warehouseId,
+      });
+      expect(aggregate.transferCount, 1);
+      expect(aggregate.rows, hasLength(1));
+      expect(aggregate.warehouseId, 'whole-branch');
+
       final syncRows = await fixture.db
           .customSelect(
             'SELECT event_type,payload_json FROM sync_outbox_events '
@@ -1228,7 +1432,7 @@ void main() {
   test(
     'consignment dispatch moves custody quantity without enterprise GL value',
     () async {
-      final fixture = await _fixture(withOpeningStock: false);
+      final fixture = await _fixture();
       addTearDown(fixture.db.close);
 
       final module = ConsignmentModuleService(
@@ -1284,7 +1488,12 @@ void main() {
       final layer = await fixture.db
           .select(fixture.db.consignmentInventoryLayers)
           .getSingle();
-      final draft = await _draft(fixture, quantity: 3);
+      final draft = await _draft(
+        fixture,
+        quantity: 3,
+        ownedQuantity: 0,
+        consignmentQuantity: 3,
+      );
 
       final posted = await fixture.dispatch.dispatch(
         transferId: draft.header.id,
@@ -1298,7 +1507,10 @@ void main() {
       expect(posted.allocations.single.sourceConsignmentLayerId, layer.id);
       expect(posted.allocations.single.supplierId, supplier);
       final consignmentEvent = await fixture.db
-          .customSelect('SELECT payload_json FROM sync_outbox_events')
+          .customSelect(
+            'SELECT payload_json FROM sync_outbox_events '
+            "WHERE event_type='warehouse_transfer.dispatched.v1'",
+          )
           .getSingle();
       final consignmentPayload =
           jsonDecode(consignmentEvent.read<String>('payload_json'))
@@ -1312,7 +1524,7 @@ void main() {
       expect(syncedConsignment['sourceConsignmentLayerId'], layer.id);
       expect(
         await _stock(fixture.db, fixture.source.warehouseId, fixture.variant),
-        2,
+        7,
       );
       expect(
         await _stock(
@@ -1388,7 +1600,7 @@ void main() {
       expect(recalled.recall.journalEntryId, isNull);
       expect(
         await _stock(fixture.db, fixture.source.warehouseId, fixture.variant),
-        3,
+        8,
       );
       expect(
         await _stock(

@@ -1,3 +1,4 @@
+import '../../../../core/services/returns/purchase_return_disposition.dart';
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -381,9 +382,7 @@ class PurchaseReturnFormBloc
     on<PurchaseReturnFormSubmitted>(_onSubmitted);
   }
 
-  bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+  bool get _isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
   Future<PurchaseReturnFormState> _loadRemoteState(int purchaseId) async {
     final details = await _lan!.fetchRemoteReturnablePurchase(purchaseId);
@@ -582,13 +581,30 @@ class PurchaseReturnFormBloc
     ReturnDispositionChanged event,
     Emitter<PurchaseReturnFormState> emit,
   ) {
-    emit(state.copyWith(dispositionType: event.dispositionType));
+    if (!PurchaseReturnDispositionPolicy.supported.contains(
+      event.dispositionType,
+    )) {
+      return;
+    }
+    emit(
+      state.copyWith(
+        dispositionType: event.dispositionType,
+        refundMethod: event.dispositionType == 'replace'
+            ? 'credit'
+            : state.refundMethod,
+        dueDate: event.dispositionType == 'replace' ? null : state.dueDate,
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onRefundMethodChanged(
     ReturnRefundMethodChanged event,
     Emitter<PurchaseReturnFormState> emit,
   ) {
+    if (state.dispositionType == 'replace' && event.refundMethod != 'credit') {
+      return;
+    }
     final clearDueDate = event.refundMethod != 'cheque';
     emit(
       state.copyWith(
@@ -628,6 +644,16 @@ class PurchaseReturnFormBloc
       return;
     }
 
+    final dispositionError = PurchaseReturnDispositionPolicy.validate(
+      disposition: state.dispositionType,
+      refundMethod: state.refundMethod,
+      reason: state.reason,
+      hasSettlementAllocations: event.settlementAllocations.isNotEmpty,
+    );
+    if (dispositionError != null) {
+      emit(state.copyWith(error: 'purchases.$dispositionError'));
+      return;
+    }
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {

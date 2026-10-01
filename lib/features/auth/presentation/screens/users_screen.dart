@@ -209,6 +209,23 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                             ),
                             _buildFilterChip(
                               context,
+                              label: 'users.role_accountant'.tr(),
+                              isSelected:
+                                  _selectedRoleFilter == UserRole.accountant,
+                              onSelected: () {
+                                setState(
+                                  () =>
+                                      _selectedRoleFilter = UserRole.accountant,
+                                );
+                                context.read<UsersBloc>().add(
+                                  const UserFilterByRoleRequested(
+                                    UserRole.accountant,
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildFilterChip(
+                              context,
                               label: 'users.role_cashier'.tr(),
                               isSelected:
                                   _selectedRoleFilter == UserRole.cashier,
@@ -219,6 +236,24 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                                 context.read<UsersBloc>().add(
                                   const UserFilterByRoleRequested(
                                     UserRole.cashier,
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildFilterChip(
+                              context,
+                              label: 'users.role_warehouse_clerk'.tr(),
+                              isSelected:
+                                  _selectedRoleFilter ==
+                                  UserRole.warehouseClerk,
+                              onSelected: () {
+                                setState(
+                                  () => _selectedRoleFilter =
+                                      UserRole.warehouseClerk,
+                                );
+                                context.read<UsersBloc>().add(
+                                  const UserFilterByRoleRequested(
+                                    UserRole.warehouseClerk,
                                   ),
                                 );
                               },
@@ -354,6 +389,9 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                                   ),
                                 );
                               },
+                              onDelete: user.isOwner
+                                  ? null
+                                  : () => _deleteUser(user),
                             ),
                           );
                         }, childCount: users.length),
@@ -377,6 +415,72 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
         label: Text('users.add'.tr()),
       ),
     );
+  }
+
+  Future<void> _deleteUser(UserEntity user) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('users.delete_confirm_title'.tr()),
+        content: Text('users.delete_confirm_message'.tr(args: [user.username])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            child: Text('users.delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final result = await context.read<UsersBloc>().deleteUser(user.id);
+    if (!mounted) return;
+
+    switch (result) {
+      case UserDeleteResult.deleted:
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('users.deleted_success'.tr())));
+        return;
+      case UserDeleteResult.ownerProtected:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('users.owner_delete_protected'.tr())),
+        );
+        return;
+      case UserDeleteResult.hasOperationalHistory:
+        final deactivate = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('users.delete_history_title'.tr()),
+            content: Text('users.delete_history_message'.tr()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text('common.cancel'.tr()),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text('users.delete_history_action'.tr()),
+              ),
+            ],
+          ),
+        );
+        if (deactivate == true && mounted) {
+          context.read<UsersBloc>().add(
+            UserToggleActiveRequested(user.id, false),
+          );
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('users.deactivated_success'.tr())),
+          );
+        }
+    }
   }
 
   Widget _buildFilterChip(

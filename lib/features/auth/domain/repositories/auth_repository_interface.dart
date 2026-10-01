@@ -4,6 +4,11 @@ class RemoteAuthenticationRequiredException implements Exception {
   const RemoteAuthenticationRequiredException();
 }
 
+class RemoteAuthenticationRejectedException implements Exception {
+  const RemoteAuthenticationRejectedException(this.code);
+  final String code;
+}
+
 abstract class AuthRepositoryInterface {
   Future<UserEntity?> login(
     String username,

@@ -85,6 +85,43 @@ void main() {
     );
 
     blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
+      'filters warehouse clerks as a distinct role',
+      setUp: () {
+        final users = [
+          ...testUsers,
+          UserEntity(
+            id: 4,
+            username: 'warehouse1',
+            role: UserRole.warehouseClerk,
+            branchId: 'branch-a',
+            warehouseId: 'warehouse-a',
+            isActive: true,
+            createdAt: DateTime(2026, 1, 4),
+            updatedAt: DateTime(2026, 1, 4),
+          ),
+        ];
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => Stream.value(users));
+      },
+      build: () => UsersBloc(mockRepository),
+      act: (bloc) async {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        bloc.add(const UserFilterByRoleRequested(UserRole.warehouseClerk));
+      },
+      skip: 1,
+      expect: () => [
+        isA<RealtimeSuccess<List<UserEntity>>>()
+            .having((state) => state.data.length, 'data.length', 1)
+            .having(
+              (state) => state.data.single.role,
+              'role',
+              UserRole.warehouseClerk,
+            ),
+      ],
+    );
+
+    blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
       'filters users by search query when UserSearchRequested is added',
       setUp: () {
         when(

@@ -59,7 +59,10 @@ import '../../features/settings/presentation/screens/company_profile_screen.dart
 import '../../features/settings/presentation/screens/backup_restore_screen.dart';
 import '../../features/settings/presentation/screens/lan_network_settings_screen.dart';
 import '../../features/settings/presentation/screens/lan_client_session_screen.dart';
+import '../../features/business/data/warehouse_transfer_application_service.dart';
 import '../../features/business/presentation/screens/business_locations_hub_screen.dart';
+import '../../features/business/presentation/screens/warehouse_transfer_screen.dart';
+import '../../features/business/presentation/screens/lan_branch_join_screen.dart';
 import '../../features/settings/presentation/screens/lan_remote_sale_screen.dart';
 import '../../features/promotions/presentation/screens/promotions_screen.dart';
 import '../../features/promotions/presentation/screens/promotion_usage_report_screen.dart';
@@ -134,9 +137,20 @@ import '../../features/financial_management/presentation/screens/fixed_assets_sc
 import '../../features/subscription/presentation/screens/upgrade_required_screen.dart';
 import '../services/feature_gate_service.dart';
 import '../services/lan/lan_network_service.dart';
+import '../services/lan/device_mode_reset_service.dart';
 import '../di/injection_container.dart';
+import '../services/sync/branch_catalogue_sync_service.dart';
+import '../widgets/shared_catalogue_authority_gate.dart';
 import 'pro_route_policy.dart';
 import 'route_permissions.dart';
+
+Widget _sharedCatalogueEditor(String title, Widget child) =>
+    SharedCatalogueAuthorityGate(
+      title: title,
+      authorityCheck:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueAuthority,
+      child: child,
+    );
 
 class AppRouter {
   static final GlobalKey<NavigatorState> _rootNavigatorKey =
@@ -212,7 +226,20 @@ class AppRouter {
 
       // No users exist - go to setup screen to create first owner
       if (authState is AuthNeedsSetup) {
-        if (currentPath == '/setup' || currentPath == '/device-connect') {
+        final pendingDeviceTarget = sl<SharedPreferences>().getString(
+          DeviceModeResetService.pendingTargetKey,
+        );
+        if (pendingDeviceTarget ==
+            FreshDeviceModeTarget.independentBranch.name) {
+          return currentPath == '/branch-connect' ? null : '/branch-connect';
+        }
+        if (pendingDeviceTarget ==
+            FreshDeviceModeTarget.branchWarehouseDevice.name) {
+          return currentPath == '/device-connect' ? null : '/device-connect';
+        }
+        if (currentPath == '/setup' ||
+            currentPath == '/device-connect' ||
+            currentPath == '/branch-connect') {
           return null;
         }
         return '/setup';
@@ -236,23 +263,31 @@ class AppRouter {
         // client's unrelated local SQLite database.
         final lan = sl<LanNetworkService>();
         final isRemoteClient = lan.snapshot.mode == LanMode.client;
-        var isRemotePurchaseReturnRoute = false;
+        var isRemotePurchaseRoute = false;
         if (isRemoteClient) {
           final isAuthEntry =
               currentPath == '/login' ||
               currentPath == '/setup' ||
               currentPath == '/' ||
               currentPath == '/forgot-password' ||
-              currentPath == '/device-connect';
+              currentPath == '/device-connect' ||
+              currentPath == '/branch-connect';
           if (isAuthEntry) return '/dashboard';
 
           final isRemoteSaleForm = currentPath == '/sales/new';
-          final isRemoteReturnForm = currentPath == '/sales/returns/new';
+          final isRemoteReturnForm =
+              currentPath == '/sales/returns/new' ||
+              currentPath == '/sales/returns/adjustment';
           final isRemoteSaleDetail = RegExp(
             r'^/sales/\d+$',
           ).hasMatch(currentPath);
           final isRemoteReturnDetail = RegExp(
             r'^/sales/returns/(?:adj/)?\d+$',
+          ).hasMatch(currentPath);
+          final isRemotePurchaseList = currentPath == '/purchases';
+          final isRemotePurchaseForm = currentPath == '/purchases/new';
+          final isRemotePurchaseDetail = RegExp(
+            r'^/purchases/\d+$',
           ).hasMatch(currentPath);
           final isRemotePurchaseReturnList =
               currentPath == '/purchases/returns';
@@ -262,17 +297,30 @@ class AppRouter {
           final isRemotePurchaseReturnDetail = RegExp(
             r'^/purchases/returns/(?:adj/)?\d+$',
           ).hasMatch(currentPath);
-          isRemotePurchaseReturnRoute =
+          final isRemotePurchaseReturnRoute =
               isRemotePurchaseReturnList ||
               isRemotePurchaseReturnForm ||
               isRemotePurchaseReturnDetail;
-          if (isRemotePurchaseReturnRoute) {
+          isRemotePurchaseRoute =
+              isRemotePurchaseList ||
+              isRemotePurchaseForm ||
+              isRemotePurchaseDetail ||
+              isRemotePurchaseReturnRoute;
+          if (isRemotePurchaseRoute) {
             final permissions = lan.remoteUser?.permissions ?? const <String>[];
             final canView =
                 permissions.contains(Permissions.viewPurchases) ||
                 permissions.contains(Permissions.managePurchases);
             final canManage = permissions.contains(Permissions.managePurchases);
-            if (!canView || (isRemotePurchaseReturnForm && !canManage)) {
+            if (!canView ||
+                ((isRemotePurchaseForm || isRemotePurchaseReturnForm) &&
+                    !canManage)) {
+              return '/access-denied';
+            }
+          }
+          if (currentPath.startsWith('/sales/returns')) {
+            final permissions = lan.remoteUser?.permissions ?? const <String>[];
+            if (!permissions.contains(Permissions.handleReturns)) {
               return '/access-denied';
             }
           }
@@ -282,12 +330,13 @@ class AppRouter {
               currentPath == '/sales' ||
               currentPath == '/sales/returns' ||
               currentPath == '/products' ||
+              currentPath == '/warehouse-transfers' ||
               (currentPath == '/devices' && user.role == UserRole.owner) ||
               isRemoteSaleForm ||
               isRemoteReturnForm ||
               isRemoteSaleDetail ||
               isRemoteReturnDetail ||
-              isRemotePurchaseReturnRoute ||
+              isRemotePurchaseRoute ||
               currentPath == '/access-denied';
           if (!isRemoteReady) return '/dashboard';
           if (isRemoteSaleForm && user.role == UserRole.cashier) {
@@ -320,7 +369,7 @@ class AppRouter {
 
         if (ProRoutePolicy.requiresPro(currentPath) &&
             !isPro &&
-            !isRemotePurchaseReturnRoute) {
+            !isRemotePurchaseRoute) {
           final encoded = Uri.encodeComponent(currentPath);
           return '/upgrade?from=$encoded';
         }
@@ -330,7 +379,8 @@ class AppRouter {
             currentPath == '/setup' ||
             currentPath == '/' ||
             currentPath == '/forgot-password' ||
-            currentPath == '/device-connect') {
+            currentPath == '/device-connect' ||
+            currentPath == '/branch-connect') {
           return '/dashboard';
         }
 
@@ -340,7 +390,8 @@ class AppRouter {
       // AuthUnauthenticated or AuthError - go to login
       if (currentPath == '/login' ||
           currentPath == '/forgot-password' ||
-          currentPath == '/device-connect') {
+          currentPath == '/device-connect' ||
+          currentPath == '/branch-connect') {
         return null;
       }
 
@@ -374,6 +425,10 @@ class AppRouter {
         path: '/device-connect',
         builder: (context, state) =>
             const LanNetworkSettingsScreen(clientOnly: true),
+      ),
+      GoRoute(
+        path: '/branch-connect',
+        builder: (context, state) => LanBranchJoinScreen(service: sl()),
       ),
       GoRoute(
         path: '/client-session',
@@ -427,15 +482,24 @@ class AppRouter {
           ),
           GoRoute(
             path: 'bulk',
-            builder: (context, state) => const BulkProductFormScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'product_form.title'.tr(),
+              const BulkProductFormScreen(),
+            ),
           ),
           GoRoute(
             path: 'edit-prices',
-            builder: (context, state) => const EditPricesScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'product_form.title'.tr(),
+              const EditPricesScreen(),
+            ),
           ),
           GoRoute(
             path: 'import',
-            builder: (context, state) => const ImportProductsScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'product_form.title'.tr(),
+              const ImportProductsScreen(),
+            ),
           ),
           GoRoute(
             path: 'export',
@@ -443,11 +507,17 @@ class AppRouter {
           ),
           GoRoute(
             path: 'variants',
-            builder: (context, state) => const VariantsScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'product_form.title'.tr(),
+              const VariantsScreen(),
+            ),
           ),
           GoRoute(
             path: 'categories',
-            builder: (context, state) => const CategoriesScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'categories.title'.tr(),
+              const CategoriesScreen(),
+            ),
             routes: [
               GoRoute(
                 path: 'pick',
@@ -456,18 +526,24 @@ class AppRouter {
               ),
               GoRoute(
                 path: 'new',
-                builder: (context, state) => BlocProvider(
-                  create: (_) => sl<CategoriesBloc>(),
-                  child: const CategoryFormScreen(),
+                builder: (context, state) => _sharedCatalogueEditor(
+                  'categories.title'.tr(),
+                  BlocProvider(
+                    create: (_) => sl<CategoriesBloc>(),
+                    child: const CategoryFormScreen(),
+                  ),
                 ),
               ),
               GoRoute(
                 path: ':id/edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return BlocProvider(
-                    create: (_) => sl<CategoriesBloc>(),
-                    child: CategoryFormScreen(categoryId: id),
+                  return _sharedCatalogueEditor(
+                    'categories.title'.tr(),
+                    BlocProvider(
+                      create: (_) => sl<CategoriesBloc>(),
+                      child: CategoryFormScreen(categoryId: id),
+                    ),
                   );
                 },
               ),
@@ -475,7 +551,10 @@ class AppRouter {
           ),
           GoRoute(
             path: 'colors',
-            builder: (context, state) => const ColorsScreen(),
+            builder: (context, state) => _sharedCatalogueEditor(
+              'colors.title'.tr(),
+              const ColorsScreen(),
+            ),
             routes: [
               GoRoute(
                 path: 'magazine',
@@ -483,18 +562,24 @@ class AppRouter {
               ),
               GoRoute(
                 path: 'new',
-                builder: (context, state) => BlocProvider(
-                  create: (_) => sl<ColorsBloc>(),
-                  child: const ColorFormScreen(),
+                builder: (context, state) => _sharedCatalogueEditor(
+                  'colors.title'.tr(),
+                  BlocProvider(
+                    create: (_) => sl<ColorsBloc>(),
+                    child: const ColorFormScreen(),
+                  ),
                 ),
               ),
               GoRoute(
                 path: ':id/edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return BlocProvider(
-                    create: (_) => sl<ColorsBloc>(),
-                    child: ColorFormScreen(colorId: id),
+                  return _sharedCatalogueEditor(
+                    'colors.title'.tr(),
+                    BlocProvider(
+                      create: (_) => sl<ColorsBloc>(),
+                      child: ColorFormScreen(colorId: id),
+                    ),
                   );
                 },
               ),
@@ -502,17 +587,24 @@ class AppRouter {
           ),
           GoRoute(
             path: 'sizes',
-            builder: (context, state) => const SizesScreen(),
+            builder: (context, state) =>
+                _sharedCatalogueEditor('sizes.title'.tr(), const SizesScreen()),
             routes: [
               GoRoute(
                 path: 'new',
-                builder: (context, state) => const SizeFormScreen(),
+                builder: (context, state) => _sharedCatalogueEditor(
+                  'sizes.title'.tr(),
+                  const SizeFormScreen(),
+                ),
               ),
               GoRoute(
                 path: ':id/edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  return SizeFormScreen(sizeId: id);
+                  return _sharedCatalogueEditor(
+                    'sizes.title'.tr(),
+                    SizeFormScreen(sizeId: id),
+                  );
                 },
               ),
             ],
@@ -1206,6 +1298,12 @@ class AppRouter {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/warehouse-transfers',
+        builder: (context, state) => WarehouseTransferScreen(
+          service: sl<WarehouseTransferApplicationService>(),
+        ),
       ),
       GoRoute(
         path: '/devices',

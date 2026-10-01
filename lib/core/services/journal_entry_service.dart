@@ -99,12 +99,14 @@ class JournalEntryService {
 
   /// Incoming cheques are assets in hand, not bank cash, until cleared.
   Future<int> _incomingSettlementAccountId(String? method) {
+    if (method == 'loyalty') return _requireAccountId('2300');
     if (_isCheque(method)) return _requireAccountId('1020');
     return _cashOrBankAccountId(method);
   }
 
   /// Issued cheques remain an outstanding liability until bank clearance.
   Future<int> _outgoingSettlementAccountId(String? method) {
+    if (method == 'loyalty') return _requireAccountId('2300');
     if (_isCheque(method)) return _requireAccountId('2020');
     return _cashOrBankAccountId(method);
   }

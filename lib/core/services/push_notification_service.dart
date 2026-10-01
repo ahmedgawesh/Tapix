@@ -43,7 +43,14 @@ class PushNotificationService {
   static const String _channelName = 'TapBix Notifications';
   static const String _languageTopicKey = 'tapbix_push_language_topic_v1';
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  // Firebase is intentionally resolved lazily. Desktop builds still use this
+  // service as the optional device-notification sink for business events, but
+  // Firebase is not initialized there. Resolving FirebaseMessaging in the
+  // singleton constructor made even a no-op Linux notification throw
+  // [core/no-app] before the platform guard could run.
+  FirebaseMessaging? _firebaseMessaging;
+  FirebaseMessaging get _messaging =>
+      _firebaseMessaging ??= FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final Dio _dio = Dio(
@@ -62,19 +69,23 @@ class PushNotificationService {
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
   StreamSubscription<RemoteMessage>? _openedSubscription;
   bool _initialized = false;
+  Future<void>? _localInitialization;
 
-  bool get _isSupported =>
+  bool get _isPushSupported =>
       !kIsWeb && (PlatformUtils.isAndroid || PlatformUtils.isIOS);
+  bool get _isLocalNotificationSupported =>
+      !kIsWeb &&
+      (PlatformUtils.isAndroid || PlatformUtils.isIOS || PlatformUtils.isLinux);
 
   Future<void> initialize() async {
-    if (_initialized || !_isSupported) return;
+    if (_initialized || !_isPushSupported) return;
     _initialized = true;
 
     FirebaseMessaging.onBackgroundMessage(
       tapbixFirebaseMessagingBackgroundHandler,
     );
 
-    await _initializeLocalNotifications();
+    await (_localInitialization ??= _initializeLocalNotifications());
 
     try {
       final settings = await _messaging.requestPermission(
@@ -137,6 +148,7 @@ class PushNotificationService {
     const initializationSettings = InitializationSettings(
       android: AndroidInitializationSettings('ic_notification'),
       iOS: DarwinInitializationSettings(),
+      linux: LinuxInitializationSettings(defaultActionName: 'Open TapBix'),
     );
 
     await _localNotifications.initialize(
@@ -175,7 +187,7 @@ class PushNotificationService {
   /// Re-syncs the selected TapBix language and refreshes this device's
   /// registration metadata. Safe to call after the user changes language.
   Future<void> refreshRegistration() async {
-    if (!_initialized || !_isSupported) return;
+    if (!_initialized || !_isPushSupported) return;
     try {
       await _syncLanguageTopic();
       await _registerCurrentToken();
@@ -283,6 +295,45 @@ class PushNotificationService {
       // Device label is optional metadata only.
     }
     return 'Unknown device';
+  }
+
+  Future<void> showLocalBusinessNotification({
+    required String title,
+    required String body,
+    required Map<String, Object?> payload,
+    required String stableKey,
+  }) async {
+    if (!_isLocalNotificationSupported) return;
+    await (_localInitialization ??= _initializeLocalNotifications());
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        _channelName,
+        channelDescription: 'General messages and updates from TapBix.',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      ),
+      linux: LinuxNotificationDetails(
+        urgency: LinuxNotificationUrgency.critical,
+      ),
+    );
+    var id = 17;
+    for (final unit in stableKey.codeUnits) {
+      id = ((id * 31) + unit) & 0x7fffffff;
+    }
+    await _localNotifications.show(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
+      payload: jsonEncode(payload),
+    );
   }
 
   Future<void> _showForegroundNotification(RemoteMessage message) async {

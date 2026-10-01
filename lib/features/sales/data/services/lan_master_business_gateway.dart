@@ -1,3 +1,8 @@
+import '../../../../core/services/returns/purchase_return_disposition.dart';
+import '../../../../core/services/loyalty/sale_loyalty_settlement.dart';
+import 'dart:async';
+import 'dart:convert';
+
 import '../../../../core/pricing/pricing_preview_fingerprint.dart';
 import '../../../../core/services/business/branch_tax_policy_store.dart';
 import 'package:decimal/decimal.dart';
@@ -7,8 +12,9 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/migrations/consignment_return_liability.dart';
 import '../../../../core/services/business/warehouse_catalog_scope.dart';
 import '../../../../core/services/business/document_posting_scope.dart';
-import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../../../../core/services/business/warehouse_operation_scope.dart';
+import '../../../../core/services/business/warehouse_read_scope.dart';
+import '../../../../core/services/business/warehouse_stock_initialization_service.dart';
 import '../../../../core/services/business/warehouse_transfer_preflight.dart';
 import '../../../business/data/warehouse_setup_service.dart';
 import '../../../business/data/warehouse_transfer_dispatch_service.dart';
@@ -44,15 +50,24 @@ import '../../../../core/services/inventory/supplier_product_identity_service.da
 import '../../../../core/services/inventory/inventory_stock_source_service.dart';
 import '../../../../core/services/lan/lan_request_receipt_store.dart';
 import '../../../../core/services/lan/lan_business_models.dart';
+import '../../../../core/services/lan/lan_void_impact_codec.dart';
 import '../../../../core/services/lan/lan_models.dart';
+import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../settings/data/services/app_settings_service.dart';
 import '../../../purchases/domain/entities/purchase_entity.dart';
 import '../../../purchases/domain/repositories/purchase_repository.dart';
+import '../../../purchases/data/repositories/purchase_repository_impl.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
+import '../repositories/sale_repository_impl.dart';
 
 class LanMasterBusinessGatewayImpl
-    implements LanMasterBusinessGateway, LanWarehouseTransferGateway {
+    implements
+        LanMasterBusinessGateway,
+        LanWarehouseScopedBusinessGateway,
+        LanPurchaseInvoiceGateway,
+        LanWarehouseTransferGateway {
+  static final Object _warehouseContextKey = Object();
   final AppDatabase _database;
   final SaleRepository _sales;
   final PurchaseRepository _purchases;
@@ -102,40 +117,80 @@ class LanMasterBusinessGatewayImpl
        _auditLog = auditLog,
        _warehouseEntitlement = warehouseEntitlement;
 
+  _LanWarehouseContext? get _warehouseContext =>
+      Zone.current[_warehouseContextKey] as _LanWarehouseContext?;
+
+  SaleRepository get _activeSales => _warehouseContext?.sales ?? _sales;
+  PurchaseRepository get _activePurchases =>
+      _warehouseContext?.purchases ?? _purchases;
+  WarehouseOperationScope? get _activeWarehouseScope =>
+      _warehouseContext?.scope;
+
+  @override
+  Future<T> runForWarehouse<T>(
+    String warehouseId,
+    Future<T> Function() operation,
+  ) async {
+    final scope = await WarehouseOperationScope.resolveForOrganization(
+      _database,
+      warehouseId: warehouseId,
+    );
+    await scope.validate(_database);
+    if (scope.isPrimary) return operation();
+    if (_sales is! SaleRepositoryImpl ||
+        _purchases is! PurchaseRepositoryImpl) {
+      throw StateError('Warehouse-scoped LAN repositories are unavailable.');
+    }
+    final context = _LanWarehouseContext(
+      scope: scope,
+      sales: _sales.forWarehouse(scope),
+      purchases: _purchases.forWarehouse(scope),
+    );
+    return runZoned(operation, zoneValues: {_warehouseContextKey: context});
+  }
+
   bool _isEnabled(AppFeature feature, bool settingEnabled) =>
       _featureGate.isEnabled(feature, settingEnabled: settingEnabled);
 
-  Future<Set<int>> _primaryDocumentIds(InventoryPostingDocument kind) async =>
-      (await _database
-              .customSelect(
-                'SELECT id FROM ${WarehouseDocumentScope.primaryDocuments(kind)}',
-              )
-              .get())
-          .map((row) => row.read<int>('id'))
-          .toSet();
+  Future<WarehouseReadScope> _activeReadScope() async {
+    final selected = _activeWarehouseScope;
+    return selected == null
+        ? WarehouseReadScope.resolve(_database)
+        : selected.forReading(_database);
+  }
+
+  Future<Set<int>> _activeDocumentIds(InventoryPostingDocument kind) async {
+    final scope = await _activeReadScope();
+    return (await _database
+            .customSelect('SELECT id FROM ${scope.documents(kind)}')
+            .get())
+        .map((row) => row.read<int>('id'))
+        .toSet();
+  }
+
+  Future<bool> _containsActiveDocument(
+    InventoryPostingDocument kind,
+    int id,
+  ) async {
+    final scope = await _activeReadScope();
+    return await _database
+            .customSelect(
+              'SELECT 1 AS found FROM ${scope.documents(kind)} WHERE id=?',
+              variables: [Variable.withInt(id)],
+            )
+            .getSingleOrNull() !=
+        null;
+  }
 
   @override
   Future<LanSalesPage> fetchSales({required int limit}) async {
     final safeLimit = limit.clamp(1, 500);
-    final allowed = await _primaryDocumentIds(InventoryPostingDocument.sale);
+    final allowed = await _activeDocumentIds(InventoryPostingDocument.sale);
     final results = await Future.wait<dynamic>([
-      _sales.watchAllSales().first,
-      _database.saleDao
-          .getDashboardStats(primaryWarehouseOnly: true)
-          .then(
-            (stats) => SaleDashboardStats(
-              totalCount: stats.totalCount,
-              completedCount: stats.completedCount,
-              voidedCount: stats.voidedCount,
-              totalSalesCents: stats.totalSalesCents,
-              returnsCount: stats.returnsCount,
-              totalReturnsCents: stats.totalReturnsCents,
-              todaySalesCents: stats.todaySalesCents,
-              todayCount: stats.todayCount,
-            ),
-          ),
-      _sales.watchSaleIdsWithReturns().first,
-      _sales.watchSaleProductSearchTerms().first,
+      _activeSales.watchAllSales().first,
+      _activeSales.watchDashboardStats().first,
+      _activeSales.watchSaleIdsWithReturns().first,
+      _activeSales.watchSaleProductSearchTerms().first,
     ]);
     final sales = (results[0] as List<SaleEntity>)
         .where((sale) => allowed.contains(sale.id))
@@ -200,17 +255,13 @@ class LanMasterBusinessGatewayImpl
 
   @override
   Future<LanSaleDetails?> fetchSaleDetails({required int saleId}) async {
-    if (!await WarehouseDocumentScope.contains(
-      _database,
-      InventoryPostingDocument.sale,
-      saleId,
-    )) {
+    if (!await _containsActiveDocument(InventoryPostingDocument.sale, saleId)) {
       return null;
     }
     if (saleId <= 0) return null;
-    final sale = await _sales.getSaleById(saleId);
+    final sale = await _activeSales.getSaleById(saleId);
     if (sale == null) return null;
-    final items = await _sales.getSaleItems(saleId);
+    final items = await _activeSales.getSaleItems(saleId);
     final shift = await _shifts.getSaleShift(saleId);
     final promotionApplications = await _promotions.loadSaleApplications(
       saleId,
@@ -303,18 +354,14 @@ class LanMasterBusinessGatewayImpl
         statusCode: 409,
       );
     }
-    if (!await WarehouseDocumentScope.contains(
-      _database,
-      InventoryPostingDocument.sale,
-      saleId,
-    )) {
+    if (!await _containsActiveDocument(InventoryPostingDocument.sale, saleId)) {
       throw const LanBusinessException(
         'sale_not_found',
         'Sale not found in the active warehouse.',
         statusCode: 404,
       );
     }
-    final sale = await _sales.getSaleById(saleId);
+    final sale = await _activeSales.getSaleById(saleId);
     if (sale == null) {
       throw const LanBusinessException(
         'sale_not_found',
@@ -337,7 +384,7 @@ class LanMasterBusinessGatewayImpl
       );
     }
     try {
-      await _sales.voidSale(saleId, actorUserId: actor.id);
+      await _activeSales.voidSale(saleId, actorUserId: actor.id);
       return LanSaleVoidResult(saleId: saleId, status: 'voided');
     } catch (error) {
       throw LanBusinessException(
@@ -376,7 +423,10 @@ class LanMasterBusinessGatewayImpl
         ? null
         : await InventoryStockSourceService(
             _database,
-          ).resolveConsignmentCodeReference(normalized);
+          ).resolveConsignmentCodeReference(
+            normalized,
+            scope: _activeWarehouseScope,
+          );
     final pharmacyEnabled = _isEnabled(
       AppFeature.pharmacy,
       appSettings.enablePharmacyFeatures,
@@ -385,12 +435,28 @@ class LanMasterBusinessGatewayImpl
       AppFeature.promotions,
       appSettings.enablePromotions,
     );
+    final cataloguePolicy = await _activeBranchCataloguePolicy();
     final medicineProductIds = pharmacyEnabled && normalized.isNotEmpty
         ? await _pharmacy.searchMedicineProductIds(normalized)
         : const <int>{};
     final statement = _database.select(_database.products)
       ..where((row) {
         var expression = row.isActive.equals(true);
+        if (cataloguePolicy.isManaged) {
+          Expression<bool> selected = const Constant(false);
+          if (cataloguePolicy.categoryIds.isNotEmpty) {
+            selected =
+                selected | row.categoryId.isIn(cataloguePolicy.categoryIds);
+          }
+          if (cataloguePolicy.productIds.isNotEmpty) {
+            selected = selected | row.id.isIn(cataloguePolicy.productIds);
+          }
+          expression = expression & selected;
+          if (cataloguePolicy.excludedProductIds.isNotEmpty) {
+            expression =
+                expression & row.id.isNotIn(cataloguePolicy.excludedProductIds);
+          }
+        }
         if (normalized.isNotEmpty) {
           final pattern = '%$normalized%';
           expression =
@@ -455,6 +521,10 @@ class LanMasterBusinessGatewayImpl
       )..where((row) => row.id.isIn(promotionVariantIds))).get();
       promotionProductIds.addAll(variantRows.map((row) => row.productId));
     }
+    if (cataloguePolicy.isManaged && promotionProductIds.isNotEmpty) {
+      final allowed = await _managedCatalogueProductIds(cataloguePolicy);
+      promotionProductIds.retainAll(allowed);
+    }
     final promotionProducts = promotionProductIds.isEmpty
         ? const <LanCatalogProduct>[]
         : await _buildCatalogProducts(
@@ -494,6 +564,7 @@ class LanMasterBusinessGatewayImpl
       receiptHeaderText: appSettings.receiptHeaderText,
       receiptFooterText: appSettings.receiptFooterText,
       enablePharmacyFeatures: pharmacyEnabled,
+      useSupplierProductCodes: appSettings.enableSupplierProductCodes,
       enablePromotions: promotionsEnabled,
       promotionRules: activePromotionRules
           .map((rule) => rule.toTransportMap())
@@ -532,11 +603,14 @@ class LanMasterBusinessGatewayImpl
     Map<int, SupplierIdentitySelection> identityMatches = const {},
     Map<int, InventoryStockSourceBalance> consignmentMatches = const {},
   }) async {
+    await _ensureActiveWarehouseBalances(products);
     final productIds = products.map((row) => row.id).toList(growable: false);
+    final readScope = await _activeReadScope();
     final scopedProducts = {
       for (final p in await WarehouseCatalogScope.readProducts(
         _database,
         productIds,
+        scope: readScope,
       ))
         p.id: p,
     };
@@ -555,6 +629,7 @@ class LanMasterBusinessGatewayImpl
     final variants = await WarehouseCatalogScope.readVariants(
       _database,
       storedVariants.map((v) => v.id).toList(),
+      scope: readScope,
     );
     final colors = await _database.select(_database.productColors).get();
     final sizes = await _database.select(_database.sizes).get();
@@ -652,6 +727,122 @@ class LanMasterBusinessGatewayImpl
         .toList(growable: false);
   }
 
+  Future<BranchCataloguePolicy> _activeBranchCataloguePolicy() async {
+    final scope = _activeWarehouseScope;
+    if (scope == null || scope.isPrimary) {
+      return const BranchCataloguePolicy();
+    }
+    final row = await _database
+        .customSelect(
+          'SELECT value FROM app_settings WHERE key=?',
+          variables: [
+            Variable.withString(
+              'lan.branch_catalogue.policy.v1.${scope.branchId}',
+            ),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) return const BranchCataloguePolicy();
+    try {
+      return BranchCataloguePolicy.fromJson(
+        jsonDecode(row.read<String>('value')),
+      );
+    } on FormatException {
+      return const BranchCataloguePolicy();
+    }
+  }
+
+  Future<Set<int>> _managedCatalogueProductIds(
+    BranchCataloguePolicy policy,
+  ) async {
+    if (!policy.isManaged) return const <int>{};
+    final rows =
+        await (_database.select(_database.products)..where((row) {
+              Expression<bool> selected = const Constant(false);
+              if (policy.categoryIds.isNotEmpty) {
+                selected = selected | row.categoryId.isIn(policy.categoryIds);
+              }
+              if (policy.productIds.isNotEmpty) {
+                selected = selected | row.id.isIn(policy.productIds);
+              }
+              var expression = row.isActive.equals(true) & selected;
+              if (policy.excludedProductIds.isNotEmpty) {
+                expression =
+                    expression & row.id.isNotIn(policy.excludedProductIds);
+              }
+              return expression;
+            }))
+            .get();
+    return rows.map((row) => row.id).toSet();
+  }
+
+  /// A catalogue assignment establishes which SKUs a location may operate.
+  /// Creating a zero balance is metadata only: it neither increases stock nor
+  /// posts a journal entry. The first purchase/transfer still owns quantity
+  /// and valuation, while the saved variant cost is merely the initial WAC
+  /// fallback required by the warehouse ledger.
+  Future<void> _ensureActiveWarehouseBalances(List<Product> products) async {
+    final scope = _activeWarehouseScope;
+    if (scope == null || scope.isPrimary || products.isEmpty) return;
+    final productIds = products.map((row) => row.id).toSet();
+    final variants =
+        await (_database.select(_database.productVariants).join([
+              innerJoin(
+                _database.products,
+                _database.products.id.equalsExp(
+                  _database.productVariants.productId,
+                ),
+              ),
+            ])..where(
+              _database.productVariants.productId.isIn(productIds) &
+                  _database.productVariants.isActive.equals(true) &
+                  _database.products.isActive.equals(true) &
+                  _database.products.trackInventory.equals(true),
+            ))
+            .get();
+    final primaryScope = await WarehouseReadScope.resolve(_database);
+    final authoritativeVariants = {
+      for (final variant in await WarehouseCatalogScope.readVariants(
+        _database,
+        variants
+            .map((row) => row.readTable(_database.productVariants).id)
+            .toList(growable: false),
+        scope: primaryScope,
+      ))
+        variant.id: variant,
+    };
+    final grouped = <int, List<WarehouseStockSeed>>{};
+    for (final row in variants) {
+      final variant = row.readTable(_database.productVariants);
+      final product = row.readTable(_database.products);
+      final authoritative = authoritativeVariants[variant.id];
+      if (authoritative == null) {
+        throw StateError(
+          'Primary warehouse balance is missing for variant ${variant.id}.',
+        );
+      }
+      grouped
+          .putIfAbsent(product.currencyId!, () => <WarehouseStockSeed>[])
+          .add(
+            WarehouseStockSeed(
+              variantId: variant.id,
+              unitCostCents: _cents(authoritative.costCents),
+            ),
+          );
+    }
+    final initializer = WarehouseStockInitializationService(_database);
+    for (final entry in grouped.entries) {
+      for (var offset = 0; offset < entry.value.length; offset += 500) {
+        final end = (offset + 500).clamp(0, entry.value.length);
+        await initializer.initialize(
+          scope: scope,
+          currencyId: entry.key,
+          seeds: entry.value.sublist(offset, end),
+        );
+      }
+    }
+  }
+
   LanMedicineProfile? _toLanMedicine(MedicineProfileDetails? details) {
     if (details == null) return null;
     return LanMedicineProfile(
@@ -706,12 +897,23 @@ class LanMasterBusinessGatewayImpl
         final currency = await (_database.select(
           _database.currencies,
         )..where((c) => c.id.equals(customer.currencyId))).getSingle();
+        final loyalty = await _database
+            .select(_database.loyaltySettingsTable)
+            .getSingleOrNull();
         return LanCustomerCheckout(
           customerId: customer.id,
           currencyId: currency.id,
           currencyCode: currency.code,
           balanceCents: _cents(customer.balanceCents),
           pointsBalance: customer.loyaltyPointsBalance,
+          redemptionEnabled:
+              customer.loyaltyEnabled &&
+              loyalty != null &&
+              loyalty.isEnabled &&
+              loyalty.allowPointsRedemption,
+          pointValueCents: loyalty?.pointValueCents ?? 0,
+          minRedemptionPoints: loyalty?.minRedemptionPoints ?? 0,
+          maxRedemptionPercentBps: loyalty?.maxRedemptionPercentBps ?? 0,
         );
       });
 
@@ -983,11 +1185,6 @@ class LanMasterBusinessGatewayImpl
             ),
           ])
           ..where(_database.sales.status.equals('completed'))
-          ..where(
-            CustomExpression<bool>(
-              'sales.id IN (SELECT id FROM ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)})',
-            ),
-          )
           ..orderBy([
             OrderingTerm.desc(_database.sales.saleDate),
             OrderingTerm.desc(_database.sales.id),
@@ -1005,7 +1202,10 @@ class LanMasterBusinessGatewayImpl
       );
     }
 
-    final rows = await statement.get();
+    final allowed = await _activeDocumentIds(InventoryPostingDocument.sale);
+    final rows = (await statement.get())
+        .where((row) => allowed.contains(row.readTable(_database.sales).id))
+        .toList(growable: false);
     final summaries = <int, LanReturnableSaleSummary>{};
     for (final row in rows) {
       final item = row.readTable(_database.saleItems);
@@ -1048,11 +1248,7 @@ class LanMasterBusinessGatewayImpl
   Future<LanReturnableSaleDetails?> fetchReturnableSale({
     required int saleId,
   }) async {
-    if (!await WarehouseDocumentScope.contains(
-      _database,
-      InventoryPostingDocument.sale,
-      saleId,
-    )) {
+    if (!await _containsActiveDocument(InventoryPostingDocument.sale, saleId)) {
       return null;
     }
     if (saleId <= 0) return null;
@@ -1105,7 +1301,7 @@ class LanMasterBusinessGatewayImpl
       if (available <= 0) continue;
       final product = row.readTable(_database.products);
       final variant = row.readTableOrNull(_database.productVariants);
-      final linkedHistory = await _sales.getLinkedReturnHistory(item.id);
+      final linkedHistory = await _activeSales.getLinkedReturnHistory(item.id);
       lines.add(
         LanReturnableSaleLine(
           saleItemId: item.id,
@@ -1164,13 +1360,13 @@ class LanMasterBusinessGatewayImpl
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final linkedIds = await _primaryDocumentIds(
+    final linkedIds = await _activeDocumentIds(
       InventoryPostingDocument.saleReturn,
     );
-    final adjustmentIds = await _primaryDocumentIds(
+    final adjustmentIds = await _activeDocumentIds(
       InventoryPostingDocument.saleAdjustment,
     );
-    final all = (await _sales.watchAllSaleReturns().first)
+    final all = (await _activeSales.watchAllSaleReturns().first)
         .where(
           (value) => (value.isAdjustment ? adjustmentIds : linkedIds).contains(
             value.id,
@@ -1236,8 +1432,7 @@ class LanMasterBusinessGatewayImpl
     required int returnId,
     required bool adjustment,
   }) async {
-    if (!await WarehouseDocumentScope.contains(
-      _database,
+    if (!await _containsActiveDocument(
       adjustment
           ? InventoryPostingDocument.saleAdjustment
           : InventoryPostingDocument.saleReturn,
@@ -1248,12 +1443,12 @@ class LanMasterBusinessGatewayImpl
     if (returnId <= 0) return null;
 
     if (!adjustment) {
-      final ret = await _sales.getSaleReturnById(returnId);
+      final ret = await _activeSales.getSaleReturnById(returnId);
       if (ret == null || ret.isAdjustment) return null;
       final currency = await _returnCurrency(ret.currencyId);
       final results = await Future.wait<dynamic>([
-        _sales.watchSaleReturnItemsWithDetails(returnId).first,
-        _sales.getSaleItems(ret.saleId),
+        _activeSales.watchSaleReturnItemsWithDetails(returnId).first,
+        _activeSales.getSaleItems(ret.saleId),
       ]);
       final returnItems = results[0] as List<SaleReturnItemEntity>;
       final saleItems = results[1] as List<SaleItemEntity>;
@@ -1599,7 +1794,7 @@ class LanMasterBusinessGatewayImpl
 
     late final int returnId;
     try {
-      returnId = await _sales.createSaleReturn(
+      returnId = await _activeSales.createSaleReturn(
         saleId: request.saleId,
         currencyId: details.sale.currencyId,
         subtotalCents: Decimal.zero,
@@ -1659,6 +1854,7 @@ class LanMasterBusinessGatewayImpl
         .getConsignmentAdjustmentReturnSources(
           productId: productId,
           variantId: variantId,
+          scope: _activeWarehouseScope,
         );
     return sources
         .map(
@@ -1691,9 +1887,11 @@ class LanMasterBusinessGatewayImpl
     }
     late final ProductStockSourceSnapshot snapshot;
     try {
-      snapshot = await InventoryStockSourceService(
-        _database,
-      ).loadProduct(productId, variantId: variantId);
+      snapshot = await InventoryStockSourceService(_database).loadProduct(
+        productId,
+        variantId: variantId,
+        scope: _activeWarehouseScope,
+      );
     } on StockSourceIntegrityException catch (error) {
       throw LanBusinessException(
         error.messageKey,
@@ -1900,6 +2098,7 @@ class LanMasterBusinessGatewayImpl
     final products = await WarehouseCatalogScope.readProducts(
       _database,
       productIds,
+      scope: await _activeReadScope(),
     );
     final productMap = {for (final value in products) value.id: value};
     final variantIds = request.lines
@@ -1910,6 +2109,7 @@ class LanMasterBusinessGatewayImpl
     final variants = await WarehouseCatalogScope.readVariants(
       _database,
       variantIds,
+      scope: await _activeReadScope(),
     );
     final variantMap = {for (final value in variants) value.id: value};
 
@@ -2153,6 +2353,7 @@ class LanMasterBusinessGatewayImpl
         commissionService: _commissions,
         loyaltyPointsService: _loyaltyPoints,
         settlementAllocations: settlementAllocations,
+        scope: _activeWarehouseScope,
       );
       final created = await _adjustmentReturns.getSaleAdjReturnById(returnId);
       if (created == null) {
@@ -2238,10 +2439,8 @@ class LanMasterBusinessGatewayImpl
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final allowed = await _primaryDocumentIds(
-      InventoryPostingDocument.purchase,
-    );
-    final all = (await _purchases.watchAllPurchases().first).where(
+    final allowed = await _activeDocumentIds(InventoryPostingDocument.purchase);
+    final all = (await _activePurchases.watchAllPurchases().first).where(
       (value) => allowed.contains(value.id),
     );
     final candidates = all.where(
@@ -2256,10 +2455,10 @@ class LanMasterBusinessGatewayImpl
     );
     final returnable = <LanReturnablePurchaseSummary>[];
     for (final purchase in candidates) {
-      final items = await _purchases.getPurchaseItems(purchase.id);
+      final items = await _activePurchases.getPurchaseItems(purchase.id);
       var actualCount = 0;
       for (final item in items) {
-        final returned = await _purchases.getReturnedQuantity(item.id);
+        final returned = await _activePurchases.getReturnedQuantity(item.id);
         if (returned < item.quantity) actualCount++;
       }
       if (actualCount == 0) continue;
@@ -2294,22 +2493,21 @@ class LanMasterBusinessGatewayImpl
   Future<LanReturnablePurchaseDetails?> fetchReturnablePurchase({
     required int purchaseId,
   }) async {
-    if (!await WarehouseDocumentScope.contains(
-      _database,
+    if (!await _containsActiveDocument(
       InventoryPostingDocument.purchase,
       purchaseId,
     )) {
       return null;
     }
-    final purchase = await _purchases.getPurchaseById(purchaseId);
+    final purchase = await _activePurchases.getPurchaseById(purchaseId);
     if (purchase == null || !purchase.isPosted) return null;
-    final items = await _purchases.getPurchaseItems(purchaseId);
+    final items = await _activePurchases.getPurchaseItems(purchaseId);
     final lines = <LanReturnablePurchaseLine>[];
     for (final item in items) {
-      final returned = await _purchases.getReturnedQuantity(item.id);
+      final returned = await _activePurchases.getReturnedQuantity(item.id);
       final available = item.quantity - returned;
       if (available <= 0) continue;
-      final history = await _purchases.getLinkedReturnHistory(item.id);
+      final history = await _activePurchases.getLinkedReturnHistory(item.id);
       lines.add(
         LanReturnablePurchaseLine(
           purchaseItemId: item.id,
@@ -2390,13 +2588,13 @@ class LanMasterBusinessGatewayImpl
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final linkedIds = await _primaryDocumentIds(
+    final linkedIds = await _activeDocumentIds(
       InventoryPostingDocument.purchaseReturn,
     );
-    final adjustmentIds = await _primaryDocumentIds(
+    final adjustmentIds = await _activeDocumentIds(
       InventoryPostingDocument.purchaseAdjustment,
     );
-    final all = (await _purchases.watchAllPurchaseReturns().first)
+    final all = (await _activePurchases.watchAllPurchaseReturns().first)
         .where(
           (value) => (value.isAdjustment ? adjustmentIds : linkedIds).contains(
             value.id,
@@ -2424,7 +2622,7 @@ class LanMasterBusinessGatewayImpl
       final summary = _purchaseReturnSummary(value);
       String? number;
       if (!value.isAdjustment && value.purchaseId > 0) {
-        number = (await _purchases.getPurchaseById(
+        number = (await _activePurchases.getPurchaseById(
           value.purchaseId,
         ))?.purchaseNumber;
       }
@@ -2466,8 +2664,7 @@ class LanMasterBusinessGatewayImpl
     required int returnId,
     required bool adjustment,
   }) async {
-    if (!await WarehouseDocumentScope.contains(
-      _database,
+    if (!await _containsActiveDocument(
       adjustment
           ? InventoryPostingDocument.purchaseAdjustment
           : InventoryPostingDocument.purchaseReturn,
@@ -2476,10 +2673,10 @@ class LanMasterBusinessGatewayImpl
       return null;
     }
     if (!adjustment) {
-      final ret = await _purchases.getPurchaseReturnById(returnId);
+      final ret = await _activePurchases.getPurchaseReturnById(returnId);
       if (ret == null || ret.isAdjustment) return null;
-      final purchase = await _purchases.getPurchaseById(ret.purchaseId);
-      final originals = await _purchases.getPurchaseItems(ret.purchaseId);
+      final purchase = await _activePurchases.getPurchaseById(ret.purchaseId);
+      final originals = await _activePurchases.getPurchaseItems(ret.purchaseId);
       final byId = {for (final item in originals) item.id: item};
       final items = await _purchases
           .watchPurchaseReturnItemsWithDetails(returnId)
@@ -2668,12 +2865,14 @@ class LanMasterBusinessGatewayImpl
         'A cheque due date is required.',
       );
     }
-    const dispositions = {'restock', 'write_off'};
-    if (!dispositions.contains(request.dispositionType)) {
-      throw const LanBusinessException(
-        'invalid_disposition',
-        'Unsupported purchase return disposition.',
-      );
+    final dispositionError = PurchaseReturnDispositionPolicy.validate(
+      disposition: request.dispositionType,
+      refundMethod: request.refundMethod,
+      reason: request.reason,
+      hasSettlementAllocations: request.payments.isNotEmpty,
+    );
+    if (dispositionError != null) {
+      throw LanBusinessException(dispositionError, dispositionError);
     }
     final requestReceipts = LanRequestReceiptStore(_database);
     final reservation = await requestReceipts.reserve(
@@ -2706,6 +2905,16 @@ class LanMasterBusinessGatewayImpl
           'idempotency_receipt_corrupt',
           'The saved request result is unavailable.',
           statusCode: 409,
+        );
+      }
+      if (!await _containsActiveDocument(
+        InventoryPostingDocument.purchaseReturn,
+        existing.id,
+      )) {
+        throw const LanBusinessException(
+          'purchase_return_not_found',
+          'The saved request belongs to another warehouse.',
+          statusCode: 404,
         );
       }
       return LanPurchaseReturnResult(
@@ -2755,7 +2964,7 @@ class LanMasterBusinessGatewayImpl
       );
     }
     try {
-      final returnId = await _purchases.createPurchaseReturn(
+      final returnId = await _activePurchases.createPurchaseReturn(
         purchaseId: request.purchaseId,
         currencyId: details.purchase.currencyId,
         subtotalCents: Decimal.zero,
@@ -2772,8 +2981,9 @@ class LanMasterBusinessGatewayImpl
         idempotencyKey: key,
         taxInclusiveAtPost: details.purchase.taxInclusiveAtPost,
         settlementAllocations: _purchaseReturnAllocations(request.payments),
+        actorUserId: actor.id,
       );
-      final created = await _purchases.getPurchaseReturnById(returnId);
+      final created = await _activePurchases.getPurchaseReturnById(returnId);
       if (created == null) throw StateError('Purchase return not found');
       await requestReceipts.complete(
         operation: 'purchase_return',
@@ -2893,6 +3103,7 @@ class LanMasterBusinessGatewayImpl
     final products = await WarehouseCatalogScope.readProducts(
       _database,
       productIds.toList(),
+      scope: await _activeReadScope(),
     );
     final productMap = {for (final value in products) value.id: value};
     final variantIds = request.lines
@@ -2902,6 +3113,7 @@ class LanMasterBusinessGatewayImpl
     final variants = await WarehouseCatalogScope.readVariants(
       _database,
       variantIds.toList(),
+      scope: await _activeReadScope(),
     );
     final variantMap = {for (final value in variants) value.id: value};
     final inputs = <LineItemPricingInput>[];
@@ -3074,6 +3286,7 @@ class LanMasterBusinessGatewayImpl
         userId: actor.id,
         allowNegativeStock: _settings.current.allowNegativeStock,
         settlementAllocations: allocations,
+        scope: _activeWarehouseScope,
       );
       final created = await _adjustmentReturns.getPurchaseAdjReturnById(
         returnId,
@@ -3111,7 +3324,7 @@ class LanMasterBusinessGatewayImpl
     final kind = adjustment
         ? InventoryPostingDocument.purchaseAdjustment
         : InventoryPostingDocument.purchaseReturn;
-    if (!await WarehouseDocumentScope.contains(_database, kind, returnId)) {
+    if (!await _containsActiveDocument(kind, returnId)) {
       throw const LanBusinessException(
         'purchase_return_not_found',
         'Purchase return not found in the active warehouse.',
@@ -3146,9 +3359,13 @@ class LanMasterBusinessGatewayImpl
           journalEntryService: _journalEntries,
           voidedBy: actor.id,
           voidReason: 'Remote user voided purchase adjustment return',
+          scope: _activeWarehouseScope,
         );
       } else {
-        await _purchases.voidPurchaseReturn(returnId);
+        await _activePurchases.voidPurchaseReturn(
+          returnId,
+          actorUserId: actor.id,
+        );
       }
     } catch (error) {
       throw LanBusinessException(
@@ -3157,6 +3374,715 @@ class LanMasterBusinessGatewayImpl
         statusCode: 409,
       );
     }
+  }
+
+  @override
+  Future<LanPurchasesPage> fetchPurchases({required int limit}) async {
+    final safeLimit = limit.clamp(1, 500);
+    final allowed = await _activeDocumentIds(InventoryPostingDocument.purchase);
+    final results = await Future.wait<dynamic>([
+      _activePurchases.watchAllPurchases().first,
+      _activePurchases.watchDashboardStats().first,
+      _activePurchases.watchPurchaseIdsWithReturns().first,
+      _activePurchases.watchPurchaseProductSearchTerms().first,
+    ]);
+    final purchases = (results[0] as List<PurchaseEntity>)
+        .where((value) => allowed.contains(value.id))
+        .take(safeLimit)
+        .toList(growable: false);
+    final stats = results[1] as PurchaseDashboardStats;
+    final returned = results[2] as Set<int>;
+    final terms = results[3] as Map<int, List<String>>;
+    final visibleIds = purchases.map((value) => value.id).toSet();
+    final currency = _currencyService.getCurrency();
+    return LanPurchasesPage(
+      purchases: purchases.map(_purchaseSummary).toList(growable: false),
+      stats: LanPurchaseDashboardStats(
+        totalCount: stats.totalCount,
+        draftCount: stats.draftCount,
+        postedCount: stats.postedCount,
+        totalPayableCents: stats.totalPayableCents,
+        totalPaidCents: stats.totalPaidCents,
+        overdueCount: stats.overdueCount,
+        returnsCount: stats.returnsCount,
+      ),
+      purchaseIdsWithReturns: returned.intersection(visibleIds),
+      productSearchTerms: Map<int, List<String>>.fromEntries(
+        terms.entries.where((entry) => visibleIds.contains(entry.key)),
+      ),
+      currencyCode: currency.code,
+      currencySymbol: currency.symbol,
+      currencyDecimalDigits: currency.decimalDigits,
+      currencySymbolAfter: currency.symbolPosition == SymbolPosition.after,
+    );
+  }
+
+  @override
+  Future<LanPurchaseDetails?> fetchPurchaseDetails({
+    required int purchaseId,
+  }) async {
+    if (purchaseId <= 0 ||
+        !await _containsActiveDocument(
+          InventoryPostingDocument.purchase,
+          purchaseId,
+        )) {
+      return null;
+    }
+    final purchase = await _activePurchases.getPurchaseById(purchaseId);
+    if (purchase == null) return null;
+    final results = await Future.wait<dynamic>([
+      _activePurchases.getPurchaseItems(purchaseId),
+      _activePurchases.watchPurchaseReturnsByPurchase(purchaseId).first,
+    ]);
+    final items = results[0] as List<PurchaseItemEntity>;
+    final returns = results[1] as List<PurchaseReturnEntity>;
+    final storedCurrency =
+        await (_database.select(_database.currencies)
+              ..where((row) => row.id.equals(purchase.currencyId))
+              ..limit(1))
+            .getSingleOrNull();
+    final configured = _currencyService.getCurrency();
+    final definition =
+        storedCurrency == null || storedCurrency.code == configured.code
+        ? configured
+        : currency_model.Currency.fromCode(storedCurrency.code);
+    return LanPurchaseDetails(
+      purchase: _purchaseSummary(purchase),
+      lines: items
+          .map(
+            (item) => LanPurchaseDetailLine(
+              id: item.id,
+              purchaseId: item.purchaseId,
+              productId: item.productId,
+              productName: item.productName ?? 'Product #${item.productId}',
+              variantId: item.variantId,
+              variantSku: item.variantSku,
+              colorName: item.colorName,
+              colorHex: item.colorHex,
+              sizeName: item.sizeName,
+              supplierIdentityRequested: item.supplierIdentityRequested,
+              supplierIdentityId: item.supplierIdentityId,
+              supplierSourceSku: item.supplierSourceSku,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+              measurementType: item.measurementType,
+              unitCostCents: _cents(item.unitCostCents),
+              subtotalCents: _cents(item.subtotalCents),
+              discountCents: _cents(item.discountCents),
+              taxCents: _cents(item.taxCents),
+              totalCents: _cents(item.totalCents),
+              originalCostCents: item.originalCostCents == null
+                  ? null
+                  : _cents(item.originalCostCents!),
+              originalPriceCents: item.originalPriceCents == null
+                  ? null
+                  : _cents(item.originalPriceCents!),
+              originalWholesalePriceCents:
+                  item.originalWholesalePriceCents == null
+                  ? null
+                  : _cents(item.originalWholesalePriceCents!),
+              newSellPriceCents: item.newSellPriceCents == null
+                  ? null
+                  : _cents(item.newSellPriceCents!),
+              newWholesalePriceCents: item.newWholesalePriceCents == null
+                  ? null
+                  : _cents(item.newWholesalePriceCents!),
+              expiryDate: item.expiryDate,
+              manufacturerLotNumber: item.manufacturerLotNumber,
+              createdAt: item.createdAt,
+            ),
+          )
+          .toList(growable: false),
+      returns: returns.map(_purchaseReturnSummary).toList(growable: false),
+      supplierBalanceCents: null,
+      currencyCode: storedCurrency?.code ?? configured.code,
+      currencySymbol: storedCurrency?.symbol ?? definition.symbol,
+      currencyDecimalDigits: definition.decimalDigits,
+      currencySymbolAfter: definition.symbolPosition == SymbolPosition.after,
+    );
+  }
+
+  LanPurchaseSummary _purchaseSummary(PurchaseEntity value) =>
+      LanPurchaseSummary(
+        id: value.id,
+        purchaseNumber: value.purchaseNumber,
+        supplierId: value.supplierId,
+        supplierName: value.supplierName,
+        supplierPhone: value.supplierPhone,
+        subtotalCents: _cents(value.subtotalCents),
+        discountCents: _cents(value.discountCents),
+        taxCents: _cents(value.taxCents),
+        totalCents: _cents(value.totalCents),
+        paidAmountCents: _cents(value.paidAmountCents),
+        currencyId: value.currencyId,
+        status: value.status,
+        paymentMethod: value.paymentMethod,
+        supplierInvoiceRef: value.supplierInvoiceRef,
+        notes: value.notes,
+        purchaseDate: value.purchaseDate,
+        dueDate: value.dueDate,
+        taxInclusiveAtPost: value.taxInclusiveAtPost,
+        createdAt: value.createdAt,
+        updatedAt: value.updatedAt,
+      );
+
+  @override
+  Future<LanPurchaseResult> createPurchase({
+    required LanRemoteUser actor,
+    required LanPurchaseRequest request,
+  }) => _database.transaction(() async {
+    final key = request.idempotencyKey.trim();
+    if (key.length < 8 || key.length > 128) {
+      throw const LanBusinessException(
+        'invalid_idempotency_key',
+        'Invalid request identity.',
+      );
+    }
+    if (request.lines.isEmpty || request.lines.length > 200) {
+      throw const LanBusinessException(
+        'invalid_lines',
+        'A purchase must contain between 1 and 200 lines.',
+      );
+    }
+    final receipts = LanRequestReceiptStore(_database);
+    final warehouseIdentity = _activeWarehouseScope?.warehouseId ?? 'primary';
+    const receiptOperation = 'purchase';
+    final receiptPayload = <String, dynamic>{
+      ...request.toJson(),
+      'warehouseId': warehouseIdentity,
+      'actorUserId': actor.id,
+    };
+    final reservation = await receipts.reserve(
+      operation: receiptOperation,
+      idempotencyKey: key,
+      payload: receiptPayload,
+      findLegacyDocument: () async => null,
+    );
+    if (!reservation.shouldCreate) {
+      final existing = await _activePurchases.getPurchaseById(
+        reservation.documentId!,
+      );
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
+      return _purchaseResult(existing, duplicate: true);
+    }
+
+    final supplier =
+        await (_database.select(_database.suppliers)
+              ..where(
+                (row) =>
+                    row.id.equals(request.supplierId) &
+                    row.isActive.equals(true),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    if (supplier == null) {
+      throw const LanBusinessException(
+        'supplier_unavailable',
+        'The selected supplier is unavailable.',
+        statusCode: 409,
+      );
+    }
+    const paymentMethods = {'cash', 'card', 'credit', 'cheque', 'mixed'};
+    if (!paymentMethods.contains(request.paymentMethod)) {
+      throw const LanBusinessException(
+        'invalid_payment_method',
+        'Unsupported payment method.',
+      );
+    }
+    if (request.paymentMethod == 'cheque' && request.dueDate == null) {
+      throw const LanBusinessException(
+        'cheque_due_date_required',
+        'A cheque due date is required.',
+      );
+    }
+
+    final productIds = request.lines
+        .map((line) => line.productId)
+        .toSet()
+        .toList(growable: false);
+    final products = await WarehouseCatalogScope.readProducts(
+      _database,
+      productIds,
+      scope: await _activeReadScope(),
+    );
+    final productMap = {for (final value in products) value.id: value};
+    final variantIds = request.lines
+        .map((line) => line.variantId)
+        .whereType<int>()
+        .toSet()
+        .toList(growable: false);
+    final variants = await WarehouseCatalogScope.readVariants(
+      _database,
+      variantIds,
+      scope: await _activeReadScope(),
+    );
+    final variantMap = {for (final value in variants) value.id: value};
+    final appSettings = _settings.current;
+    final pharmacyEnabled = _isEnabled(
+      AppFeature.pharmacy,
+      appSettings.enablePharmacyFeatures,
+    );
+    final medicineIds = pharmacyEnabled
+        ? await _pharmacy.getMedicineProductIds()
+        : const <int>{};
+    final resolved =
+        <
+          ({
+            LanPurchaseLineRequest request,
+            Product product,
+            ProductVariant? variant,
+          })
+        >[];
+    final pricingInputs = <LineItemPricingInput>[];
+    for (final requested in request.lines) {
+      final product = productMap[requested.productId];
+      if (product == null || !product.isActive || requested.quantity <= 0) {
+        throw const LanBusinessException(
+          'product_unavailable',
+          'A selected product is unavailable or has an invalid quantity.',
+          statusCode: 409,
+        );
+      }
+      ProductVariant? variant;
+      if (requested.variantId != null) {
+        variant = variantMap[requested.variantId];
+        if (variant == null ||
+            !variant.isActive ||
+            variant.productId != product.id) {
+          throw const LanBusinessException(
+            'variant_unavailable',
+            'A selected product variant is unavailable.',
+            statusCode: 409,
+          );
+        }
+      } else if (product.hasVariants) {
+        throw const LanBusinessException(
+          'variant_required',
+          'Choose a product variant.',
+        );
+      }
+      if (requested.unitCostCents < 0 ||
+          (requested.newSellPriceCents != null &&
+              requested.newSellPriceCents! < 0) ||
+          (requested.newWholesalePriceCents != null &&
+              requested.newWholesalePriceCents! < 0)) {
+        throw const LanBusinessException(
+          'invalid_purchase_price',
+          'Purchase and selling prices cannot be negative.',
+        );
+      }
+      if (product.inventoryTrackingType == 'batch_expiry' &&
+          requested.expiryDate == null) {
+        throw const LanBusinessException(
+          'purchase_expiry_required',
+          'An expiry date is required for this product.',
+        );
+      }
+      if (medicineIds.contains(product.id) &&
+          (requested.manufacturerLotNumber?.trim().isEmpty ?? true)) {
+        throw const LanBusinessException(
+          'manufacturer_lot_required',
+          'A manufacturer lot number is required for medicines.',
+        );
+      }
+      final quantityScale = MeasurementType.fromDb(
+        product.measurementType,
+      ).quantityScale;
+      resolved.add((request: requested, product: product, variant: variant));
+      pricingInputs.add(
+        LineItemPricingInput(
+          unitPrice: Money.fromCents(requested.unitCostCents),
+          quantity: requested.quantity,
+          quantityScale: quantityScale,
+          discount: _purchaseDiscount(
+            requested.discountType,
+            requested.discountValue,
+          ),
+          isTaxable: product.isTaxable,
+          productTaxRateBps: product.purchaseTaxRateBps,
+        ),
+      );
+    }
+
+    final policy = await BranchTaxPolicyStore(_database).read();
+    if (policy == null && _settings.requiresPersistedTaxPolicy) {
+      throw const LanBusinessException(
+        'tax_policy_unavailable',
+        'The branch tax policy is unavailable.',
+        statusCode: 409,
+      );
+    }
+    final effectiveSettings =
+        policy?.policy.applyTo(appSettings) ?? appSettings;
+    final pricing = InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: pricingInputs,
+        overallDiscount: _purchaseDiscount(
+          request.overallDiscountType,
+          request.overallDiscountValue,
+        ),
+        enableTaxCalculations: effectiveSettings.enableTaxCalculations,
+        defaultTaxRateBps: (effectiveSettings.defaultPurchaseTaxRate * 100)
+            .round(),
+        taxInclusivePricing: effectiveSettings.taxInclusivePricing,
+      ),
+    );
+    final expected = request.expectedPricingFingerprint;
+    if (expected != null &&
+        expected !=
+            pricingPreviewFingerprint(
+              pricing,
+              taxInclusive: effectiveSettings.taxInclusivePricing,
+            )) {
+      throw const LanBusinessException(
+        'pricing_preview_changed',
+        'Pricing changed. Refresh and review the purchase before submitting again.',
+        statusCode: 409,
+      );
+    }
+    final currency = await _selectedCurrency();
+    if (currency == null) {
+      throw const LanBusinessException(
+        'currency_unavailable',
+        'The branch currency is unavailable.',
+        statusCode: 409,
+      );
+    }
+    final allocations = request.payments
+        .map(
+          (payment) => CheckoutPaymentAllocation(
+            method: payment.method,
+            amountCents: payment.amountCents,
+            reference: payment.reference,
+            bankName: payment.bankName,
+            issueDate: payment.issueDate?.toLocal(),
+            dueDate: payment.dueDate?.toLocal(),
+            note: payment.note,
+          ),
+        )
+        .toList(growable: false);
+    final totalCents = pricing.total.cents;
+    late final int paidAmountCents;
+    if (allocations.isNotEmpty) {
+      const settlementMethods = {'cash', 'card', 'cheque', 'check'};
+      if (allocations.any(
+        (payment) => !settlementMethods.contains(payment.method),
+      )) {
+        throw const LanBusinessException(
+          'invalid_payment_method',
+          'Unsupported settlement payment method.',
+        );
+      }
+      final settlement = CheckoutSettlement(allocations);
+      try {
+        settlement.validate(invoiceTotalCents: totalCents);
+      } on ArgumentError catch (error) {
+        throw LanBusinessException(
+          'invalid_settlement',
+          error.message?.toString() ?? 'Invalid purchase settlement.',
+        );
+      }
+      paidAmountCents = settlement.totalSettledCents;
+      if ((request.paidAmountCents ?? paidAmountCents) != paidAmountCents) {
+        throw const LanBusinessException(
+          'settlement_total_mismatch',
+          'Settlement total does not match the paid amount.',
+        );
+      }
+    } else {
+      switch (request.paymentMethod) {
+        case 'cash':
+        case 'card':
+          paidAmountCents = request.paidAmountCents ?? totalCents;
+          if (paidAmountCents != totalCents) {
+            throw const LanBusinessException(
+              'purchase_payment_total_mismatch',
+              'Cash and card purchases must be paid in full.',
+            );
+          }
+          break;
+        case 'credit':
+        case 'cheque':
+          paidAmountCents = 0;
+          if ((request.paidAmountCents ?? 0) != 0) {
+            throw const LanBusinessException(
+              'purchase_payment_total_mismatch',
+              'Credit and cheque purchases require structured payments.',
+            );
+          }
+          break;
+        case 'mixed':
+          throw const LanBusinessException(
+            'settlement_required',
+            'Mixed payment requires settlement details.',
+          );
+        default:
+          throw const LanBusinessException(
+            'invalid_payment_method',
+            'Unsupported payment method.',
+          );
+      }
+    }
+    final inputs = <PurchaseItemInput>[];
+    for (var index = 0; index < resolved.length; index++) {
+      final value = resolved[index];
+      final line = pricing.lines[index];
+      final originalCost = value.variant?.costCents ?? value.product.costCents;
+      final originalPrice =
+          value.variant?.priceCents ?? value.product.priceCents;
+      final originalWholesale =
+          value.variant?.wholesalePriceCents ??
+          value.product.wholesalePriceCents;
+      inputs.add(
+        PurchaseItemInput(
+          productId: value.product.id,
+          supplierIdentityRequested:
+              effectiveSettings.enableSupplierProductCodes &&
+              value.request.supplierIdentityRequested &&
+              value.product.trackInventory,
+          variantId: value.variant?.id,
+          quantity: value.request.quantity,
+          quantityScale: MeasurementType.fromDb(
+            value.product.measurementType,
+          ).quantityScale,
+          measurementType: value.product.measurementType,
+          unitCostCents: Decimal.fromInt(value.request.unitCostCents),
+          discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
+          subtotalCents: Decimal.fromInt(line.subtotal.cents),
+          taxCents: Decimal.fromInt(line.tax.cents),
+          totalCents: Decimal.fromInt(line.total.cents),
+          expiryDate: value.request.expiryDate?.toLocal(),
+          manufacturerLotNumber: _nullableTrim(
+            value.request.manufacturerLotNumber,
+          ),
+          originalCostCents: originalCost,
+          originalPriceCents: originalPrice,
+          originalWholesalePriceCents: originalWholesale,
+          newSellPriceCents: value.request.newSellPriceCents == null
+              ? null
+              : Decimal.fromInt(value.request.newSellPriceCents!),
+          newWholesalePriceCents: value.request.newWholesalePriceCents == null
+              ? null
+              : Decimal.fromInt(value.request.newWholesalePriceCents!),
+        ),
+      );
+    }
+    final purchaseId = await _activePurchases.createPurchase(
+      supplierId: supplier.id,
+      currencyId: currency.id,
+      subtotalCents: Decimal.fromInt(pricing.subtotal.cents),
+      discountCents: Decimal.fromInt(pricing.totalDiscount.cents),
+      taxCents: Decimal.fromInt(pricing.tax.cents),
+      totalCents: Decimal.fromInt(totalCents),
+      paidAmountCents: Decimal.fromInt(paidAmountCents),
+      items: inputs,
+      paymentMethod: allocations.isEmpty ? request.paymentMethod : 'mixed',
+      supplierInvoiceRef: _nullableTrim(request.supplierInvoiceRef),
+      notes: _nullableTrim(request.notes),
+      purchaseDate: request.purchaseDate?.toLocal() ?? DateTime.now(),
+      dueDate: request.dueDate?.toLocal(),
+      taxInclusiveAtPost: effectiveSettings.taxInclusivePricing,
+      initialPayments: allocations,
+      actorUserId: actor.id,
+    );
+    final created = await _activePurchases.getPurchaseById(purchaseId);
+    if (created == null) throw StateError('Purchase not found after creation.');
+    await receipts.complete(
+      operation: receiptOperation,
+      idempotencyKey: key,
+      payload: receiptPayload,
+      documentId: created.id,
+      documentNumber: created.purchaseNumber,
+      totalCents: _cents(created.totalCents),
+    );
+    return _purchaseResult(created);
+  });
+
+  @override
+  Future<LanPurchaseResult> postPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    final purchase = await _activePurchases.getPurchaseById(purchaseId);
+    if (purchase == null) {
+      throw const LanBusinessException(
+        'purchase_not_found',
+        'Purchase not found in the assigned warehouse.',
+        statusCode: 404,
+      );
+    }
+    if (purchase.isPosted) return _purchaseResult(purchase, duplicate: true);
+    if (!purchase.isDraft) {
+      throw const LanBusinessException(
+        'purchase_not_postable',
+        'Only a draft purchase can be posted.',
+        statusCode: 409,
+      );
+    }
+    try {
+      await _activePurchases.postPurchase(purchaseId, actorUserId: actor.id);
+    } on SupplierIdentityException catch (error) {
+      throw LanBusinessException(
+        error.messageKey,
+        error.messageKey,
+        statusCode: 409,
+      );
+    } catch (error) {
+      throw LanBusinessException(
+        'purchase_post_rejected',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+    return _purchaseResult(
+      (await _activePurchases.getPurchaseById(purchaseId))!,
+    );
+  }
+
+  @override
+  Future<LanPurchaseVoidResult> voidPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    final purchase = await _activePurchases.getPurchaseById(purchaseId);
+    if (purchase == null) {
+      throw const LanBusinessException(
+        'purchase_not_found',
+        'Purchase not found in the assigned warehouse.',
+        statusCode: 404,
+      );
+    }
+    if (purchase.isVoided) {
+      return LanPurchaseVoidResult(
+        purchaseId: purchaseId,
+        status: 'voided',
+        duplicate: true,
+      );
+    }
+    if (!purchase.isPosted) {
+      throw const LanBusinessException(
+        'purchase_not_voidable',
+        'Only a posted purchase can be voided.',
+        statusCode: 409,
+      );
+    }
+    try {
+      await _activePurchases.voidPurchase(purchaseId, actorUserId: actor.id);
+    } on VoidBlockedByImpactException catch (error) {
+      throw LanBusinessException(
+        'purchase_void_blocked',
+        'The purchase cannot be voided because related stock has changed.',
+        statusCode: 409,
+        details: lanVoidImpactToJson(error.report),
+      );
+    } catch (error) {
+      throw LanBusinessException(
+        'purchase_void_rejected',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+    return LanPurchaseVoidResult(purchaseId: purchaseId, status: 'voided');
+  }
+
+  @override
+  Future<bool> deletePurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    final purchase = await _activePurchases.getPurchaseById(purchaseId);
+    if (purchase == null) return false;
+    if (!purchase.isDraft) {
+      throw const LanBusinessException(
+        'purchase_not_deletable',
+        'Only a draft purchase can be deleted.',
+        statusCode: 409,
+      );
+    }
+    return await _activePurchases.deletePurchase(
+          purchaseId,
+          actorUserId: actor.id,
+        ) >
+        0;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> inspectPurchaseVoidImpact({
+    required int purchaseId,
+  }) async {
+    if (!await _containsActiveDocument(
+      InventoryPostingDocument.purchase,
+      purchaseId,
+    )) {
+      return null;
+    }
+    final report = await VoidImpactAnalyzer(
+      _database,
+      warehouseScope: await _activeReadScope(),
+    ).analyzePurchaseVoid(purchaseId);
+    return lanVoidImpactToJson(report);
+  }
+
+  LanPurchaseResult _purchaseResult(
+    PurchaseEntity purchase, {
+    bool duplicate = false,
+  }) => LanPurchaseResult(
+    purchaseId: purchase.id,
+    purchaseNumber: purchase.purchaseNumber,
+    subtotalCents: _cents(purchase.subtotalCents),
+    discountCents: _cents(purchase.discountCents),
+    taxCents: _cents(purchase.taxCents),
+    totalCents: _cents(purchase.totalCents),
+    paidAmountCents: _cents(purchase.paidAmountCents),
+    status: purchase.status,
+    duplicate: duplicate,
+  );
+
+  Discount _purchaseDiscount(String type, int value) {
+    if (value < 0) {
+      throw const LanBusinessException(
+        'invalid_discount',
+        'Discount value cannot be negative.',
+      );
+    }
+    switch (type) {
+      case 'none':
+        if (value != 0) {
+          throw const LanBusinessException(
+            'invalid_discount',
+            'A no-discount value must be zero.',
+          );
+        }
+        return Discount.none;
+      case 'fixed':
+        return value == 0
+            ? Discount.none
+            : Discount.fixed(Money.fromCents(value));
+      case 'percentage':
+        if (value > 10000) {
+          throw const LanBusinessException(
+            'invalid_discount',
+            'Percentage discount cannot exceed 100%.',
+          );
+        }
+        return value == 0 ? Discount.none : Discount.percent(value);
+      default:
+        throw const LanBusinessException(
+          'invalid_discount',
+          'Unsupported discount type.',
+        );
+    }
+  }
+
+  String? _nullableTrim(String? value) {
+    final normalized = value?.trim();
+    return normalized == null || normalized.isEmpty ? null : normalized;
   }
 
   @override
@@ -3277,6 +4203,7 @@ class LanMasterBusinessGatewayImpl
     final products = await WarehouseCatalogScope.readProducts(
       _database,
       productIds.toList(),
+      scope: await _activeReadScope(),
     );
     final productMap = {for (final value in products) value.id: value};
 
@@ -3288,6 +4215,7 @@ class LanMasterBusinessGatewayImpl
     final variants = await WarehouseCatalogScope.readVariants(
       _database,
       variantIds.toList(),
+      scope: await _activeReadScope(),
     );
     final variantMap = {for (final value in variants) value.id: value};
 
@@ -3426,9 +4354,19 @@ class LanMasterBusinessGatewayImpl
       );
     }
 
+    if (request.overallDiscountCents < 0) {
+      throw const LanBusinessException(
+        'invalid_discount',
+        'Invalid invoice discount.',
+      );
+    }
+    final overallDiscount = request.overallDiscountCents == 0
+        ? Discount.none
+        : Discount.fixed(Money.fromCents(request.overallDiscountCents));
     final manualPricing = InvoicePricingEngine.compute(
       InvoicePricingInput(
         lines: pricingInputs,
+        overallDiscount: overallDiscount,
         enableTaxCalculations: appSettings.enableTaxCalculations,
         defaultTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
         taxInclusivePricing: appSettings.taxInclusivePricing,
@@ -3474,7 +4412,7 @@ class LanMasterBusinessGatewayImpl
     for (var index = 0; index < resolved.length; index++) {
       final value = resolved[index];
       final combinedDiscount =
-          manualPricing.lines[index].totalLineDiscount +
+          manualPricing.lines[index].local.discount +
           (promotionByLine['lan_$index'] ?? Money.zero);
       finalPricingInputs.add(
         LineItemPricingInput(
@@ -3494,11 +4432,25 @@ class LanMasterBusinessGatewayImpl
     final pricing = InvoicePricingEngine.compute(
       InvoicePricingInput(
         lines: finalPricingInputs,
+        overallDiscount: overallDiscount,
         enableTaxCalculations: appSettings.enableTaxCalculations,
         defaultTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
         taxInclusivePricing: appSettings.taxInclusivePricing,
       ),
     );
+
+    if (request.expectedPricingFingerprint != null &&
+        request.expectedPricingFingerprint !=
+            pricingPreviewFingerprint(
+              pricing,
+              taxInclusive: appSettings.taxInclusivePricing,
+            )) {
+      throw const LanBusinessException(
+        'pricing_preview_changed',
+        'Pricing changed. Refresh and review the sale before submitting again.',
+        statusCode: 409,
+      );
+    }
 
     final profitableFreeBundleLineIds =
         PromotionMarginPolicy.profitableFreeBundleLineIds(
@@ -3617,6 +4569,24 @@ class LanMasterBusinessGatewayImpl
     }
 
     final totalCents = pricing.total.cents;
+    late final int loyaltyValue;
+    try {
+      loyaltyValue = await SaleLoyaltySettlement.validate(
+        _database,
+        customerId: customer?.id,
+        currencyId: currency.id,
+        points: request.loyaltyPointsToRedeem,
+        expectedValueCents: request.loyaltyValueCents,
+        totalCents: totalCents,
+      );
+    } on StateError catch (error) {
+      throw LanBusinessException(
+        'loyalty_balance_or_policy_changed',
+        error.message,
+        statusCode: 409,
+      );
+    }
+    final payableCents = totalCents - loyaltyValue;
     final initialPayments = request.payments
         .map(
           (payment) => CheckoutPaymentAllocation(
@@ -3630,7 +4600,7 @@ class LanMasterBusinessGatewayImpl
           ),
         )
         .toList(growable: false);
-    final requestedPaid = request.paidAmountCents ?? totalCents;
+    final requestedPaid = request.paidAmountCents ?? payableCents;
     late final int paidAmountCents;
     if (initialPayments.isNotEmpty) {
       const allowedSettlementMethods = {'cash', 'card', 'cheque', 'check'};
@@ -3644,7 +4614,7 @@ class LanMasterBusinessGatewayImpl
       }
       final settlement = CheckoutSettlement(initialPayments);
       try {
-        settlement.validate(invoiceTotalCents: totalCents);
+        settlement.validate(invoiceTotalCents: payableCents);
       } on ArgumentError catch (error) {
         throw LanBusinessException(
           'invalid_settlement',
@@ -3658,7 +4628,7 @@ class LanMasterBusinessGatewayImpl
           'Settlement total does not match the paid amount.',
         );
       }
-      if (settlement.totalAllocatedCents < totalCents) {
+      if (settlement.totalAllocatedCents < payableCents) {
         if (!appSettings.allowPartialPayments) {
           throw const LanBusinessException(
             'partial_payment_disabled',
@@ -3675,7 +4645,7 @@ class LanMasterBusinessGatewayImpl
     } else {
       switch (request.paymentMethod) {
         case 'card':
-          paidAmountCents = totalCents;
+          paidAmountCents = payableCents;
           break;
         case 'credit':
         case 'cheque':
@@ -3688,7 +4658,7 @@ class LanMasterBusinessGatewayImpl
               'Paid amount cannot be negative.',
             );
           }
-          if (requestedPaid < totalCents) {
+          if (requestedPaid < payableCents) {
             if (!appSettings.allowPartialPayments) {
               throw const LanBusinessException(
                 'partial_payment_disabled',
@@ -3706,8 +4676,8 @@ class LanMasterBusinessGatewayImpl
           // explicitly chooses to keep an overpayment as customer credit. A
           // walk-in customer cannot own a credit balance, so their excess is
           // still treated as returned change and capped at the invoice total.
-          paidAmountCents = requestedPaid > totalCents && customer == null
-              ? totalCents
+          paidAmountCents = requestedPaid > payableCents && customer == null
+              ? payableCents
               : requestedPaid;
           break;
         case 'mixed':
@@ -3752,7 +4722,7 @@ class LanMasterBusinessGatewayImpl
 
     late final int saleId;
     try {
-      saleId = await _sales.createSale(
+      saleId = await _activeSales.createSale(
         customerId: customer?.id,
         employeeId: request.salespersonId,
         currencyId: currency.id,
@@ -3771,6 +4741,8 @@ class LanMasterBusinessGatewayImpl
         taxInclusiveAtPost: appSettings.taxInclusivePricing,
         appliedPromotions: promotionEvaluation.applications,
         initialPayments: initialPayments,
+        loyaltyPointsToRedeem: request.loyaltyPointsToRedeem,
+        loyaltyValueCents: loyaltyValue,
       );
     } on SupplierIdentityException catch (error) {
       throw LanBusinessException(
@@ -3880,7 +4852,7 @@ class LanMasterBusinessGatewayImpl
       );
     }
     final primary = await WarehouseOperationScope.resolve(_database);
-    final scope = await WarehouseOperationScope.resolve(
+    final scope = await WarehouseOperationScope.resolveForOrganization(
       _database,
       warehouseId: warehouseId,
     );
@@ -3894,12 +4866,11 @@ class LanMasterBusinessGatewayImpl
       );
     }
     if (scope.organizationId != primary.organizationId ||
-        scope.branchId != primary.branchId ||
         scope.databaseId != primary.databaseId ||
         !await _warehouseEntitlement.permits(scope)) {
       throw const LanBusinessException(
         'warehouse_access_denied',
-        'The selected warehouse is outside the permitted local branch.',
+        'The selected warehouse is outside the permitted organization.',
         statusCode: 403,
       );
     }
@@ -3919,13 +4890,43 @@ class LanMasterBusinessGatewayImpl
     );
     if (source.warehouseId == destination.warehouseId ||
         source.organizationId != destination.organizationId ||
-        source.branchId != destination.branchId ||
         source.databaseId != destination.databaseId) {
       throw const LanBusinessException(
         'invalid_warehouse_route',
-        'A transfer requires two distinct warehouses in the same local branch.',
+        'A transfer requires two distinct warehouses in the same organization.',
         statusCode: 409,
       );
+    }
+    if (actor.role != 'owner' && !actor.hasGlobalLocationAccess) {
+      final assignedBranch = actor.branchId;
+      final assignedWarehouse = actor.warehouseId;
+      final permitted = switch (action) {
+        TransferDraftAction.receive =>
+          assignedBranch == destination.branchId &&
+              (assignedWarehouse == null ||
+                  assignedWarehouse == destination.warehouseId),
+        TransferDraftAction.read =>
+          (assignedBranch == source.branchId &&
+                  (assignedWarehouse == null ||
+                      assignedWarehouse == source.warehouseId)) ||
+              (assignedBranch == destination.branchId &&
+                  (assignedWarehouse == null ||
+                      assignedWarehouse == destination.warehouseId)),
+        TransferDraftAction.create ||
+        TransferDraftAction.cancel ||
+        TransferDraftAction.dispatch ||
+        TransferDraftAction.recall =>
+          assignedBranch == source.branchId &&
+              (assignedWarehouse == null ||
+                  assignedWarehouse == source.warehouseId),
+      };
+      if (!permitted) {
+        throw const LanBusinessException(
+          'warehouse_access_denied',
+          'This operation is outside the assigned location.',
+          statusCode: 403,
+        );
+      }
     }
     return actor.id;
   }
@@ -3971,24 +4972,37 @@ class LanMasterBusinessGatewayImpl
   }) => _database.transaction(() async {
     _requireWarehouseTransferActor(actor);
     final primary = await WarehouseOperationScope.resolve(_database);
-    final rows =
-        await (_database.select(_database.businessWarehouses)
-              ..where(
-                (row) =>
-                    row.organizationId.equals(primary.organizationId) &
-                    row.branchId.equals(primary.branchId) &
-                    row.isActive.equals(true),
-              )
-              ..orderBy([(row) => OrderingTerm.asc(row.code)]))
-            .get();
+    final rows = await _database
+        .customSelect(
+          '''SELECT w.id,w.code,w.name,w.branch_id,b.name AS branch_name,
+            CASE WHEN w.location_kind='branch_store' THEN 1 ELSE 0 END
+              AS is_branch_location
+          FROM business_warehouses w
+          JOIN business_branches b ON b.id=w.branch_id
+            AND b.organization_id=w.organization_id AND b.is_active=1
+          WHERE w.organization_id=? AND w.is_active=1
+          ORDER BY b.created_at,b.code,is_branch_location DESC,w.created_at,w.code''',
+          variables: [Variable.withString(primary.organizationId)],
+        )
+        .get();
     final result = <LanWarehouseTransferWarehouse>[];
     for (final row in rows) {
-      await _authorizeTransferWarehouse(actor, row.id);
+      final id = row.read<String>('id');
+      await _authorizeTransferWarehouse(actor, id);
+      final branchId = row.read<String>('branch_id');
+      final canSource =
+          actor.role == 'owner' ||
+          actor.hasGlobalLocationAccess ||
+          (actor.branchId == branchId &&
+              (actor.warehouseId == null || actor.warehouseId == id));
       result.add(
         LanWarehouseTransferWarehouse(
-          id: row.id,
-          code: row.code,
-          name: row.name,
+          id: id,
+          code: row.read<String>('code'),
+          name: row.read<String>('name'),
+          branchName: row.read<String>('branch_name'),
+          isBranchLocation: row.read<int>('is_branch_location') == 1,
+          canSource: canSource,
         ),
       );
     }
@@ -4001,12 +5015,80 @@ class LanMasterBusinessGatewayImpl
     required Set<String> statuses,
     required int limit,
   }) async {
+    _requireWarehouseTransferActor(actor);
+    const validStatuses = {
+      'draft',
+      'in_transit',
+      'partially_received',
+      'completed',
+      'cancelled',
+    };
+    if (statuses.isEmpty ||
+        !validStatuses.containsAll(statuses) ||
+        limit < 1 ||
+        limit > 500) {
+      throw ArgumentError('Invalid warehouse transfer filter');
+    }
+
+    // Select only documents visible to the authenticated location before
+    // loading them. Asking the repository to enumerate the whole company and
+    // then authorize each row makes one unrelated transfer abort the complete
+    // list for a warehouse clerk.
+    final marks = List.filled(statuses.length, '?').join(',');
+    final variables = <Variable<Object>>[...statuses.map(Variable.withString)];
+    var locationClause = '';
+    if (actor.role != 'owner' && !actor.hasGlobalLocationAccess) {
+      final branchId = actor.branchId;
+      if (branchId == null || branchId.isEmpty) {
+        throw const LanBusinessException(
+          'warehouse_access_denied',
+          'The account has no assigned business location.',
+          statusCode: 403,
+        );
+      }
+      variables.add(Variable.withString(branchId));
+      variables.add(Variable.withString(branchId));
+      if (actor.warehouseId == null) {
+        locationClause = ' AND (source.branch_id=? OR destination.branch_id=?)';
+      } else {
+        variables.add(Variable.withString(actor.warehouseId!));
+        variables.add(Variable.withString(actor.warehouseId!));
+        locationClause =
+            ' AND ((source.branch_id=? AND t.source_warehouse_id=?)'
+            ' OR (destination.branch_id=? AND t.destination_warehouse_id=?))';
+        // Match the placeholder order used by the clause.
+        final sourceBranch = variables.removeAt(variables.length - 4);
+        final destinationBranch = variables.removeAt(variables.length - 3);
+        final sourceWarehouse = variables.removeAt(variables.length - 2);
+        final destinationWarehouse = variables.removeLast();
+        variables.addAll([
+          sourceBranch,
+          sourceWarehouse,
+          destinationBranch,
+          destinationWarehouse,
+        ]);
+      }
+    }
+    variables.add(Variable.withInt(limit));
+    final headers = await _database.customSelect('''SELECT t.id
+         FROM warehouse_transfers t
+         JOIN business_warehouses source
+           ON source.id=t.source_warehouse_id
+         JOIN business_warehouses destination
+           ON destination.id=t.destination_warehouse_id
+         WHERE t.status IN ($marks)$locationClause
+         ORDER BY t.created_at DESC
+         LIMIT ?''', variables: variables).get();
+
     final preflight = _transferPreflight(actor);
-    final rows = await _transferRepository(
-      actor,
-      preflight,
-    ).list(statuses: statuses, limit: limit);
-    return List.unmodifiable(rows.map(_transferDraftDocument));
+    final repository = _transferRepository(actor, preflight);
+    final result = <LanWarehouseTransferDocument>[];
+    for (final header in headers) {
+      result.add(
+        _transferDraftDocument(await repository.get(header.read<String>('id'))),
+      );
+    }
+    return List.unmodifiable(result);
   }
 
   @override
@@ -4016,7 +5098,18 @@ class LanMasterBusinessGatewayImpl
     required String query,
     required int offset,
   }) => _database.transaction(() async {
-    await _authorizeTransferWarehouse(actor, warehouseId);
+    final scope = await _authorizeTransferWarehouse(actor, warehouseId);
+    if (actor.role != 'owner' &&
+        !actor.hasGlobalLocationAccess &&
+        (actor.branchId != scope.branchId ||
+            (actor.warehouseId != null &&
+                actor.warehouseId != scope.warehouseId))) {
+      throw const LanBusinessException(
+        'warehouse_access_denied',
+        'The catalogue is outside the assigned warehouse.',
+        statusCode: 403,
+      );
+    }
     if (offset < 0) throw ArgumentError.value(offset, 'offset');
     final search = query.trim();
     final rows = await _database
@@ -4065,6 +5158,18 @@ class LanMasterBusinessGatewayImpl
     required LanRemoteUser actor,
     required LanWarehouseTransferCreateRequest request,
   }) async {
+    for (final line in request.lines) {
+      if ((line.ownedQuantity == null) != (line.consignmentQuantity == null)) {
+        throw ArgumentError('Transfer ownership selection is incomplete');
+      }
+      if (line.ownedQuantity != null &&
+          (line.ownedQuantity! < 0 ||
+              line.consignmentQuantity! < 0 ||
+              line.ownedQuantity! + line.consignmentQuantity! !=
+                  line.quantity)) {
+        throw ArgumentError('Transfer ownership quantities are invalid');
+      }
+    }
     final preflight = _transferPreflight(actor);
     final source = await _authorizeTransferWarehouse(
       actor,
@@ -4073,6 +5178,12 @@ class LanMasterBusinessGatewayImpl
     final destination = await _authorizeTransferWarehouse(
       actor,
       request.destinationWarehouseId,
+    );
+    await _authorizeTransfer(
+      actor,
+      TransferDraftAction.create,
+      source.warehouseId,
+      destination.warehouseId,
     );
     final preview = await preflight.preview(
       source: source,
@@ -4089,6 +5200,14 @@ class LanMasterBusinessGatewayImpl
     final draft = await _transferRepository(actor, preflight).create(
       requestKey: request.requestKey,
       preview: preview,
+      ownershipByVariant: {
+        for (final line in request.lines)
+          if (line.ownedQuantity != null && line.consignmentQuantity != null)
+            line.variantId: WarehouseTransferOwnershipIntent(
+              ownedQuantity: line.ownedQuantity!,
+              consignmentQuantity: line.consignmentQuantity!,
+            ),
+      },
       notes: request.notes,
     );
     return _transferDraftDocument(draft);
@@ -4282,6 +5401,18 @@ class LanMasterBusinessGatewayImpl
   }
 
   int _cents(Decimal value) => value.toBigInt().toInt();
+}
+
+class _LanWarehouseContext {
+  const _LanWarehouseContext({
+    required this.scope,
+    required this.sales,
+    required this.purchases,
+  });
+
+  final WarehouseOperationScope scope;
+  final SaleRepository sales;
+  final PurchaseRepository purchases;
 }
 
 class _BelowCostViolation {

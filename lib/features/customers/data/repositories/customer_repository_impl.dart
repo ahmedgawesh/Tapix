@@ -3,6 +3,9 @@ import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
+import '../../../../core/services/sync/offline_sync_event_store.dart';
+import '../../../../core/services/sync/sync_entity_identity_store.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../datasources/customer_local_datasource.dart';
@@ -90,6 +93,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
         );
       }
 
+      await _appendCustomerProfileEvent(id);
+
       return id;
     });
 
@@ -97,12 +102,26 @@ class CustomerRepositoryImpl implements CustomerRepository {
   }
 
   @override
-  Future<bool> updateCustomer(Customer customer) {
-    return _datasource.updateCustomer(customer);
-  }
+  Future<bool> updateCustomer(Customer customer) => _db.transaction(() async {
+    final updated = await _datasource.updateCustomer(customer);
+    if (updated) await _appendCustomerProfileEvent(customer.id);
+    return updated;
+  });
 
   @override
-  Future<int> deleteCustomer(int id) {
+  Future<int> deleteCustomer(int id) async {
+    final events = OfflineSyncEventStore(_db);
+    if (await events.isWriterRecordingEnabled()) {
+      return _db.transaction(() async {
+        final customer = await _datasource.getCustomer(id);
+        if (customer == null) return 0;
+        final updated = await _datasource.updateCustomer(
+          customer.copyWith(isActive: false, updatedAt: DateTime.now()),
+        );
+        if (updated) await _appendCustomerProfileEvent(id);
+        return updated ? 1 : 0;
+      });
+    }
     return _datasource.deleteCustomer(id);
   }
 
@@ -161,8 +180,62 @@ class CustomerRepositoryImpl implements CustomerRepository {
   Future<void> updateCustomerLoyaltyEnabled(
     int customerId,
     bool loyaltyEnabled,
-  ) {
-    return _datasource.updateCustomerLoyaltyEnabled(customerId, loyaltyEnabled);
+  ) => _db.transaction(() async {
+    await _datasource.updateCustomerLoyaltyEnabled(customerId, loyaltyEnabled);
+    await _appendCustomerProfileEvent(customerId);
+  });
+
+  Future<void> _appendCustomerProfileEvent(int customerId) async {
+    final events = OfflineSyncEventStore(_db);
+    await events.transaction((sync) async {
+      if (!await sync.isWriterRecordingEnabled()) return;
+      final customer = await _datasource.getCustomer(customerId);
+      if (customer == null) return;
+      final currencyCode = await _db
+          .customSelect(
+            'SELECT code FROM currencies WHERE id=?',
+            variables: [Variable.withInt(customer.currencyId)],
+          )
+          .map((row) => row.read<String>('code'))
+          .getSingle();
+      final identity = await SyncEntityIdentityStore(
+        _db,
+      ).getOrCreateLocal(entityType: 'customer', localId: customerId);
+      final local = await _db
+          .customSelect(
+            'SELECT database_id,organization_id,branch_id '
+            'FROM sync_local_state WHERE id=1',
+          )
+          .getSingle();
+      final changedAt = DateTime.now().toUtc();
+      await sync.appendOnce(
+        producerKey:
+            'customer:${identity.globalId}:profile:${changedAt.microsecondsSinceEpoch}',
+        eventType: BranchCatalogueSyncService.customerProfileEventType,
+        aggregateType: 'customer',
+        aggregateId: identity.globalId,
+        occurredAt: changedAt,
+        payload: {
+          'contract': 'customer.profile_upserted',
+          'contractVersion': 1,
+          'organizationId': local.read<String>('organization_id'),
+          'sourceDatabaseId': local.read<String>('database_id'),
+          'sourceBranchId': local.read<String>('branch_id'),
+          'customer': {
+            'globalId': identity.globalId,
+            'originDatabaseId': identity.originDatabaseId,
+            'name': customer.name,
+            'email': customer.email,
+            'phone': customer.phone,
+            'address': customer.address,
+            'currencyCode': currencyCode,
+            'segment': customer.segment,
+            'loyaltyEnabled': customer.loyaltyEnabled,
+            'isActive': customer.isActive,
+          },
+        },
+      );
+    });
   }
 
   @override
@@ -224,6 +297,12 @@ class CustomerRepositoryImpl implements CustomerRepository {
           userId: userId,
         );
       }
+
+      await _appendCustomerTransactionEvent(
+        transactionId: id,
+        eventType: 'customer_transaction.posted.v1',
+        action: 'posted',
+      );
 
       return id;
     });
@@ -339,6 +418,13 @@ class CustomerRepositoryImpl implements CustomerRepository {
         );
       }
 
+      await _appendCustomerTransactionEvent(
+        transactionId: transactionId,
+        eventType: 'customer_transaction.corrected.v1',
+        action: 'corrected',
+        previousAmountMinor: existing.amountCents.toBigInt().toInt(),
+      );
+
       return old;
     });
 
@@ -357,6 +443,83 @@ class CustomerRepositoryImpl implements CustomerRepository {
     );
 
     return oldTx;
+  }
+
+  Future<void> _appendCustomerTransactionEvent({
+    required int transactionId,
+    required String eventType,
+    required String action,
+    int? previousAmountMinor,
+  }) async {
+    final events = OfflineSyncEventStore(_db);
+    await events.transaction((sync) async {
+      if (!await sync.isWriterRecordingEnabled()) return;
+      final transaction = await _datasource.getTransaction(transactionId);
+      if (transaction == null) {
+        throw StateError('Customer transaction is missing after posting.');
+      }
+      final customer = await _datasource.getCustomer(transaction.customerId);
+      if (customer == null) {
+        throw StateError('Customer is missing after transaction posting.');
+      }
+      final identity = await SyncEntityIdentityStore(
+        _db,
+      ).getOrCreateLocal(entityType: 'customer', localId: customer.id);
+      final currencyCode = await _db
+          .customSelect(
+            'SELECT code FROM currencies WHERE id=?',
+            variables: [Variable.withInt(transaction.currencyId)],
+          )
+          .map((row) => row.read<String>('code'))
+          .getSingle();
+      final local = await _db
+          .customSelect(
+            'SELECT database_id,organization_id,branch_id '
+            'FROM sync_local_state WHERE id=1',
+          )
+          .getSingle();
+      final recordedAt = DateTime.now().toUtc();
+      await sync.appendOnce(
+        producerKey: action == 'posted'
+            ? 'customer_transaction:posted:$transactionId'
+            : 'customer_transaction:corrected:$transactionId:'
+                  '${recordedAt.microsecondsSinceEpoch}',
+        eventType: eventType,
+        aggregateType: 'customer_transaction',
+        aggregateId:
+            '${local.read<String>('database_id')}:customer_transaction:$transactionId',
+        occurredAt: transaction.transactionDate,
+        payload: {
+          'contract': 'customer_transaction.$action',
+          'contractVersion': 1,
+          'organizationId': local.read<String>('organization_id'),
+          'sourceDatabaseId': local.read<String>('database_id'),
+          'sourceBranchId': local.read<String>('branch_id'),
+          'sourceTransactionRef': {
+            'databaseId': local.read<String>('database_id'),
+            'localId': transaction.id,
+          },
+          'customerGlobalId': identity.globalId,
+          'transactionType': transaction.transactionType,
+          'amountMinor': transaction.amountCents.toBigInt().toInt(),
+          'previousAmountMinor': ?previousAmountMinor,
+          'currencyCode': currencyCode,
+          'description': transaction.description,
+          'reference': transaction.referenceId == null
+              ? null
+              : {
+                  'databaseId': local.read<String>('database_id'),
+                  'table': transaction.referenceType,
+                  'localId': transaction.referenceId,
+                },
+          'discountType': transaction.discountType,
+          'transactionDate': transaction.transactionDate
+              .toUtc()
+              .toIso8601String(),
+          'recordedAt': recordedAt.toIso8601String(),
+        },
+      );
+    });
   }
 
   @override

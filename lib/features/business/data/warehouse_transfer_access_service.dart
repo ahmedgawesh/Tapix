@@ -53,6 +53,16 @@ class WarehouseTransferCatalogItem {
   }
 }
 
+class WarehouseTransferAccessLocation {
+  const WarehouseTransferAccessLocation({
+    required this.warehouse,
+    required this.branchName,
+  });
+
+  final BusinessWarehouse warehouse;
+  final String branchName;
+}
+
 class WarehouseTransferAccessDenied implements Exception {
   const WarehouseTransferAccessDenied();
 }
@@ -76,28 +86,47 @@ class WarehouseTransferAccessService {
   final WarehouseSetupEntitlement _entitlement;
   final bool Function() _isRemoteClient;
 
-  Future<int> _activeOwner() async {
+  Future<User> _activeOperator() async {
     if (_isRemoteClient()) throw const WarehouseTransferAccessDenied();
     final id = await _session.getCurrentUserId();
     if (id == null) throw const WarehouseTransferAccessDenied();
     final user = await (_db.select(
       _db.users,
     )..where((row) => row.id.equals(id))).getSingleOrNull();
-    if (user == null || user.isActive != 1 || user.role != 'owner') {
+    if (user == null ||
+        user.isActive != 1 ||
+        !const {'owner', 'manager', 'warehouseClerk'}.contains(user.role)) {
       throw const WarehouseTransferAccessDenied();
     }
-    return id;
+    return user;
+  }
+
+  void _requireUserScope(User user, WarehouseOperationScope scope) {
+    final legacyOwner =
+        user.role == 'owner' &&
+        user.branchId == null &&
+        user.warehouseId == null;
+    if (user.globalLocationAccess || legacyOwner) return;
+    if (user.branchId != scope.branchId) {
+      throw const WarehouseTransferAccessDenied();
+    }
+    if (user.role == 'warehouseClerk' &&
+        user.warehouseId != scope.warehouseId) {
+      throw const WarehouseTransferAccessDenied();
+    }
+    if (user.warehouseId != null && user.warehouseId != scope.warehouseId) {
+      throw const WarehouseTransferAccessDenied();
+    }
   }
 
   Future<WarehouseOperationScope> _allowedScope(String warehouseId) async {
     final primary = await WarehouseOperationScope.resolve(_db);
-    final scope = await WarehouseOperationScope.resolve(
+    final scope = await WarehouseOperationScope.resolveForOrganization(
       _db,
       warehouseId: warehouseId,
     );
     await scope.validate(_db);
     if (scope.organizationId != primary.organizationId ||
-        scope.branchId != primary.branchId ||
         scope.databaseId != primary.databaseId ||
         !await _entitlement.permits(scope)) {
       throw const WarehouseTransferAccessDenied();
@@ -106,8 +135,46 @@ class WarehouseTransferAccessService {
   }
 
   Future<void> authorizeWarehouse(String warehouseId) async {
-    await _activeOwner();
-    await _allowedScope(warehouseId);
+    final user = await _activeOperator();
+    final scope = await _allowedScope(warehouseId);
+    _requireUserScope(user, scope);
+  }
+
+  /// Authorizes a document owned by one local warehouse and returns the
+  /// immutable actor id that must be recorded on that document.
+  Future<int> authorizeInboundWarehouse(String warehouseId) async {
+    final user = await _activeOperator();
+    final scope = await _allowedScope(warehouseId);
+    _requireUserScope(user, scope);
+    return user.id;
+  }
+
+  /// Authorizes an outbound document whose source stock is local while the
+  /// destination is a routing identity owned by another enrolled branch.
+  Future<int> authorizeDistributedOutbound(
+    String sourceWarehouseId,
+    String destinationWarehouseId,
+  ) async {
+    final user = await _activeOperator();
+    final source = await _allowedScope(sourceWarehouseId);
+    _requireUserScope(user, source);
+    final target = await _db
+        .customSelect(
+          '''SELECT w.organization_id,w.branch_id,b.writer_database_id
+          FROM sync_warehouse_directory w
+          JOIN sync_branch_directory b ON b.branch_id=w.branch_id
+          WHERE w.warehouse_id=? AND w.is_active=1 AND b.is_active=1''',
+          variables: [Variable.withString(destinationWarehouseId)],
+        )
+        .getSingleOrNull();
+    if (target == null ||
+        target.read<String>('organization_id') != source.organizationId ||
+        target.read<String>('branch_id') == source.branchId ||
+        target.readNullable<String>('writer_database_id') == null ||
+        target.read<String>('writer_database_id') == source.databaseId) {
+      throw const WarehouseTransferAccessDenied();
+    }
+    return user.id;
   }
 
   Future<int> authorize(
@@ -115,16 +182,27 @@ class WarehouseTransferAccessService {
     String sourceWarehouseId,
     String destinationWarehouseId,
   ) async {
-    final actor = await _activeOwner();
+    final user = await _activeOperator();
     final source = await _allowedScope(sourceWarehouseId);
     final destination = await _allowedScope(destinationWarehouseId);
     if (source.warehouseId == destination.warehouseId ||
         source.organizationId != destination.organizationId ||
-        source.branchId != destination.branchId ||
         source.databaseId != destination.databaseId) {
       throw const WarehouseTransferAccessDenied();
     }
-    return actor;
+    if (action == TransferDraftAction.read) {
+      try {
+        _requireUserScope(user, source);
+      } on WarehouseTransferAccessDenied {
+        _requireUserScope(user, destination);
+      }
+    } else {
+      _requireUserScope(
+        user,
+        action == TransferDraftAction.receive ? destination : source,
+      );
+    }
+    return user.id;
   }
 
   Future<List<WarehouseTransferCatalogItem>> catalog(
@@ -132,8 +210,9 @@ class WarehouseTransferAccessService {
     String query = '',
     int offset = 0,
   }) => _db.transaction(() async {
-    await _activeOwner();
-    await _allowedScope(warehouseId);
+    final user = await _activeOperator();
+    final scope = await _allowedScope(warehouseId);
+    _requireUserScope(user, scope);
     if (offset < 0) throw ArgumentError.value(offset, 'offset');
     final search = query.trim();
     final rows = await _db
@@ -177,28 +256,42 @@ class WarehouseTransferAccessService {
     );
   });
 
-  Future<List<BusinessWarehouse>> warehouses() => _db.transaction(() async {
-    await _activeOwner();
-    final primary = await WarehouseOperationScope.resolve(_db);
-    final rows =
-        await (_db.select(_db.businessWarehouses)
-              ..where(
-                (row) =>
-                    row.organizationId.equals(primary.organizationId) &
-                    row.branchId.equals(primary.branchId) &
-                    row.isActive.equals(true),
-              )
-              ..orderBy([(row) => OrderingTerm.asc(row.code)]))
+  Future<List<WarehouseTransferAccessLocation>> warehouses() =>
+      _db.transaction(() async {
+        await _activeOperator();
+        final primary = await WarehouseOperationScope.resolve(_db);
+        final rows = await _db
+            .customSelect(
+              '''SELECT w.*, b.name AS branch_name, b.code AS branch_code
+              FROM business_warehouses w
+              JOIN business_branches b ON b.id=w.branch_id
+                AND b.organization_id=w.organization_id
+              WHERE w.organization_id=? AND w.is_active=1 AND b.is_active=1
+              ORDER BY b.created_at,b.code,
+                CASE WHEN w.location_kind='branch_store' THEN 0 ELSE 1 END,
+                w.created_at,w.code''',
+              variables: [Variable.withString(primary.organizationId)],
+              readsFrom: {_db.businessWarehouses, _db.businessBranches},
+            )
             .get();
-    final allowed = <BusinessWarehouse>[];
-    for (final row in rows) {
-      try {
-        await _allowedScope(row.id);
-        allowed.add(row);
-      } on WarehouseTransferAccessDenied {
-        // Do not reveal a warehouse outside the active entitlement/scope.
-      }
-    }
-    return List.unmodifiable(allowed);
-  });
+        final allowed = <WarehouseTransferAccessLocation>[];
+        for (final row in rows) {
+          final warehouse = _db.businessWarehouses.map(row.data);
+          try {
+            await _allowedScope(warehouse.id);
+            final branchName = row.read<String>('branch_name').trim();
+            allowed.add(
+              WarehouseTransferAccessLocation(
+                warehouse: warehouse,
+                branchName: branchName.isEmpty
+                    ? row.read<String>('branch_code')
+                    : branchName,
+              ),
+            );
+          } on WarehouseTransferAccessDenied {
+            // Do not reveal a location outside the active entitlement/scope.
+          }
+        }
+        return List.unmodifiable(allowed);
+      });
 }

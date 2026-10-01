@@ -113,6 +113,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return 'users.role_accountant'.tr();
       case UserRole.cashier:
         return 'users.role_cashier'.tr();
+      case UserRole.warehouseClerk:
+        return 'users.role_warehouse_clerk'.tr();
       case UserRole.salesperson:
         return 'users.role_salesperson'.tr();
     }
@@ -128,6 +130,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return Icons.account_balance_outlined;
       case UserRole.cashier:
         return Icons.point_of_sale_outlined;
+      case UserRole.warehouseClerk:
+        return Icons.inventory_2_outlined;
       case UserRole.salesperson:
         return Icons.storefront_outlined;
     }
@@ -143,6 +147,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return Colors.indigo;
       case UserRole.cashier:
         return Colors.green;
+      case UserRole.warehouseClerk:
+        return Colors.deepOrange;
       case UserRole.salesperson:
         return Colors.teal;
     }
@@ -158,6 +164,8 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
         return 'users.role_accountant_desc'.tr();
       case UserRole.cashier:
         return 'users.role_cashier_desc'.tr();
+      case UserRole.warehouseClerk:
+        return 'users.role_warehouse_clerk_desc'.tr();
       case UserRole.salesperson:
         return 'users.role_salesperson_desc'.tr();
     }

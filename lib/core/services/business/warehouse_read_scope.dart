@@ -12,7 +12,8 @@ class WarehouseReadScope {
     this.branchId,
     this.warehouseId,
     this.databaseId,
-    this.isPrimary, [
+    this.isPrimary,
+    this._organizationWide, [
     this._accessCheck,
   ]);
 
@@ -22,6 +23,7 @@ class WarehouseReadScope {
   final String warehouseId;
   final String databaseId;
   final bool isPrimary;
+  final bool _organizationWide;
   final Future<void> Function()? _accessCheck;
 
   WarehouseReadScope withAccessCheck(Future<void> Function() check) =>
@@ -32,6 +34,7 @@ class WarehouseReadScope {
         warehouseId,
         databaseId,
         isPrimary,
+        _organizationWide,
         check,
       );
 
@@ -40,20 +43,24 @@ class WarehouseReadScope {
   static Future<WarehouseReadScope> resolve(
     AppDatabase db, {
     String? warehouseId,
+    bool organizationWide = false,
   }) async {
     final rows = await db
         .customSelect(
           '''
-      SELECT c.organization_id, c.branch_id, c.database_id,
+      SELECT c.organization_id, w.branch_id, c.database_id,
         c.warehouse_id AS primary_id, w.id AS selected_id
       FROM business_contexts c
       JOIN business_warehouses w ON w.id = COALESCE(?, c.warehouse_id)
-        AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id
-      JOIN business_branches b ON b.id = c.branch_id
+        AND w.organization_id = c.organization_id
+      JOIN business_branches b ON b.id = w.branch_id
         AND b.organization_id = c.organization_id
-      WHERE c.id = 1
+      WHERE c.id = 1 AND (? = 1 OR w.branch_id = c.branch_id)
     ''',
-          variables: [Variable<String>(warehouseId)],
+          variables: [
+            Variable<String>(warehouseId),
+            Variable.withInt(organizationWide ? 1 : 0),
+          ],
         )
         .get();
     if (rows.length != 1) {
@@ -67,6 +74,7 @@ class WarehouseReadScope {
       r.read<String>('selected_id'),
       r.read<String>('database_id'),
       r.read<String>('selected_id') == r.read<String>('primary_id'),
+      organizationWide,
     );
   }
 
@@ -84,7 +92,11 @@ class WarehouseReadScope {
       throw StateError('Read scope belongs to another database connection.');
     }
     await _accessCheck?.call();
-    final current = await resolve(db, warehouseId: warehouseId);
+    final current = await resolve(
+      db,
+      warehouseId: warehouseId,
+      organizationWide: _organizationWide,
+    );
     if (current.organizationId != organizationId ||
         current.branchId != branchId ||
         current.databaseId != databaseId ||
@@ -100,12 +112,12 @@ class WarehouseReadScope {
       '''EXISTS (
     SELECT 1 FROM business_contexts c
     JOIN business_warehouses w ON w.id = ${_literal(warehouseId)}
-      AND w.organization_id = c.organization_id AND w.branch_id = c.branch_id
-    JOIN business_branches b ON b.id = c.branch_id
+      AND w.organization_id = c.organization_id
+      AND w.branch_id = ${_literal(branchId)}
+    JOIN business_branches b ON b.id = w.branch_id
       AND b.organization_id = c.organization_id
     WHERE c.id = 1 AND c.database_id = ${_literal(databaseId)}
-      AND c.organization_id = ${_literal(organizationId)}
-      AND c.branch_id = ${_literal(branchId)})''';
+      AND c.organization_id = ${_literal(organizationId)})''';
 
   String get warehouses =>
       '(SELECT w.* FROM business_warehouses w '

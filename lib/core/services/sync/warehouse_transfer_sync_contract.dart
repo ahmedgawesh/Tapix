@@ -401,9 +401,11 @@ class WarehouseTransferSyncContractBuilder {
       total += quantity;
       final purchaseItemId = layer['p'] is int ? layer['p'] as int : null;
       final supplierIdentityId = layer['i'] is int ? layer['i'] as int : null;
+      final directSupplierId = layer['s'] is int ? layer['s'] as int : null;
       final supplierId = await _originSupplier(
         purchaseItemId: purchaseItemId,
         supplierIdentityId: supplierIdentityId,
+        directSupplierId: directSupplierId,
       );
       final supplierGlobalId = supplierId == null
           ? null
@@ -436,6 +438,7 @@ class WarehouseTransferSyncContractBuilder {
   Future<int?> _originSupplier({
     required int? purchaseItemId,
     required int? supplierIdentityId,
+    required int? directSupplierId,
   }) async {
     int? fromIdentity;
     if (supplierIdentityId != null) {
@@ -478,6 +481,14 @@ class WarehouseTransferSyncContractBuilder {
         'The purchase and supplier identity origins disagree.',
       );
     }
-    return fromIdentity ?? fromPurchase;
+    if (directSupplierId != null &&
+        ((fromIdentity != null && fromIdentity != directSupplierId) ||
+            (fromPurchase != null && fromPurchase != directSupplierId))) {
+      throw const OfflineSyncException(
+        'transfer_origin_supplier_conflict',
+        'The direct, purchase and supplier identity origins disagree.',
+      );
+    }
+    return directSupplierId ?? fromIdentity ?? fromPurchase;
   }
 }

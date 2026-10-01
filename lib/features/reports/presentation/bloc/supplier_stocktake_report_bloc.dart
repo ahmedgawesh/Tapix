@@ -701,7 +701,7 @@ class SupplierStocktakeReportBloc
         FROM purchase_items pi
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pu.status = 'posted' AND pu.supplier_id = ?
-          AND pu.purchase_date >= ? AND pu.purchase_date <= ?
+          AND datetime(pu.purchase_date) >= datetime(?) AND datetime(pu.purchase_date) <= datetime(?)
         UNION ALL
         SELECT 'return' AS kind, pi.product_id AS product_id,
                ${resolvedVariant('pi')} AS variant_id, pri.quantity AS quantity
@@ -710,14 +710,14 @@ class SupplierStocktakeReportBloc
         INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pr.status = 'posted' AND pu.supplier_id = ?
-          AND pr.return_date >= ? AND pr.return_date <= ?
+          AND datetime(pr.return_date) >= datetime(?) AND datetime(pr.return_date) <= datetime(?)
         UNION ALL
         SELECT 'return' AS kind, prai.product_id AS product_id,
                ${resolvedVariant('prai')} AS variant_id, prai.quantity AS quantity
         FROM purchase_return_adjustment_items prai
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
         WHERE pra.status = 'posted' AND pra.supplier_id = ?
-          AND pra.return_date >= ? AND pra.return_date <= ?
+          AND datetime(pra.return_date) >= datetime(?) AND datetime(pra.return_date) <= datetime(?)
       ) activity
       GROUP BY kind, product_id, variant_id
       ''',
@@ -770,24 +770,32 @@ class SupplierStocktakeReportBloc
          FROM inventory_origin_states os
          JOIN product_variants v ON v.id=os.variant_id
          JOIN json_each(os.layers) j
-         JOIN purchase_items pi
+         LEFT JOIN purchase_items pi
            ON pi.id=CAST(json_extract(j.value,'\$.p') AS INTEGER)
           AND pi.product_id=v.product_id
           AND COALESCE(${WarehouseDocumentScope.operationalVariant('pi')},0)=os.variant_id
           AND pi.measurement_type=os.measurement_type
-         JOIN purchases pu ON pu.id=pi.purchase_id
-          AND pu.status='posted' AND pu.supplier_id=?
+         LEFT JOIN purchases pu ON pu.id=pi.purchase_id
+          AND pu.status='posted'
+         LEFT JOIN supplier_product_identities spi
+           ON spi.id=CAST(json_extract(j.value,'\$.i') AS INTEGER)
          WHERE os.warehouse_id=? AND os.dirty=0
+           AND COALESCE(
+             CAST(json_extract(j.value,'\$.s') AS INTEGER),
+             spi.supplier_id,
+             pu.supplier_id
+           )=?
          GROUP BY v.product_id,os.variant_id''',
           variables: [
-            Variable.withInt(_supplierId!),
             Variable.withString(originWarehouseId),
+            Variable.withInt(_supplierId!),
           ],
           readsFrom: {
             _db.inventoryOriginStates,
             _db.productVariants,
             _db.purchaseItems,
             _db.purchases,
+            _db.supplierProductIdentities,
           },
         )
         .get();
@@ -862,7 +870,7 @@ class SupplierStocktakeReportBloc
       INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id=si.sale_id
       INNER JOIN products p ON p.id=si.product_id AND p.track_inventory=1
       LEFT JOIN product_variants pv ON pv.id=si.variant_id
-      WHERE sa.status='completed' AND sa.sale_date>=? AND sa.sale_date<=?
+      WHERE sa.status='completed' AND datetime(sa.sale_date)>=datetime(?) AND datetime(sa.sale_date)<=datetime(?)
       UNION ALL
       SELECT 'return',sri.id,si.product_id,${resolvedVariant('si')},sri.quantity,
              -(sri.refund_cents-sri.tax_cents),
@@ -873,7 +881,7 @@ class SupplierStocktakeReportBloc
       INNER JOIN sale_items si ON si.id=sri.sale_item_id
       INNER JOIN products p ON p.id=si.product_id AND p.track_inventory=1
       LEFT JOIN product_variants pv ON pv.id=si.variant_id
-      WHERE sr.status='posted' AND sr.return_date>=? AND sr.return_date<=?
+      WHERE sr.status='posted' AND datetime(sr.return_date)>=datetime(?) AND datetime(sr.return_date)<=datetime(?)
       UNION ALL
       SELECT 'adjustment',srai.id,srai.product_id,${resolvedVariant('srai')},srai.quantity,
              -(srai.total_cents-srai.tax_cents),
@@ -882,7 +890,7 @@ class SupplierStocktakeReportBloc
       FROM sale_return_adjustment_items srai
       INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id=srai.return_id
       INNER JOIN products p ON p.id=srai.product_id AND p.track_inventory=1
-      WHERE sra.status='posted' AND sra.return_date>=? AND sra.return_date<=?
+      WHERE sra.status='posted' AND datetime(sra.return_date)>=datetime(?) AND datetime(sra.return_date)<=datetime(?)
       ''',
           variables: [
             Variable.withString(startIso),
@@ -1016,7 +1024,7 @@ class SupplierStocktakeReportBloc
         INNER JOIN sale_items si ON si.id = bc.sale_item_id
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id = si.sale_id
         WHERE bc.direction = 'out' AND bc.consumption_type = 'sale'
-          AND sa.status = 'completed' AND sa.sale_date >= ? AND sa.sale_date <= ?
+          AND sa.status = 'completed' AND datetime(sa.sale_date) >= datetime(?) AND datetime(sa.sale_date) <= datetime(?)
         UNION ALL
         SELECT 'linked_return' AS kind, sri.id AS line_id, si.product_id AS product_id,
                ${resolvedVariant('si')} AS variant_id,
@@ -1030,7 +1038,7 @@ class SupplierStocktakeReportBloc
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         WHERE bc.direction = 'in' AND bc.consumption_type = 'sale_return_reverse'
-          AND sr.status = 'posted' AND sr.return_date >= ? AND sr.return_date <= ?
+          AND sr.status = 'posted' AND datetime(sr.return_date) >= datetime(?) AND datetime(sr.return_date) <= datetime(?)
         UNION ALL
         SELECT 'adjustment_return' AS kind, srai.id AS line_id, srai.product_id AS product_id,
                ${resolvedVariant('srai')} AS variant_id,
@@ -1045,7 +1053,7 @@ class SupplierStocktakeReportBloc
         INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         WHERE bc.direction = 'in'
           AND bc.consumption_type = 'sale_adj_return_reverse'
-          AND sra.status = 'posted' AND sra.return_date >= ? AND sra.return_date <= ?
+          AND sra.status = 'posted' AND datetime(sra.return_date) >= datetime(?) AND datetime(sra.return_date) <= datetime(?)
       ) lines
       GROUP BY kind, line_id, product_id, variant_id, source_id, net_revenue
       ''',

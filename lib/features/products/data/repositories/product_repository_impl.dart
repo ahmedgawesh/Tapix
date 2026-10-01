@@ -4,6 +4,7 @@ import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/free_quota_service.dart';
 import '../../../../core/services/inventory/inventory_adjustment_service.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/price_history_entity.dart';
@@ -20,6 +21,8 @@ class ProductRepositoryImpl implements ProductRepository {
   final SessionService _sessionService;
   final VariantLocalDatasource? _variantDatasource;
   final InventoryAdjustmentService? _adjustmentService;
+  final Future<bool> Function()? _canEditSharedCatalogue;
+  final Future<bool> Function()? _isSharedCatalogueDistributed;
 
   /// Phase B4 — free-tier cumulative quota guard. Optional so existing tests
   /// that construct the repository without DI keep working. When provided,
@@ -35,11 +38,25 @@ class ProductRepositoryImpl implements ProductRepository {
     VariantLocalDatasource? variantDatasource,
     InventoryAdjustmentService? adjustmentService,
     FreeQuotaService? freeQuotaService,
+    Future<bool> Function()? canEditSharedCatalogue,
+    Future<bool> Function()? isSharedCatalogueDistributed,
   }) : _variantDatasource = variantDatasource,
        _adjustmentService = adjustmentService,
-       _freeQuotaService = freeQuotaService;
+       _freeQuotaService = freeQuotaService,
+       _canEditSharedCatalogue = canEditSharedCatalogue,
+       _isSharedCatalogueDistributed = isSharedCatalogueDistributed;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
+
+  Future<void> _requireCatalogueAuthority() async {
+    final check = _canEditSharedCatalogue;
+    if (check != null && !await check()) {
+      throw const SharedCatalogueAuthorityRequired();
+    }
+  }
+
+  Future<bool> _distributedCatalogue() async =>
+      await _isSharedCatalogueDistributed?.call() ?? false;
 
   @override
   Stream<List<Product>> watchAllProducts({bool? isActive = true}) {
@@ -167,6 +184,7 @@ class ProductRepositoryImpl implements ProductRepository {
     String costingMethod = 'wac',
     String inventoryTrackingType = 'standard',
   }) async {
+    await _requireCatalogueAuthority();
     if (stockQuantity != 0) {
       throw ArgumentError.value(
         stockQuantity,
@@ -256,6 +274,7 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<bool> updateProduct(Product product) async {
+    await _requireCatalogueAuthority();
     // Audit: log product update
     _audit.logProductUpdated(
       productId: product.id,
@@ -307,7 +326,8 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<String?> setCostingMethod({
     required int productId,
     required String method,
-  }) {
+  }) async {
+    await _requireCatalogueAuthority();
     return _datasource.setCostingMethod(productId: productId, method: method);
   }
 
@@ -320,7 +340,8 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<String?> setInventoryTrackingType({
     required int productId,
     required String trackingType,
-  }) {
+  }) async {
+    await _requireCatalogueAuthority();
     return _datasource.setInventoryTrackingType(
       productId: productId,
       trackingType: trackingType,
@@ -331,7 +352,8 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<String?> setMeasurementType({
     required int productId,
     required String measurementType,
-  }) {
+  }) async {
+    await _requireCatalogueAuthority();
     return _datasource.setMeasurementType(
       productId: productId,
       measurementType: measurementType,
@@ -342,7 +364,8 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<String?> setTrackInventory({
     required int productId,
     required bool trackInventory,
-  }) {
+  }) async {
+    await _requireCatalogueAuthority();
     return _datasource.setTrackInventory(
       productId: productId,
       trackInventory: trackInventory,
@@ -351,8 +374,18 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<int> deleteProduct(int id) async {
-    // Audit: log product deletion (CRITICAL)
-    _audit.logProductDeleted(
+    await _requireCatalogueAuthority();
+    if (await _distributedCatalogue()) {
+      final result = await _datasource.deactivateProduct(id);
+      await _audit.logProductUpdated(
+        productId: id,
+        productName: 'Product #$id (archived for shared catalogue)',
+        userId: await _currentUserId(),
+      );
+      return result;
+    }
+    // Audit: log product deletion (CRITICAL).
+    await _audit.logProductDeleted(
       productId: id,
       productName: 'Product #$id',
       userId: await _currentUserId(),
@@ -367,7 +400,22 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<ProductDeletionResult> smartDeleteProduct(int productId) async {
+    await _requireCatalogueAuthority();
     return _datasource.runInTransaction(() async {
+      if (await _distributedCatalogue()) {
+        final references = await _datasource.countProductReferences(productId);
+        await _datasource.deactivateProduct(productId);
+        await _audit.logProductUpdated(
+          productId: productId,
+          productName:
+              'Product #$productId (archived for shared catalogue, $references refs)',
+          userId: await _currentUserId(),
+        );
+        return ProductDeletionResult(
+          wasDeleted: false,
+          referenceCount: references,
+        );
+      }
       final result = await _datasource.smartDeleteProduct(productId);
       if (result.wasDeleted) {
         await _audit.logProductDeleted(
@@ -396,6 +444,7 @@ class ProductRepositoryImpl implements ProductRepository {
     required int productId,
     required String reason,
   }) async {
+    await _requireCatalogueAuthority();
     return _datasource.runInTransaction(() async {
       // The accounting-safe write-off step requires both the variant
       // datasource (to enumerate every variant carrying stock) and the
@@ -430,17 +479,23 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<int> bulkDeleteProducts(List<int> ids) {
+  Future<int> bulkDeleteProducts(List<int> ids) async {
+    await _requireCatalogueAuthority();
+    if (await _distributedCatalogue()) {
+      return _datasource.bulkDeactivateProducts(ids);
+    }
     return _datasource.bulkDeleteProducts(ids);
   }
 
   @override
-  Future<int> deactivateProduct(int id) {
+  Future<int> deactivateProduct(int id) async {
+    await _requireCatalogueAuthority();
     return _datasource.deactivateProduct(id);
   }
 
   @override
-  Future<int> bulkDeactivateProducts(List<int> ids) {
+  Future<int> bulkDeactivateProducts(List<int> ids) async {
+    await _requireCatalogueAuthority();
     return _datasource.bulkDeactivateProducts(ids);
   }
 
@@ -464,6 +519,7 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<Map<int, int>> bulkCreateProducts(
     List<BulkProductData> products,
   ) async {
+    await _requireCatalogueAuthority();
     if (products.any((product) => product.stockQuantity != 0)) {
       throw ArgumentError(
         'Create bulk products at zero stock; record opening stock through their variants in the same transaction.',
@@ -531,6 +587,7 @@ class ProductRepositoryImpl implements ProductRepository {
     required Map<int, Map<String, Decimal>> priceChanges,
     required List<PriceHistory> historyRecords,
   }) async {
+    await _requireCatalogueAuthority();
     // Convert Product entities to ProductModel for datasource
     final productModels = products
         .map((p) => ProductModel.fromEntity(p))
@@ -549,7 +606,8 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<void> createPriceHistory(PriceHistory history) {
+  Future<void> createPriceHistory(PriceHistory history) async {
+    await _requireCatalogueAuthority();
     return _datasource.createPriceHistory(history);
   }
 

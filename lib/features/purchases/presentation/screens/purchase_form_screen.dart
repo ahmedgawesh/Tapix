@@ -12,6 +12,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/feature_gate_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
@@ -173,6 +174,8 @@ class _PurchaseFormView extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final currencyService = sl<CurrencyService>();
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
 
     return BlocConsumer<PurchaseFormBloc, PurchaseFormState>(
       listener: (context, state) {
@@ -212,7 +215,7 @@ class _PurchaseFormView extends StatelessWidget {
             _navigateBack(context);
           },
           child: Scaffold(
-            endDrawer: _buildSideDrawer(context, state),
+            endDrawer: isRemoteClient ? null : _buildSideDrawer(context, state),
             appBar: AppBar(
               leading: IconButton(
                 icon: const Icon(LucideIcons.arrowLeft),
@@ -234,13 +237,14 @@ class _PurchaseFormView extends StatelessWidget {
                             const PurchaseFormPosted(),
                           ),
                   ),
-                Builder(
-                  builder: (ctx) => IconButton(
-                    icon: const Icon(LucideIcons.menu),
-                    tooltip: 'purchases.menu'.tr(),
-                    onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                if (!isRemoteClient)
+                  Builder(
+                    builder: (ctx) => IconButton(
+                      icon: const Icon(LucideIcons.menu),
+                      tooltip: 'purchases.menu'.tr(),
+                      onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                    ),
                   ),
-                ),
               ],
             ),
             body: LayoutBuilder(
@@ -997,12 +1001,157 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // BARCODE SCANNER
   // ═══════════════════════════════════════════════════════
+  ProductVariant _remoteVariantForPurchase(LanCatalogVariant value) {
+    return ProductVariant(
+      id: value.id,
+      productId: value.productId,
+      sku: value.sku,
+      barcode: value.barcode,
+      costCents: Decimal.fromInt(value.costCents ?? 0),
+      priceCents: Decimal.fromInt(value.priceCents),
+      wholesalePriceCents: value.wholesalePriceCents == null
+          ? null
+          : Decimal.fromInt(value.wholesalePriceCents!),
+      lastPurchasePriceCents: value.lastPurchasePriceCents == null
+          ? null
+          : Decimal.fromInt(value.lastPurchasePriceCents!),
+      priceAdjustmentCents: Decimal.zero,
+      stockQuantity: value.stockQuantity,
+      isActive: true,
+    );
+  }
+
+  Future<void> _addRemoteBarcodeProduct(
+    BuildContext context,
+    String rawCode,
+  ) async {
+    final code = rawCode.trim().toLowerCase();
+    final lan = sl<LanNetworkService>();
+    final page = await lan.fetchRemoteCatalog(
+      query: rawCode.trim(),
+      limit: 50,
+      management: true,
+    );
+    if (!context.mounted) return;
+
+    final variantMatches =
+        <({LanCatalogProduct product, LanCatalogVariant variant})>[];
+    final productMatches = <LanCatalogProduct>[];
+    for (final product in page.products) {
+      final productCode = product.barcode?.trim().toLowerCase();
+      final sku = product.sku?.trim().toLowerCase();
+      if (productCode == code || sku == code) {
+        productMatches.add(product);
+      }
+      for (final variant in product.variants) {
+        final barcode = variant.barcode?.trim().toLowerCase();
+        final variantSku = variant.sku?.trim().toLowerCase();
+        if (barcode == code || variantSku == code) {
+          variantMatches.add((product: product, variant: variant));
+        }
+      }
+      if (product.matchedSupplierSourceSku?.trim().toLowerCase() == code) {
+        final matchedVariantId = product.matchedCanonicalVariantId;
+        if (matchedVariantId != null) {
+          for (final variant in product.variants) {
+            if (variant.id == matchedVariantId) {
+              variantMatches.add((product: product, variant: variant));
+              break;
+            }
+          }
+        } else {
+          productMatches.add(product);
+        }
+      }
+    }
+
+    if (variantMatches.length > 1 ||
+        (variantMatches.isEmpty && productMatches.length > 1)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('products.barcode_ambiguous'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final productsBloc = context.read<ProductsBloc>();
+    if (variantMatches.length == 1) {
+      final match = variantMatches.single;
+      final product = productsBloc.rememberRemoteCatalogProduct(match.product);
+      final variant = _remoteVariantForPurchase(match.variant);
+      final unitCost = Decimal.fromInt(
+        match.variant.lastPurchasePriceCents ??
+            match.variant.costCents ??
+            match.product.lastPurchasePriceCents ??
+            match.product.costCents ??
+            0,
+      );
+      context.read<PurchaseFormBloc>().add(
+        PurchaseLineItemAdded(
+          product: product,
+          variant: variant,
+          quantity: product.quantityScale,
+          unitCostCents: unitCost,
+          colorName: match.variant.colorName,
+          colorHex: match.variant.colorHex,
+          sizeName: match.variant.sizeName,
+          isMedicine: match.product.medicine != null,
+        ),
+      );
+      return;
+    }
+
+    if (productMatches.length == 1) {
+      final source = productMatches.single;
+      final product = productsBloc.rememberRemoteCatalogProduct(source);
+      if (source.hasVariants) {
+        _showAddItemSheet(context, initialProduct: product);
+      } else {
+        context.read<PurchaseFormBloc>().add(
+          PurchaseLineItemAdded(
+            product: product,
+            quantity: product.quantityScale,
+            unitCostCents: Decimal.fromInt(
+              source.lastPurchasePriceCents ?? source.costCents ?? 0,
+            ),
+            isMedicine: source.medicine != null,
+          ),
+        );
+      }
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('purchases.no_products_found'.tr()),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _openBarcodeScanner(BuildContext context) async {
     final result = await context.push<String>(
       '/barcode-scanner',
       extra: {'returnOnScan': true},
     );
     if (result != null && result.isNotEmpty && context.mounted) {
+      if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+        try {
+          await _addRemoteBarcodeProduct(context, result);
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('purchases.no_products_found'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+        return;
+      }
       final resolver = ProductBarcodeResolver(
         productRepository: sl<ProductRepository>(),
         variantRepository: sl<ProductVariantRepository>(),
@@ -1718,35 +1867,61 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
 
   void _showAddItemSheet(BuildContext context, {Product? initialProduct}) {
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetContext) => MultiBlocProvider(
-        providers: [
-          BlocProvider.value(value: context.read<ProductsBloc>()),
-          BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
-          BlocProvider(
-            create: (_) => sl<CategoriesBloc>()..add(const LoadCategories()),
-          ),
-        ],
-        child: _AddItemSheet(
+      builder: (sheetContext) {
+        final sheet = _AddItemSheet(
           initialProduct: initialProduct,
-          onItemAdded: (product, variant, quantity, unitCost) {
-            context.read<PurchaseFormBloc>().add(
-              PurchaseLineItemAdded(
-                product: product,
-                variant: variant,
-                quantity: quantity,
-                unitCostCents: unitCost,
-              ),
-            );
-            Navigator.pop(sheetContext);
-          },
-        ),
-      ),
+          remoteClient: isRemoteClient,
+          onItemAdded:
+              (
+                product,
+                variant,
+                quantity,
+                unitCost,
+                colorName,
+                colorHex,
+                sizeName,
+                isMedicine,
+              ) {
+                context.read<PurchaseFormBloc>().add(
+                  PurchaseLineItemAdded(
+                    product: product,
+                    variant: variant,
+                    quantity: quantity,
+                    unitCostCents: unitCost,
+                    colorName: colorName,
+                    colorHex: colorHex,
+                    sizeName: sizeName,
+                    isMedicine: isMedicine,
+                  ),
+                );
+                Navigator.pop(sheetContext);
+              },
+        );
+        if (isRemoteClient) {
+          return BlocProvider.value(
+            value: context.read<ProductsBloc>(),
+            child: sheet,
+          );
+        }
+        return MultiBlocProvider(
+          providers: [
+            BlocProvider.value(value: context.read<ProductsBloc>()),
+            BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
+            BlocProvider(
+              create: (_) => sl<CategoriesBloc>()..add(const LoadCategories()),
+            ),
+          ],
+          child: sheet,
+        );
+      },
     );
   }
 
@@ -1801,7 +1976,31 @@ class _PurchaseFormView extends StatelessWidget {
     BuildContext context,
     PurchaseFormState state,
   ) async {
-    final suppliers = await sl<SupplierRepository>().searchSuppliers('');
+    final lan = sl<LanNetworkService>();
+    final List<Supplier> suppliers;
+    if (lan.snapshot.mode == LanMode.client) {
+      final remoteSuppliers = await lan.fetchRemoteSuppliers(limit: 500);
+      final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+      suppliers = remoteSuppliers
+          .map(
+            (supplier) => Supplier(
+              id: supplier.id,
+              name: supplier.name,
+              productCode: supplier.productCode,
+              phone: supplier.phone,
+              defaultSupplyMode: 'owned',
+              balanceCents: Decimal.zero,
+              openingBalanceCents: Decimal.zero,
+              currencyId: state.currencyId,
+              isActive: true,
+              createdAt: epoch,
+              updatedAt: epoch,
+            ),
+          )
+          .toList(growable: false);
+    } else {
+      suppliers = await sl<SupplierRepository>().searchSuppliers('');
+    }
     if (!context.mounted) return;
 
     showModalBottomSheet<void>(
@@ -4907,6 +5106,30 @@ class _SupplierBalanceInfo extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(LucideIcons.landmark, size: 17, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'purchases.remote_supplier_ledger_note'.tr(),
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return StreamBuilder<Supplier?>(
       stream: sl<SupplierRepository>().watchSupplier(supplierId),
       builder: (context, snapshot) {
@@ -5214,15 +5437,24 @@ class _SupplierBalanceInfo extends StatelessWidget {
 // ═══════════════════════════════════════════════════════
 class _AddItemSheet extends StatefulWidget {
   final Product? initialProduct;
+  final bool remoteClient;
   final void Function(
     Product product,
     ProductVariant? variant,
     int quantity,
     Decimal unitCost,
+    String? colorName,
+    String? colorHex,
+    String? sizeName,
+    bool isMedicine,
   )
   onItemAdded;
 
-  const _AddItemSheet({this.initialProduct, required this.onItemAdded});
+  const _AddItemSheet({
+    this.initialProduct,
+    this.remoteClient = false,
+    required this.onItemAdded,
+  });
 
   @override
   State<_AddItemSheet> createState() => _AddItemSheetState();
@@ -5273,6 +5505,44 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   })
                 >(
                   future: () async {
+                    final productsBloc = context.read<ProductsBloc>();
+                    if (productsBloc.isRemoteClient) {
+                      final remote = productsBloc.remoteCatalogProduct(
+                        product.id,
+                      );
+                      final variants = <ProductVariant>[];
+                      final sizeNameById = <int, String>{};
+                      final colorHexById = <int, String?>{};
+                      for (
+                        var index = 0;
+                        index < (remote?.variants.length ?? 0);
+                        index++
+                      ) {
+                        final source = remote!.variants[index];
+                        final dimensionId = index + 1;
+                        variants.add(
+                          _remoteVariantEntity(source).copyWith(
+                            colorId: source.colorHex == null
+                                ? null
+                                : dimensionId,
+                            sizeId: source.sizeName == null
+                                ? null
+                                : dimensionId,
+                          ),
+                        );
+                        if (source.colorHex != null) {
+                          colorHexById[dimensionId] = source.colorHex;
+                        }
+                        if (source.sizeName != null) {
+                          sizeNameById[dimensionId] = source.sizeName!;
+                        }
+                      }
+                      return (
+                        variants: variants,
+                        sizeNameById: sizeNameById,
+                        colorHexById: colorHexById,
+                      );
+                    }
                     final variantRepo = sl<ProductVariantRepository>();
                     final colorRepo = sl<ProductColorRepository>();
                     final sizeRepo = sl<SizeRepository>();
@@ -5544,61 +5814,69 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     ),
                     filled: true,
                   ),
-                  onChanged: (_) => setState(() {}),
+                  onChanged: (value) {
+                    setState(() {});
+                    if (widget.remoteClient) {
+                      context.read<ProductsBloc>().add(
+                        ProductSearchRequested(value),
+                      );
+                    }
+                  },
                 ),
               ),
               // Category filter chips
-              BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
-                builder: (context, catState) {
-                  List<Category> categories = const [];
-                  if (catState is RealtimeSuccess<List<Category>>) {
-                    categories = catState.data;
-                  } else if (catState is RealtimeLoading<List<Category>>) {
-                    categories = catState.previousData ?? const [];
-                  }
-                  if (categories.isEmpty) return const SizedBox.shrink();
+              if (!widget.remoteClient)
+                BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+                  builder: (context, catState) {
+                    List<Category> categories = const [];
+                    if (catState is RealtimeSuccess<List<Category>>) {
+                      categories = catState.data;
+                    } else if (catState is RealtimeLoading<List<Category>>) {
+                      categories = catState.previousData ?? const [];
+                    }
+                    if (categories.isEmpty) return const SizedBox.shrink();
 
-                  return SizedBox(
-                    height: 40,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsetsDirectional.only(end: 6),
-                          child: ChoiceChip(
-                            label: Text('purchases.all_categories'.tr()),
-                            selected: _selectedCategoryId == null,
-                            onSelected: (_) =>
-                                setState(() => _selectedCategoryId = null),
-                            showCheckmark: false,
-                            selectedColor: cs.primaryContainer,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                        ...categories.map(
-                          (cat) => Padding(
+                    return SizedBox(
+                      height: 40,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          Padding(
                             padding: const EdgeInsetsDirectional.only(end: 6),
                             child: ChoiceChip(
-                              label: Text(cat.name),
-                              selected: _selectedCategoryId == cat.id,
-                              onSelected: (_) => setState(() {
-                                _selectedCategoryId =
-                                    _selectedCategoryId == cat.id
-                                    ? null
-                                    : cat.id;
-                              }),
+                              label: Text('purchases.all_categories'.tr()),
+                              selected: _selectedCategoryId == null,
+                              onSelected: (_) =>
+                                  setState(() => _selectedCategoryId = null),
                               showCheckmark: false,
                               selectedColor: cs.primaryContainer,
                               visualDensity: VisualDensity.compact,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                          ...categories.map(
+                            (cat) => Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 6),
+                              child: ChoiceChip(
+                                label: Text(cat.name),
+                                selected: _selectedCategoryId == cat.id,
+                                onSelected: (_) => setState(() {
+                                  _selectedCategoryId =
+                                      _selectedCategoryId == cat.id
+                                      ? null
+                                      : cat.id;
+                                }),
+                                showCheckmark: false,
+                                selectedColor: cs.primaryContainer,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               const SizedBox(height: 8),
             ] else
               Padding(
@@ -5628,7 +5906,14 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   Widget _buildProductList(ScrollController scrollController) {
     final cs = Theme.of(context).colorScheme;
     final currencyService = sl<CurrencyService>();
-
+    if (widget.remoteClient) {
+      return _buildProductResults(
+        scrollController,
+        const <int, VariantPreview>{},
+        cs,
+        currencyService,
+      );
+    }
     return BlocBuilder<
       VariantPreviewsBloc,
       RealtimeState<Map<int, VariantPreview>>
@@ -5640,234 +5925,377 @@ class _AddItemSheetState extends State<_AddItemSheet> {
         } else if (previewState is RealtimeLoading<Map<int, VariantPreview>>) {
           previews = previewState.previousData ?? const {};
         }
+        return _buildProductResults(
+          scrollController,
+          previews,
+          cs,
+          currencyService,
+        );
+      },
+    );
+  }
 
-        return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
-          builder: (context, state) {
-            List<Product>? products;
-            if (state is RealtimeSuccess<List<Product>>) {
-              products = state.data;
-            } else if (state is RealtimeLoading<List<Product>>) {
-              products = state.previousData;
-            }
+  Widget _buildProductResults(
+    ScrollController scrollController,
+    Map<int, VariantPreview> previews,
+    ColorScheme cs,
+    CurrencyService currencyService,
+  ) {
+    return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+      builder: (context, state) {
+        List<Product>? products;
+        if (state is RealtimeSuccess<List<Product>>) {
+          products = state.data;
+        } else if (state is RealtimeLoading<List<Product>>) {
+          products = state.previousData;
+        }
 
-            if (products == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        if (products == null) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-            final query = _searchController.text.toLowerCase();
-            final filtered = products.where((p) {
-              // Category filter
-              if (_selectedCategoryId != null &&
-                  p.categoryId != _selectedCategoryId) {
-                return false;
+        final query = _searchController.text.toLowerCase();
+        final filtered = products.where((p) {
+          // Category filter
+          if (_selectedCategoryId != null &&
+              p.categoryId != _selectedCategoryId) {
+            return false;
+          }
+          if (query.isEmpty) return true;
+          return p.name.toLowerCase().contains(query) ||
+              (p.sku?.toLowerCase().contains(query) ?? false) ||
+              (p.barcode?.toLowerCase().contains(query) ?? false);
+        }).toList();
+
+        if (filtered.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  LucideIcons.searchX,
+                  size: 48,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'purchases.no_products_found'.tr(),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          controller: scrollController,
+          itemCount: filtered.length,
+          separatorBuilder: (_, idx) => Divider(
+            height: 1,
+            indent: 56,
+            color: cs.outlineVariant.withValues(alpha: 0.5),
+          ),
+          itemBuilder: (context, index) {
+            final product = filtered[index];
+            final preview = previews[product.id];
+            final sizeName = (!product.hasVariants
+                ? preview?.sizeName?.trim()
+                : null);
+            final colorHex = (!product.hasVariants
+                ? preview?.colorHex?.trim()
+                : null);
+
+            Color? shade;
+            if (colorHex != null && colorHex.isNotEmpty) {
+              final cleaned = colorHex.replaceFirst('#', '');
+              if (cleaned.length == 6 || cleaned.length == 8) {
+                final argb = cleaned.length == 6 ? 'FF$cleaned' : cleaned;
+                try {
+                  shade = Color(int.parse(argb, radix: 16));
+                } catch (_) {}
               }
-              if (query.isEmpty) return true;
-              return p.name.toLowerCase().contains(query) ||
-                  (p.sku?.toLowerCase().contains(query) ?? false) ||
-                  (p.barcode?.toLowerCase().contains(query) ?? false);
-            }).toList();
+            }
 
-            if (filtered.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      LucideIcons.searchX,
-                      size: 48,
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 4,
+              ),
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  product.hasVariants
+                      ? LucideIcons.layers
+                      : LucideIcons.package,
+                  size: 20,
+                  color: cs.primary,
+                ),
+              ),
+              title: Text(
+                product.name,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              subtitle: Row(
+                children: [
+                  // Identifier group takes the available space so the SKU is
+                  // never truncated just to make room for a color dot.
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (product.sku != null) ...[
+                          Flexible(
+                            child: Text(
+                              'SKU: ${product.sku}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (sizeName != null && sizeName.isNotEmpty) ...[
+                          Flexible(
+                            child: Text(
+                              sizeName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (shade != null) const SizedBox(width: 6),
+                        ],
+                        if (shade != null)
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: shade,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: cs.outline),
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
+                  ),
+                  if (!product.hasVariants) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      LucideIcons.warehouse,
+                      size: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
                     Text(
-                      'purchases.no_products_found'.tr(),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      localizedQuantity(
+                        product.stockQuantity,
+                        product.measurementType,
+                      ),
+                      style: TextStyle(
+                        fontSize: 12,
                         color: cs.onSurfaceVariant,
                       ),
                     ),
-                  ],
-                ),
-              );
-            }
-
-            return ListView.separated(
-              controller: scrollController,
-              itemCount: filtered.length,
-              separatorBuilder: (_, idx) => Divider(
-                height: 1,
-                indent: 56,
-                color: cs.outlineVariant.withValues(alpha: 0.5),
-              ),
-              itemBuilder: (context, index) {
-                final product = filtered[index];
-                final preview = previews[product.id];
-                final sizeName = (!product.hasVariants
-                    ? preview?.sizeName?.trim()
-                    : null);
-                final colorHex = (!product.hasVariants
-                    ? preview?.colorHex?.trim()
-                    : null);
-
-                Color? shade;
-                if (colorHex != null && colorHex.isNotEmpty) {
-                  final cleaned = colorHex.replaceFirst('#', '');
-                  if (cleaned.length == 6 || cleaned.length == 8) {
-                    final argb = cleaned.length == 6 ? 'FF$cleaned' : cleaned;
-                    try {
-                      shade = Color(int.parse(argb, radix: 16));
-                    } catch (_) {}
-                  }
-                }
-
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      product.hasVariants
-                          ? LucideIcons.layers
-                          : LucideIcons.package,
-                      size: 20,
-                      color: cs.primary,
-                    ),
-                  ),
-                  title: Text(
-                    product.name,
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  ),
-                  subtitle: Row(
-                    children: [
-                      // Identifier group takes the available space so the SKU is
-                      // never truncated just to make room for a color dot.
-                      Expanded(
-                        child: Row(
-                          children: [
-                            if (product.sku != null) ...[
-                              Flexible(
-                                child: Text(
-                                  'SKU: ${product.sku}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (sizeName != null && sizeName.isNotEmpty) ...[
-                              Flexible(
-                                child: Text(
-                                  sizeName,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (shade != null) const SizedBox(width: 6),
-                            ],
-                            if (shade != null)
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: shade,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: cs.outline),
-                                ),
-                              ),
-                          ],
-                        ),
+                    const SizedBox(width: 12),
+                    Text(
+                      // Display the GROSS supplier reference price so the
+                      // picker and the line item start from the same
+                      // number as the user-entered cost on the last
+                      // purchase. Mirrors the rule used at
+                      // `onItemAdded` below and in `_buildVariantSelection`.
+                      currencyService.format(
+                        (product.lastPurchasePriceCents ?? product.costCents)
+                            .toBigInt()
+                            .toInt(),
                       ),
-                      if (!product.hasVariants) ...[
-                        const SizedBox(width: 8),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: cs.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              trailing: product.hasVariants
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(LucideIcons.info, size: 18),
+                          onPressed: () => _showVariantsInfoDialog(product),
+                        ),
                         Icon(
-                          LucideIcons.warehouse,
-                          size: 12,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          localizedQuantity(
-                            product.stockQuantity,
-                            product.measurementType,
-                          ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          // Display the GROSS supplier reference price so the
-                          // picker and the line item start from the same
-                          // number as the user-entered cost on the last
-                          // purchase. Mirrors the rule used at
-                          // `onItemAdded` below and in `_buildVariantSelection`.
-                          currencyService.format(
-                            (product.lastPurchasePriceCents ??
-                                    product.costCents)
-                                .toBigInt()
-                                .toInt(),
-                          ),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: cs.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  trailing: product.hasVariants
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(LucideIcons.info, size: 18),
-                              onPressed: () => _showVariantsInfoDialog(product),
-                            ),
-                            Icon(
-                              LucideIcons.chevronRight,
-                              size: 20,
-                              color: cs.primary,
-                            ),
-                          ],
-                        )
-                      : Icon(
-                          LucideIcons.plusCircle,
+                          LucideIcons.chevronRight,
                           size: 20,
                           color: cs.primary,
                         ),
-                  onTap: () {
-                    if (product.hasVariants) {
-                      setState(() => _selectedProduct = product);
-                    } else {
-                      // GROSS supplier reference price (see variant branch
-                      // below for the rationale).
-                      widget.onItemAdded(
-                        product,
+                      ],
+                    )
+                  : Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+              onTap: () {
+                if (product.hasVariants) {
+                  setState(() => _selectedProduct = product);
+                } else {
+                  // GROSS supplier reference price (see variant branch
+                  // below for the rationale).
+                  widget.onItemAdded(
+                    product,
+                    null,
+                    product.quantityScale,
+                    product.lastPurchasePriceCents ?? product.costCents,
+                    null,
+                    null,
+                    null,
+                    context
+                            .read<ProductsBloc>()
+                            .remoteCatalogProduct(product.id)
+                            ?.medicine !=
                         null,
-                        product.quantityScale,
-                        product.lastPurchasePriceCents ?? product.costCents,
-                      );
-                    }
-                  },
-                );
+                  );
+                }
               },
             );
           },
+        );
+      },
+    );
+  }
+
+  ProductVariant _remoteVariantEntity(LanCatalogVariant value) {
+    return ProductVariant(
+      id: value.id,
+      productId: value.productId,
+      sku: value.sku,
+      barcode: value.barcode,
+      costCents: Decimal.fromInt(value.costCents ?? 0),
+      priceCents: Decimal.fromInt(value.priceCents),
+      wholesalePriceCents: value.wholesalePriceCents == null
+          ? null
+          : Decimal.fromInt(value.wholesalePriceCents!),
+      lastPurchasePriceCents: value.lastPurchasePriceCents == null
+          ? null
+          : Decimal.fromInt(value.lastPurchasePriceCents!),
+      priceAdjustmentCents: Decimal.zero,
+      stockQuantity: value.stockQuantity,
+      isActive: true,
+    );
+  }
+
+  Widget _buildRemoteVariantSelection(
+    LanCatalogProduct remoteProduct,
+    ColorScheme cs,
+    CurrencyService currencyService,
+  ) {
+    if (remoteProduct.variants.isEmpty) {
+      return Center(child: Text('purchases.no_products_found'.tr()));
+    }
+    return ListView.separated(
+      itemCount: remoteProduct.variants.length,
+      separatorBuilder: (_, _) => Divider(
+        height: 1,
+        indent: 56,
+        color: cs.outlineVariant.withValues(alpha: 0.5),
+      ),
+      itemBuilder: (context, index) {
+        final source = remoteProduct.variants[index];
+        final variant = _remoteVariantEntity(source);
+        final shade = _tryParseHexColor(source.colorHex);
+        final unitCost = Decimal.fromInt(
+          source.lastPurchasePriceCents ??
+              source.costCents ??
+              remoteProduct.lastPurchasePriceCents ??
+              remoteProduct.costCents ??
+              0,
+        );
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: cs.tertiaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(LucideIcons.tag, size: 18, color: cs.tertiary),
+          ),
+          title: Text(
+            source.sku ?? source.label,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          subtitle: Row(
+            children: [
+              if (source.sizeName?.trim().isNotEmpty == true) ...[
+                Flexible(
+                  child: Text(
+                    source.sizeName!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  ),
+                ),
+                if (shade != null) const SizedBox(width: 6),
+              ],
+              if (shade != null) ...[
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: shade,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: cs.outline),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+              const SizedBox(width: 4),
+              Text(
+                localizedQuantity(
+                  source.stockQuantity,
+                  _selectedProduct!.measurementType,
+                ),
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(width: 12),
+              Icon(LucideIcons.coins, size: 12, color: cs.primary),
+              const SizedBox(width: 4),
+              Text(
+                currencyService.format(unitCost.toBigInt().toInt()),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+          onTap: () => widget.onItemAdded(
+            _selectedProduct!,
+            variant,
+            _selectedProduct!.quantityScale,
+            unitCost,
+            source.colorName,
+            source.colorHex,
+            source.sizeName,
+            remoteProduct.medicine != null,
+          ),
         );
       },
     );
@@ -5877,6 +6305,16 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final currencyService = sl<CurrencyService>();
+    final productsBloc = context.read<ProductsBloc>();
+    if (productsBloc.isRemoteClient) {
+      final remoteProduct = productsBloc.remoteCatalogProduct(
+        _selectedProduct!.id,
+      );
+      if (remoteProduct == null) {
+        return Center(child: Text('purchases.no_products_found'.tr()));
+      }
+      return _buildRemoteVariantSelection(remoteProduct, cs, currencyService);
+    }
 
     return BlocProvider(
       create: (context) =>
@@ -6053,6 +6491,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         variant,
                         _selectedProduct!.quantityScale,
                         variant.lastPurchasePriceCents ?? variant.costCents,
+                        null,
+                        colorHex,
+                        sizeName,
+                        false,
                       );
                     },
                   );

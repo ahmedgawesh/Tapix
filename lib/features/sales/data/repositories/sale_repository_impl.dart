@@ -1,3 +1,4 @@
+import '../../../../core/services/loyalty/sale_loyalty_settlement.dart';
 import 'dart:async';
 import '../../../../core/services/business/warehouse_document_reader.dart';
 import '../../../../core/services/business/document_posting_scope.dart';
@@ -110,6 +111,29 @@ class SaleRepositoryImpl implements SaleRepository {
        _syncEvents = syncEvents,
        _syncIdentities = syncIdentities;
 
+  /// Creates an operation-local repository bound to a warehouse that was
+  /// already authorized by the caller. The shared dependencies are immutable;
+  /// only the document/inventory boundary changes. This avoids mutating the
+  /// process-wide business context when concurrent LAN cashiers use different
+  /// allowed warehouses.
+  SaleRepositoryImpl forWarehouse(WarehouseOperationScope scope) =>
+      SaleRepositoryImpl(
+        _datasource,
+        _dao,
+        _journalService,
+        _audit,
+        _sessionService,
+        _loyaltyRepository,
+        _commissionService,
+        _loyaltyPointsService,
+        warehouseScope: scope,
+        einvoiceDispatch: _einvoiceDispatch,
+        freeQuotaService: _freeQuotaService,
+        cashierShiftService: _cashierShiftService,
+        syncEvents: _syncEvents,
+        syncIdentities: _syncIdentities,
+      );
+
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
   Future<void> _appendPostedSaleEvent(
@@ -160,6 +184,65 @@ class SaleRepositoryImpl implements SaleRepository {
       aggregateId: payload['documentId']! as String,
       contractVersion: 1,
       occurredAt: saleReturn.returnDate,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendVoidedSaleEvent(
+    OfflineSyncTransaction transaction, {
+    required int saleId,
+    required int? actorUserId,
+    required DateTime voidedAt,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final sale = await _dao.getSaleById(saleId);
+    if (sale == null) {
+      throw StateError('Voided sale is missing from the local database.');
+    }
+    final payload = await SaleSyncContractBuilder(
+      _dao.db,
+      _effectiveSyncIdentities,
+    ).buildVoidedSale(sale: sale, actorUserId: actorUserId, voidedAt: voidedAt);
+    await transaction.appendOnce(
+      producerKey: 'sale:voided:$saleId',
+      eventType: 'sale.voided.v1',
+      aggregateType: 'sale',
+      aggregateId: payload['documentId']! as String,
+      contractVersion: 1,
+      occurredAt: voidedAt,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendVoidedLinkedReturnEvent(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required int? actorUserId,
+    required DateTime voidedAt,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final saleReturn = await _dao.getSaleReturnById(returnId);
+    if (saleReturn == null) {
+      throw StateError(
+        'Voided sale return is missing from the local database.',
+      );
+    }
+    final payload =
+        await SaleSyncContractBuilder(
+          _dao.db,
+          _effectiveSyncIdentities,
+        ).buildVoidedLinkedReturn(
+          saleReturn: saleReturn,
+          actorUserId: actorUserId,
+          voidedAt: voidedAt,
+        );
+    await transaction.appendOnce(
+      producerKey: 'sale_return:voided:$returnId',
+      eventType: 'sale_return.voided.v1',
+      aggregateType: 'sale_return',
+      aggregateId: payload['documentId']! as String,
+      contractVersion: 1,
+      occurredAt: voidedAt,
       payload: payload,
     );
   }
@@ -229,13 +312,17 @@ class SaleRepositoryImpl implements SaleRepository {
     bool taxInclusiveAtPost = false,
     List<AppliedPromotion> appliedPromotions = const [],
     List<CheckoutPaymentAllocation> initialPayments = const [],
+    int loyaltyPointsToRedeem = 0,
+    int loyaltyValueCents = 0,
   }) async {
     final settlement = CheckoutSettlement(initialPayments);
     final isPureCheque =
         initialPayments.isEmpty &&
         (paymentMethod == 'cheque' || paymentMethod == 'check');
     if (initialPayments.isNotEmpty) {
-      settlement.validate(invoiceTotalCents: totalCents.toBigInt().toInt());
+      settlement.validate(
+        invoiceTotalCents: totalCents.toBigInt().toInt() - loyaltyValueCents,
+      );
       if (settlement.totalSettledCents != paidAmountCents.toBigInt().toInt()) {
         throw ArgumentError('settlement_total_mismatch');
       }
@@ -360,6 +447,17 @@ class SaleRepositoryImpl implements SaleRepository {
         saleId = await _effectiveSyncEvents.transaction((
           syncTransaction,
         ) async {
+          await SaleLoyaltySettlement.validate(
+            _dao.db,
+            customerId: customerId,
+            currencyId: currencyId,
+            points: loyaltyPointsToRedeem,
+            expectedValueCents: loyaltyValueCents,
+            totalCents: totalCents.toBigInt().toInt(),
+          );
+          if (initialPayments.any((p) => p.method == 'loyalty')) {
+            throw ArgumentError('loyalty_payment_must_be_server_generated');
+          }
           // Generate invoice number INSIDE the transaction for atomicity
           final invoiceNumber = await _dao.generateInvoiceNumber();
           final companionWithNumber = saleCompanion.copyWith(
@@ -448,7 +546,7 @@ class SaleRepositoryImpl implements SaleRepository {
               direction: ChequeDirectionValue.incoming,
               sourceTable: ChequeSourceTables.sale,
               sourceId: id,
-              amountCents: totalCents.toBigInt().toInt(),
+              amountCents: totalCents.toBigInt().toInt() - loyaltyValueCents,
               currencyId: currencyId,
               dueDate: dueDate,
               partyType: customerId == null ? null : 'customer',
@@ -457,6 +555,31 @@ class SaleRepositoryImpl implements SaleRepository {
             );
           }
 
+          if (loyaltyPointsToRedeem > 0) {
+            await SaleLoyaltySettlement.changePoints(
+              _dao.db,
+              customerId: customerId!,
+              points: -loyaltyPointsToRedeem,
+              referenceId: id,
+              referenceType: 'sale_redemption',
+            );
+            final paymentId = await _dao.recordPayment(
+              db.SalePaymentsCompanion.insert(
+                saleId: id,
+                amountCents: Decimal.fromInt(loyaltyValueCents),
+                currencyId: currencyId,
+                paymentMethod: 'loyalty',
+                reference: Value('points:$loyaltyPointsToRedeem'),
+              ),
+            );
+            await _journalService.recordCustomerPaymentJournalEntry(
+              paymentId: paymentId,
+              amountCents: loyaltyValueCents,
+              currencyId: currencyId,
+              paymentMethod: 'loyalty',
+              userId: userId,
+            );
+          }
           // COGS journal entry — MANDATORY (Dr COGS, Cr Inventory)
           final costCents = await _dao.computeSaleCostCents(id);
           await _journalService.recordSaleCOGSJournalEntry(
@@ -472,7 +595,7 @@ class SaleRepositoryImpl implements SaleRepository {
             await _loyaltyPointsService.awardForSale(
               customerId: customerId,
               saleId: id,
-              totalCents: totalCents.toBigInt().toInt(),
+              totalCents: totalCents.toBigInt().toInt() - loyaltyValueCents,
               strict: true,
             );
           }
@@ -1007,8 +1130,9 @@ class SaleRepositoryImpl implements SaleRepository {
 
   @override
   Future<void> voidSale(int saleId, {int? actorUserId}) async {
-    await _dao.db.transaction(() async {
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
       final resolvedUserId = actorUserId ?? await _currentUserId();
+      final voidedAt = DateTime.now().toUtc();
       // 2026-05-13 — pre-flight integrity guard. The analyzer is a side-
       // effect-free SoT that surfaces every condition that would corrupt
       // the books if the void went through (entangled adjustment returns,
@@ -1108,6 +1232,35 @@ class SaleRepositoryImpl implements SaleRepository {
         beforeCompletion: (id) => consignmentAccounting
             .postPendingSaleVoidReversals(id, userId: resolvedUserId),
       );
+      for (final saleReturn in linkedReturns) {
+        await (_dao.db.update(
+          _dao.db.saleReturns,
+        )..where((row) => row.id.equals(saleReturn.id))).write(
+          db.SaleReturnsCompanion(
+            voidedBy: resolvedUserId == null
+                ? const Value.absent()
+                : Value(resolvedUserId),
+            voidedAt: Value(voidedAt),
+            voidReason: const Value('Sale voided — cascade'),
+          ),
+        );
+        if (saleReturn.status == 'posted') {
+          await _appendVoidedLinkedReturnEvent(
+            syncTransaction,
+            returnId: saleReturn.id,
+            actorUserId: resolvedUserId,
+            voidedAt: voidedAt,
+          );
+        }
+      }
+      if (sale?.status == 'completed') {
+        await _appendVoidedSaleEvent(
+          syncTransaction,
+          saleId: saleId,
+          actorUserId: resolvedUserId,
+          voidedAt: voidedAt,
+        );
+      }
       if (sale != null && sale.customerId != null) {
         await _reverseLoyaltyPointsForSale(saleId, sale.customerId!);
       }
@@ -1185,6 +1338,12 @@ class SaleRepositoryImpl implements SaleRepository {
         final originalSale = await getSaleById(originalSaleId);
         if (originalSale == null) {
           throw StateError('Sale #$originalSaleId not found');
+        }
+
+        if ((await _dao.getSalePayments(
+          originalSaleId,
+        )).any((p) => p.paymentMethod == 'loyalty')) {
+          throw StateError('sales.loyalty_edit_requires_void');
         }
 
         // 2. Check accounting period is open for the original sale date
@@ -1372,8 +1531,13 @@ class SaleRepositoryImpl implements SaleRepository {
     bool taxInclusiveAtPost = false,
     List<CheckoutPaymentAllocation> settlementAllocations = const [],
   }) async {
-    final structuredSettlement = settlementAllocations.isNotEmpty;
-    final effectiveRefundMethod = structuredSettlement
+    if (settlementAllocations.any((p) => p.method == 'loyalty')) {
+      throw ArgumentError('loyalty_payment_must_be_server_generated');
+    }
+    var structuredSettlement = settlementAllocations.isNotEmpty;
+    var effectiveAllocations = settlementAllocations;
+    var pointsToRestore = 0;
+    var effectiveRefundMethod = structuredSettlement
         ? 'mixed'
         : (refundMethod ?? 'cash');
     final isChequeRefund =
@@ -1500,6 +1664,24 @@ class SaleRepositoryImpl implements SaleRepository {
         (sum, item) => sum + item.refundCents.toBigInt().toInt(),
       );
 
+      final loyaltyShare = await SaleLoyaltySettlement.returnShare(
+        _dao.db,
+        saleId,
+        postedTotalCents,
+      );
+      if (loyaltyShare.cents > 0) {
+        pointsToRestore = loyaltyShare.points;
+        effectiveAllocations = SaleLoyaltySettlement.returnAllocations(
+          totalCents: postedTotalCents,
+          loyaltyCents: loyaltyShare.cents,
+          method: effectiveRefundMethod,
+          requested: settlementAllocations,
+          dueDate: dueDate,
+        );
+        structuredSettlement = true;
+        effectiveRefundMethod = 'mixed';
+      }
+
       final returnCompanion = db.SaleReturnsCompanion(
         saleId: Value(saleId),
         cashierShiftId: cashierShiftId != null
@@ -1620,7 +1802,8 @@ class SaleRepositoryImpl implements SaleRepository {
           partyId: originalSale.customerId!,
           totalCents: postedTotalCents,
           currencyId: currencyId,
-          allocations: settlementAllocations,
+          allocations: effectiveAllocations,
+          allowLoyalty: effectiveAllocations.any((p) => p.method == 'loyalty'),
           documentDate: effectiveReturnDate,
           userId: userId,
         );
@@ -1673,6 +1856,16 @@ class SaleRepositoryImpl implements SaleRepository {
         returnDate: effectiveReturnDate,
       );
 
+      if (pointsToRestore > 0) {
+        await SaleLoyaltySettlement.changePoints(
+          _dao.db,
+          customerId: originalSale.customerId!,
+          points: pointsToRestore,
+          referenceId: id,
+          referenceType: 'sale_return_redemption',
+        );
+      }
+
       await _loyaltyPointsService.reverseForReturn(
         saleId: saleId,
         returnId: id,
@@ -1721,7 +1914,9 @@ class SaleRepositoryImpl implements SaleRepository {
     bool allowNegativeStock = false,
   }) async {
     final userId = await _currentUserId();
-    await _dao.db.transaction(() async {
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
+      final voidedAt = DateTime.now().toUtc();
+      final returnBeforeVoid = await _dao.getSaleReturnById(returnId);
       await ChequeSourceVoidService.voidForSource(
         db: _dao.db,
         journalService: _journalService,
@@ -1754,14 +1949,30 @@ class SaleRepositoryImpl implements SaleRepository {
           _journalService,
         ).postPendingReturnVoidReaccruals(id, userId: userId),
       );
+      await (_dao.db.update(
+        _dao.db.saleReturns,
+      )..where((row) => row.id.equals(returnId))).write(
+        db.SaleReturnsCompanion(
+          voidedBy: userId == null ? const Value.absent() : Value(userId),
+          voidedAt: Value(voidedAt),
+          voidReason: const Value('voided'),
+        ),
+      );
+      if (returnBeforeVoid?.status == 'posted') {
+        await _appendVoidedLinkedReturnEvent(
+          syncTransaction,
+          returnId: returnId,
+          actorUserId: userId,
+          voidedAt: voidedAt,
+        );
+      }
+      await _audit.logVoid(
+        entityType: 'sale_return',
+        entityId: returnId,
+        reason: 'voided',
+        userId: userId,
+      );
     });
-    // Audit: log sale return void (CRITICAL)
-    _audit.logVoid(
-      entityType: 'sale_return',
-      entityId: returnId,
-      reason: 'voided',
-      userId: await _currentUserId(),
-    );
   }
 
   // ==================== SALE PAYMENTS ====================
@@ -1873,6 +2084,10 @@ class SaleRepositoryImpl implements SaleRepository {
       payment.saleId,
       scope: warehouseScope,
     );
+
+    if (payment.paymentMethod == 'loyalty') {
+      throw StateError('sales.loyalty_edit_requires_void');
+    }
 
     // Void journal entries BEFORE deleting the payment
     await _journalService.voidJournalEntriesForSource(

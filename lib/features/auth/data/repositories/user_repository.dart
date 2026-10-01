@@ -39,6 +39,9 @@ class UserRepository implements UserRepositoryInterface {
     required String password,
     required UserRole role,
     int? employeeId,
+    String? branchId,
+    String? warehouseId,
+    bool hasGlobalLocationAccess = false,
     String? securityQuestion,
     String? securityAnswer,
   }) async {
@@ -56,6 +59,9 @@ class UserRepository implements UserRepositoryInterface {
             passwordHash: hashedPassword,
             role: role.name,
             employeeId: Value(employeeId),
+            branchId: Value(branchId),
+            warehouseId: Value(warehouseId),
+            globalLocationAccess: Value(hasGlobalLocationAccess),
             securityQuestion: Value(securityQuestion),
             securityAnswerHash: Value(hashedAnswer),
             createdAt: now,
@@ -78,6 +84,10 @@ class UserRepository implements UserRepositoryInterface {
     UserRole? role,
     int? employeeId,
     bool clearEmployeeLink = false,
+    String? branchId,
+    String? warehouseId,
+    bool? hasGlobalLocationAccess,
+    bool clearLocationAssignment = false,
     String? securityQuestion,
     String? securityAnswer,
   }) async {
@@ -95,6 +105,15 @@ class UserRepository implements UserRepositoryInterface {
       employeeId: clearEmployeeLink
           ? const Value(null)
           : (employeeId != null ? Value(employeeId) : const Value.absent()),
+      branchId: clearLocationAssignment
+          ? const Value(null)
+          : (branchId != null ? Value(branchId) : const Value.absent()),
+      warehouseId: clearLocationAssignment
+          ? const Value(null)
+          : (warehouseId != null ? Value(warehouseId) : const Value.absent()),
+      globalLocationAccess: hasGlobalLocationAccess != null
+          ? Value(hasGlobalLocationAccess)
+          : const Value.absent(),
       securityQuestion: securityQuestion != null
           ? Value(securityQuestion)
           : const Value.absent(),
@@ -118,6 +137,68 @@ class UserRepository implements UserRepositoryInterface {
       UsersCompanion(isActive: Value(isActive ? 1 : 0), updatedAt: Value(now)),
     );
   }
+
+  @override
+  Future<UserDeleteResult> deleteUser(int id) async {
+    return _database.transaction(() async {
+      final user = await (_database.select(
+        _database.users,
+      )..where((row) => row.id.equals(id))).getSingleOrNull();
+      if (user == null) return UserDeleteResult.deleted;
+      if (UserRole.fromString(user.role) == UserRole.owner) {
+        return UserDeleteResult.ownerProtected;
+      }
+
+      if (await _hasOperationalHistory(id)) {
+        return UserDeleteResult.hasOperationalHistory;
+      }
+
+      // The employee link is an identity assignment rather than an accounting
+      // event. SQLite clears it through ON DELETE SET NULL. Every operational
+      // reference is checked above and therefore remains immutable.
+      final deleted = await (_database.delete(
+        _database.users,
+      )..where((row) => row.id.equals(id))).go();
+      return deleted == 1
+          ? UserDeleteResult.deleted
+          : UserDeleteResult.hasOperationalHistory;
+    });
+  }
+
+  Future<bool> _hasOperationalHistory(int userId) async {
+    final tables = await _database
+        .customSelect(
+          'SELECT name FROM sqlite_master '
+          'WHERE type = \'table\' AND name NOT LIKE \'sqlite_%\'',
+        )
+        .get();
+
+    for (final tableRow in tables) {
+      final tableName = tableRow.read<String>('name');
+      if (tableName == 'users' || tableName == 'employees') continue;
+      final quotedTable = _quoteIdentifier(tableName);
+      final foreignKeys = await _database
+          .customSelect('PRAGMA foreign_key_list($quotedTable)')
+          .get();
+      for (final foreignKey in foreignKeys) {
+        if (foreignKey.read<String>('table') != 'users') continue;
+        final columnName = foreignKey.read<String>('from');
+        final quotedColumn = _quoteIdentifier(columnName);
+        final reference = await _database
+            .customSelect(
+              'SELECT EXISTS('
+              'SELECT 1 FROM $quotedTable WHERE $quotedColumn = ? LIMIT 1'
+              ') AS has_reference',
+              variables: [Variable<int>(userId)],
+            )
+            .getSingle();
+        if (reference.read<int>('has_reference') == 1) return true;
+      }
+    }
+    return false;
+  }
+
+  String _quoteIdentifier(String value) => '"${value.replaceAll('"', '""')}"';
 
   @override
   Future<bool> isUsernameTaken(String username, {int? excludeUserId}) async {
@@ -157,6 +238,9 @@ class UserRepository implements UserRepositoryInterface {
       username: user.username,
       role: UserRole.fromString(user.role),
       employeeId: user.employeeId,
+      branchId: user.branchId,
+      warehouseId: user.warehouseId,
+      hasGlobalLocationAccess: user.globalLocationAccess,
       isActive: user.isActive == 1,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

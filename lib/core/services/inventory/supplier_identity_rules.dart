@@ -18,6 +18,7 @@ class SupplierIdentityException implements Exception {
       'supplier_purchase.source_mismatch',
       'supplier_purchase.history_locked',
       'supplier_identity.invalid_code',
+      'supplier_identity.code_required',
       'supplier_identity.code_in_use',
       'supplier_identity.code_locked',
       'supplier_identity.delete_blocked',

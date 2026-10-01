@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/services/inventory/purchase_supplier_source_service.dart';
 import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../../../core/services/inventory/supplier_product_identity_service.dart';
@@ -12,7 +13,9 @@ import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
+import '../../../../core/pricing/pricing_preview_fingerprint.dart';
 import '../../../../core/services/crashlytics_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/purchases/original_price_resolver.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
@@ -683,6 +686,10 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
   final Decimal? discountCents;
   final DateTime? expiryDate;
   final String? manufacturerLotNumber;
+  final bool isMedicine;
+  final String? colorName;
+  final String? colorHex;
+  final String? sizeName;
 
   const PurchaseLineItemAdded({
     required this.product,
@@ -692,6 +699,10 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
     this.discountCents,
     this.expiryDate,
     this.manufacturerLotNumber,
+    this.isMedicine = false,
+    this.colorName,
+    this.colorHex,
+    this.sizeName,
   });
 
   @override
@@ -703,6 +714,10 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
     discountCents,
     expiryDate,
     manufacturerLotNumber,
+    isMedicine,
+    colorName,
+    colorHex,
+    sizeName,
   ];
 }
 
@@ -807,6 +822,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   final ProductRepository _productRepository;
   final PharmacyDao? _pharmacyDao;
   final PurchaseSupplierSourcePreviewer? _supplierSourcePreviewer;
+  final LanNetworkService? _lan;
+  final String _remoteIdempotencyKey = const Uuid().v4();
   int _sourcePreviewGeneration = 0;
   int _lineCounter = 0;
   Set<int> _medicineProductIds = const {};
@@ -822,8 +839,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     this._productRepository, {
     PharmacyDao? pharmacyDao,
     PurchaseSupplierSourcePreviewer? supplierSourcePreviewer,
+    LanNetworkService? lan,
   }) : _pharmacyDao = pharmacyDao,
        _supplierSourcePreviewer = supplierSourcePreviewer,
+       _lan = lan,
        super(PurchaseFormState(currencyId: 1, purchaseDate: DateTime.now())) {
     on<PurchaseFormInitialized>(_onInitialized);
     on<PurchaseSupplierChanged>(_onSupplierChanged);
@@ -844,6 +863,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     on<PurchaseOverpaymentHandlingChanged>(_onOverpaymentHandlingChanged);
     on<PurchaseTaxSettingsChanged>(_onTaxSettingsChanged);
   }
+
+  bool get isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
   Future<void> _loadColorSizeLookups() async {
     if (_colorNames.isNotEmpty) return;
@@ -903,6 +924,37 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseFormInitialized event,
     Emitter<PurchaseFormState> emit,
   ) async {
+    if (isRemoteClient) {
+      if (event.purchaseId != null) {
+        emit(state.copyWith(error: 'purchases.remote_edit_not_supported'));
+        return;
+      }
+      try {
+        final catalog = await _lan!.fetchRemoteCatalog(
+          limit: 1,
+          management: true,
+        );
+        emit(
+          state.copyWith(
+            currencyId: catalog.currencyId,
+            purchaseNumber: '—',
+            enableTaxCalculations: catalog.enableTaxCalculations,
+            defaultPurchaseTaxRateBps: catalog.defaultPurchaseTaxRateBps ?? 0,
+            taxInclusivePricing: catalog.taxInclusivePricing,
+            pharmacyFeaturesEnabled: catalog.enablePharmacyFeatures,
+            useSupplierProductCodes: SupplierPurchaseSourcePolicy.enabled(
+              catalog.useSupplierProductCodes,
+            ),
+          ),
+        );
+      } on LanBusinessException catch (error) {
+        emit(state.copyWith(error: error.message));
+      } catch (error) {
+        emit(state.copyWith(error: error.toString()));
+      }
+      return;
+    }
+
     await _loadColorSizeLookups();
     await _loadMedicineProductIds(event.pharmacyFeaturesEnabled);
 
@@ -1163,6 +1215,16 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) async {
     final generation = ++_sourcePreviewGeneration;
+    if (isRemoteClient) {
+      emit(
+        state.copyWith(
+          supplierSourcePreviews: const {},
+          supplierSourceErrors: const {},
+          isResolvingSupplierSources: false,
+        ),
+      );
+      return;
+    }
     final snapshot = state;
     if (!snapshot.useSupplierProductCodes || snapshot.supplierId == null) {
       emit(
@@ -1297,10 +1359,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) async {
     if (state.isSubmitting) return;
-    await _loadColorSizeLookups();
+    if (!isRemoteClient) {
+      await _loadColorSizeLookups();
+    }
 
     ProductVariant? resolvedVariant = event.variant;
-    if (resolvedVariant == null) {
+    if (!isRemoteClient && resolvedVariant == null) {
       try {
         resolvedVariant = await _variantRepository.getDefaultVariantByProduct(
           event.product.id,
@@ -1327,12 +1391,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       discountCents: event.discountCents,
       expiryDate: event.expiryDate,
       manufacturerLotNumber: event.manufacturerLotNumber,
-      isMedicine:
-          state.pharmacyFeaturesEnabled &&
-          _medicineProductIds.contains(event.product.id),
-      colorName: _resolveColorName(resolvedVariant?.colorId),
-      colorHex: _resolveColorHex(resolvedVariant?.colorId),
-      sizeName: _resolveSizeName(resolvedVariant?.sizeId),
+      isMedicine: isRemoteClient
+          ? event.isMedicine
+          : state.pharmacyFeaturesEnabled &&
+                _medicineProductIds.contains(event.product.id),
+      colorName: event.colorName ?? _resolveColorName(resolvedVariant?.colorId),
+      colorHex: event.colorHex ?? _resolveColorHex(resolvedVariant?.colorId),
+      sizeName: event.sizeName ?? _resolveSizeName(resolvedVariant?.sizeId),
       originalCostCents: snapshot.costCents,
       originalPriceCents: snapshot.priceCents,
       originalWholesalePriceCents: snapshot.wholesalePriceCents,
@@ -1456,7 +1521,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     );
 
     try {
-      if (submittedState.useSupplierProductCodes) {
+      if (!isRemoteClient && submittedState.useSupplierProductCodes) {
         if (!SupplierPurchaseSourcePolicy.buildAllowsWrites ||
             _supplierSourcePreviewer == null) {
           throw const SupplierIdentityException(
@@ -1555,6 +1620,97 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
               PurchasePaymentMethod.cheque => Decimal.zero,
               PurchasePaymentMethod.purchaseOrder => submittedState.totalCents,
             };
+
+      if (isRemoteClient) {
+        if (submittedState.purchaseId != null) {
+          throw const LanBusinessException(
+            'remote_edit_not_supported',
+            'Editing an existing purchase over the network is not available.',
+            statusCode: 409,
+          );
+        }
+        final lines = <LanPurchaseLineRequest>[];
+        for (final item in submittedState.items) {
+          final lineDiscount =
+              submittedState.discountMode == DiscountMode.perItem
+              ? item.discountCents.toBigInt().toInt()
+              : 0;
+          final lot = item.manufacturerLotNumber?.trim();
+          lines.add(
+            LanPurchaseLineRequest(
+              productId: item.product.id,
+              variantId: item.variant?.id,
+              quantity: item.quantity,
+              unitCostCents: item.unitCostCents.toBigInt().toInt(),
+              discountType: lineDiscount == 0 ? 'none' : 'fixed',
+              discountValue: lineDiscount,
+              supplierIdentityRequested:
+                  submittedState.useSupplierProductCodes &&
+                  item.product.trackInventory,
+              expiryDate: item.expiryDate,
+              manufacturerLotNumber: lot == null || lot.isEmpty ? null : lot,
+              newSellPriceCents: item.newSellPriceCents?.toBigInt().toInt(),
+              newWholesalePriceCents: item.newWholesalePriceCents
+                  ?.toBigInt()
+                  .toInt(),
+            ),
+          );
+        }
+        final invoiceDiscount =
+            submittedState.discountMode == DiscountMode.invoice
+            ? submittedState.effectiveInvoiceDiscountCents.toBigInt().toInt()
+            : 0;
+        final created = await _lan!.submitRemotePurchase(
+          LanPurchaseRequest(
+            idempotencyKey: _remoteIdempotencyKey,
+            supplierId: submittedState.supplierId!,
+            paymentMethod:
+                settlement?.headerPaymentMethod ??
+                submittedState.paymentMethod.name,
+            paidAmountCents: effectivePaidCents.toBigInt().toInt(),
+            supplierInvoiceRef: submittedState.supplierInvoiceRef,
+            notes: submittedState.notes,
+            purchaseDate: submittedState.purchaseDate,
+            dueDate: submittedState.dueDate,
+            overallDiscountType: invoiceDiscount == 0 ? 'none' : 'fixed',
+            overallDiscountValue: invoiceDiscount,
+            expectedPricingFingerprint: pricingPreviewFingerprint(
+              submittedState.pricing,
+              taxInclusive: submittedState.taxInclusivePricing,
+            ),
+            lines: lines,
+            payments: settlement == null
+                ? const []
+                : settlement.payments
+                      .map(
+                        (payment) => LanCheckoutPaymentRequest(
+                          method: payment.method,
+                          amountCents: payment.amountCents,
+                          reference: payment.reference,
+                          bankName: payment.bankName,
+                          issueDate: payment.issueDate,
+                          dueDate: payment.dueDate,
+                          note: payment.note,
+                        ),
+                      )
+                      .toList(growable: false),
+          ),
+        );
+        CrashlyticsService.instance.logAction('remote_purchase_created', {
+          'purchase_id': created.purchaseId.toString(),
+          'items_count': submittedState.items.length.toString(),
+        });
+        emit(
+          state.copyWith(
+            purchaseId: created.purchaseId,
+            purchaseNumber: created.purchaseNumber,
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
+        return;
+      }
 
       if (submittedState.purchaseId == null) {
         final purchaseId = await _repository.createPurchase(
@@ -1721,7 +1877,11 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
-      await _repository.postPurchase(state.purchaseId!);
+      if (isRemoteClient) {
+        await _lan!.postRemotePurchase(state.purchaseId!);
+      } else {
+        await _repository.postPurchase(state.purchaseId!);
+      }
       emit(state.copyWith(isSubmitting: false, isSuccess: true));
     } catch (e) {
       emit(

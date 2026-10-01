@@ -53,18 +53,28 @@ void main() {
     expect(s.read<int>('unit_cost_cents'), cost);
   }
 
-  Future<String> addWarehouse({bool foreignBranch = false}) async {
+  Future<String> addWarehouse({
+    bool foreignBranch = false,
+    bool foreignOrganization = false,
+  }) async {
     final scope = await BusinessFoundationRepository(db).getScope();
     final id = const Uuid().v4();
+    var organization = scope.organizationId;
     var branch = scope.branchId;
-    if (foreignBranch) {
+    if (foreignOrganization) {
+      organization = const Uuid().v4();
+      await db
+          .into(db.businessOrganizations)
+          .insert(BusinessOrganizationsCompanion.insert(id: organization));
+    }
+    if (foreignBranch || foreignOrganization) {
       branch = const Uuid().v4();
       await db
           .into(db.businessBranches)
           .insert(
             BusinessBranchesCompanion.insert(
               id: branch,
-              organizationId: scope.organizationId,
+              organizationId: organization,
               code: branch.substring(0, 8),
             ),
           );
@@ -74,7 +84,7 @@ void main() {
         .insert(
           BusinessWarehousesCompanion.insert(
             id: id,
-            organizationId: scope.organizationId,
+            organizationId: organization,
             branchId: branch,
             code: id.substring(0, 8),
           ),
@@ -459,14 +469,16 @@ void main() {
   });
 
   test(
-    'foreign branch, key changes, replacement and primary deletion are rejected',
+    'company branches are allowed; foreign company and identity changes are rejected',
     () async {
-      final foreign = await addWarehouse(foreignBranch: true);
-      await expectLater(insertStock(foreign), throwsA(anything));
+      final companyBranch = await addWarehouse(foreignBranch: true);
+      await insertStock(companyBranch);
+      final foreignCompany = await addWarehouse(foreignOrganization: true);
+      await expectLater(insertStock(foreignCompany), throwsA(anything));
       await expectLater(
         db.customStatement(
           'UPDATE business_warehouse_stocks SET warehouse_id = ? WHERE variant_id = ?',
-          [foreign, variant],
+          [companyBranch, variant],
         ),
         throwsA(anything),
       );

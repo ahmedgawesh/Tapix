@@ -147,17 +147,30 @@ class WarehouseTransferRecallService {
         !const {'in_transit', 'partially_received'}.contains(transfer.status)) {
       throw StateError('Only an in-transit transfer can be recalled');
     }
+    final remotelyReceived = await db
+        .customSelect(
+          '''SELECT 1 AS found
+          FROM distributed_transfer_source_receipt_items i
+          JOIN warehouse_transfer_allocations a ON a.id=i.allocation_id
+          JOIN warehouse_transfer_dispatches d ON d.id=a.dispatch_id
+          WHERE d.transfer_id=? LIMIT 1''',
+          variables: [Variable.withString(transfer.id)],
+        )
+        .getSingleOrNull();
+    if (remotelyReceived != null) {
+      throw StateError('distributed_transfer_already_received');
+    }
     final dispatch =
         await (db.select(db.warehouseTransferDispatches)..where(
               (row) =>
                   row.transferId.equals(transfer.id) & row.sealed.equals(true),
             ))
             .getSingle();
-    final source = await WarehouseOperationScope.resolve(
+    final source = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.sourceWarehouseId,
     );
-    final destination = await WarehouseOperationScope.resolve(
+    final destination = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.destinationWarehouseId,
     );
@@ -165,7 +178,6 @@ class WarehouseTransferRecallService {
         source.branchId != transfer.branchId ||
         source.databaseId != transfer.databaseId ||
         destination.organizationId != transfer.organizationId ||
-        destination.branchId != transfer.branchId ||
         destination.databaseId != transfer.databaseId) {
       throw StateError('Transfer warehouse binding changed');
     }

@@ -15,6 +15,7 @@ class InventoryOriginIntent {
     this.supplierIdentityId,
     this.requiredSourceReference,
     this.excludedSourceKind,
+    this.inboundLayers,
   }) : explicitKey = null;
 
   const InventoryOriginIntent.keyed(
@@ -25,6 +26,7 @@ class InventoryOriginIntent {
     this.supplierIdentityId,
     this.requiredSourceReference,
     this.excludedSourceKind,
+    this.inboundLayers,
   }) : lineId = 0;
 
   final String kind;
@@ -35,6 +37,11 @@ class InventoryOriginIntent {
   final int? supplierIdentityId;
   final String? requiredSourceReference;
   final String? excludedSourceKind;
+
+  /// Canonical origin slices supplied by a verified cross-database transfer.
+  /// Each map uses the local ledger keys (`q`, `p`, `k`, `r`, `i`). The
+  /// receiver validates the quantity and shape before persisting them.
+  final List<Map<String, dynamic>>? inboundLayers;
   String get key => explicitKey ?? '$kind:$lineId';
 }
 
@@ -51,18 +58,21 @@ class InventoryOriginService {
     String kind = 'unknown',
     String? sourceReference,
     int? supplierIdentity,
+    int? supplierId,
   }) => {
     'q': q,
     'p': purchase,
     'k': kind,
     'r': ?sourceReference,
     'i': ?supplierIdentity,
+    's': ?supplierId,
   };
   static bool _same(Map<String, dynamic> a, Map<String, dynamic> b) =>
       a['p'] == b['p'] &&
       a['k'] == b['k'] &&
       a['r'] == b['r'] &&
-      a['i'] == b['i'];
+      a['i'] == b['i'] &&
+      a['s'] == b['s'];
 
   static Future<bool> _belongsToIdentity(
     AppDatabase db,
@@ -70,6 +80,17 @@ class InventoryOriginService {
     int identityId,
   ) async {
     if (layer['i'] == identityId) return true;
+    final directSupplierId = layer['s'];
+    if (directSupplierId is int) {
+      final identitySupplier = await db
+          .customSelect(
+            'SELECT supplier_id FROM supplier_product_identities WHERE id=?',
+            variables: [Variable.withInt(identityId)],
+          )
+          .map((row) => row.read<int>('supplier_id'))
+          .getSingleOrNull();
+      if (identitySupplier == directSupplierId) return true;
+    }
     final purchaseItemId = layer['p'];
     if (purchaseItemId is! int) return false;
     final match = await db
@@ -180,7 +201,32 @@ class InventoryOriginService {
     final parts = <Map<String, dynamic>>[];
     final amount = delta.abs();
     if (delta > 0) {
-      if (intent?.kind == 'purchase') {
+      final inbound = intent?.inboundLayers;
+      if (inbound != null) {
+        if (intent?.kind != 'distributed_transfer_in' || inbound.isEmpty) {
+          throw StateError('Invalid distributed transfer origin');
+        }
+        var supplied = 0;
+        for (final raw in inbound) {
+          final quantity = raw['q'];
+          if (quantity is! int || quantity <= 0) {
+            throw StateError('Invalid distributed transfer origin quantity');
+          }
+          supplied += quantity;
+          parts.add(
+            _part(
+              quantity,
+              kind: raw['k']?.toString() ?? 'branch_transfer',
+              sourceReference: raw['r']?.toString(),
+              supplierIdentity: raw['i'] is int ? raw['i'] as int : null,
+              supplierId: raw['s'] is int ? raw['s'] as int : null,
+            ),
+          );
+        }
+        if (supplied != amount) {
+          throw StateError('Distributed transfer origin quantity mismatch');
+        }
+      } else if (intent?.kind == 'purchase') {
         parts.add(
           _part(
             amount,

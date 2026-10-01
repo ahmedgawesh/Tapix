@@ -28,6 +28,24 @@ class WarehouseTransferDraft {
   final WarehouseTransferRecall? recall;
 }
 
+class WarehouseTransferOwnershipIntent {
+  const WarehouseTransferOwnershipIntent({
+    required this.ownedQuantity,
+    required this.consignmentQuantity,
+  });
+
+  final int ownedQuantity;
+  final int consignmentQuantity;
+
+  void validate(int quantity) {
+    if (ownedQuantity < 0 ||
+        consignmentQuantity < 0 ||
+        ownedQuantity + consignmentQuantity != quantity) {
+      throw ArgumentError('Transfer ownership quantities must equal quantity');
+    }
+  }
+}
+
 /// Persists reviewed intent only. Drafts do not reserve stock or freeze dispatch
 /// costs. Every future dispatch must obtain a new preview and post atomically.
 class WarehouseTransferRepository {
@@ -73,19 +91,19 @@ class WarehouseTransferRepository {
     final from = await WarehouseReadScope.resolve(
       db,
       warehouseId: header.sourceWarehouseId,
+      organizationWide: true,
     );
     final to = await WarehouseReadScope.resolve(
       db,
       warehouseId: header.destinationWarehouseId,
+      organizationWide: true,
     );
-    for (final scope in [from, to]) {
-      if (scope.organizationId != header.organizationId ||
-          scope.branchId != header.branchId ||
-          scope.databaseId != header.databaseId) {
-        throw StateError(
-          'Transfer does not belong to this database and branch',
-        );
-      }
+    if (from.organizationId != header.organizationId ||
+        from.branchId != header.branchId ||
+        from.databaseId != header.databaseId ||
+        to.organizationId != header.organizationId ||
+        to.databaseId != header.databaseId) {
+      throw StateError('Transfer does not belong to this organization');
     }
   }
 
@@ -157,6 +175,7 @@ class WarehouseTransferRepository {
   Future<WarehouseTransferDraft> create({
     required String requestKey,
     required WarehouseTransferPreview preview,
+    Map<int, WarehouseTransferOwnershipIntent> ownershipByVariant = const {},
     String notes = '',
   }) => db.transaction(() async {
     final key = _key(requestKey), normalizedNotes = notes.trim();
@@ -173,6 +192,14 @@ class WarehouseTransferRepository {
     await destination.validate(db);
     final lines = preview.lines.toList()
       ..sort((a, b) => a.variantId.compareTo(b.variantId));
+    if (ownershipByVariant.keys.any(
+      (variantId) => !lines.any((line) => line.variantId == variantId),
+    )) {
+      throw ArgumentError('Transfer ownership references an unknown variant');
+    }
+    for (final line in lines) {
+      ownershipByVariant[line.variantId]?.validate(line.request.quantity);
+    }
     final hash = _hash({
       'version': 1,
       'organization': source.organizationId,
@@ -191,6 +218,8 @@ class WarehouseTransferRepository {
             line.request.quantity,
             line.quantityScale,
             line.measurementType,
+            ownershipByVariant[line.variantId]?.ownedQuantity,
+            ownershipByVariant[line.variantId]?.consignmentQuantity,
           ],
       ],
     });
@@ -237,6 +266,12 @@ class WarehouseTransferRepository {
               productId: line.request.productId,
               variantId: line.variantId,
               quantity: line.request.quantity,
+              requestedOwnedQuantity: Value(
+                ownershipByVariant[line.variantId]?.ownedQuantity,
+              ),
+              requestedConsignmentQuantity: Value(
+                ownershipByVariant[line.variantId]?.consignmentQuantity,
+              ),
               quantityScale: line.quantityScale,
               measurementType: line.measurementType,
               previewValueCents: line.valueCents,

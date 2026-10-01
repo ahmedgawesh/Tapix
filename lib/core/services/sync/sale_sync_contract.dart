@@ -17,6 +17,102 @@ class SaleSyncContractBuilder {
   final AppDatabase db;
   final SyncEntityIdentityStore identities;
 
+  /// Builds a compact tombstone for a voided sale. The original immutable
+  /// posting stays in the ledger; consumers apply this later event to remove
+  /// it from active totals without reconstructing mutable local rows.
+  Future<Map<String, Object?>> buildVoidedSale({
+    required Sale sale,
+    required int? actorUserId,
+    required DateTime voidedAt,
+    String reason = 'voided',
+  }) async {
+    if (sale.status != 'voided') {
+      throw const OfflineSyncException(
+        'sale_not_voided',
+        'Only a voided sale can produce a void synchronization event.',
+      );
+    }
+    final location = await _location('sales', sale.id);
+    final localDatabaseId = await _localDatabaseId();
+    if (location.originDatabaseId != localDatabaseId) {
+      throw const OfflineSyncException(
+        'sale_database_identity_mismatch',
+        'The sale belongs to another source database.',
+      );
+    }
+    return {
+      'contract': 'sale.voided',
+      'contractVersion': 1,
+      'documentId': location.documentId,
+      'sourceDocumentRef': {
+        'databaseId': localDatabaseId,
+        'table': 'sales',
+        'localId': sale.id,
+      },
+      'organizationId': location.organizationId,
+      'branchId': location.branchId,
+      'warehouseId': location.warehouseId,
+      'invoiceNumber': sale.invoiceNumber,
+      'voidedAt': voidedAt.toUtc().toIso8601String(),
+      'reason': reason,
+      'actorRef': actorUserId == null
+          ? null
+          : {'databaseId': localDatabaseId, 'localId': actorUserId},
+    };
+  }
+
+  /// Builds the tombstone for a linked return. It references both the return
+  /// and its original sale, allowing consolidated projections to reverse the
+  /// exact posted-return event and never infer by number or date.
+  Future<Map<String, Object?>> buildVoidedLinkedReturn({
+    required SaleReturn saleReturn,
+    required int? actorUserId,
+    required DateTime voidedAt,
+    String reason = 'voided',
+  }) async {
+    if (saleReturn.status != 'voided') {
+      throw const OfflineSyncException(
+        'sale_return_not_voided',
+        'Only a voided sale return can produce a void synchronization event.',
+      );
+    }
+    final location = await _location('sale_returns', saleReturn.id);
+    final sourceLocation = await _location('sales', saleReturn.saleId);
+    final localDatabaseId = await _localDatabaseId();
+    if (location.originDatabaseId != localDatabaseId ||
+        sourceLocation.originDatabaseId != localDatabaseId) {
+      throw const OfflineSyncException(
+        'sale_return_database_identity_mismatch',
+        'The return and its source sale must belong to the local database.',
+      );
+    }
+    return {
+      'contract': 'sale_return.voided',
+      'contractVersion': 1,
+      'documentId': location.documentId,
+      'sourceDocumentRef': {
+        'databaseId': localDatabaseId,
+        'table': 'sale_returns',
+        'localId': saleReturn.id,
+      },
+      'originalSaleDocumentId': sourceLocation.documentId,
+      'originalSaleRef': {
+        'databaseId': localDatabaseId,
+        'table': 'sales',
+        'localId': saleReturn.saleId,
+      },
+      'organizationId': location.organizationId,
+      'branchId': location.branchId,
+      'warehouseId': location.warehouseId,
+      'returnNumber': saleReturn.returnNumber,
+      'voidedAt': voidedAt.toUtc().toIso8601String(),
+      'reason': reason,
+      'actorRef': actorUserId == null
+          ? null
+          : {'databaseId': localDatabaseId, 'localId': actorUserId},
+    };
+  }
+
   Future<Map<String, Object?>> buildPostedSale({
     required Sale sale,
     required int? actorUserId,
@@ -44,6 +140,8 @@ class SaleSyncContractBuilder {
             entityType: 'customer',
             localId: sale.customerId!,
           )).globalId;
+    final employee = await _employeeSnapshot(sale.employeeId);
+    final commissions = await _commissionSnapshots(saleId: sale.id);
     final rows =
         await (db.select(db.saleItems)
               ..where((row) => row.saleId.equals(sale.id))
@@ -111,6 +209,8 @@ class SaleSyncContractBuilder {
       'employeeRef': sale.employeeId == null
           ? null
           : {'databaseId': localDatabaseId, 'localId': sale.employeeId},
+      'employee': ?employee,
+      'commissions': commissions,
       'cashierShiftRef': sale.cashierShiftId == null
           ? null
           : {'databaseId': localDatabaseId, 'localId': sale.cashierShiftId},
@@ -185,6 +285,8 @@ class SaleSyncContractBuilder {
             entityType: 'customer',
             localId: originalSale.customerId!,
           )).globalId;
+    final employee = await _employeeSnapshot(originalSale.employeeId);
+    final commissions = await _commissionSnapshots(saleReturnId: saleReturn.id);
     final rows =
         await (db.select(db.saleReturnItems)
               ..where((row) => row.returnId.equals(saleReturn.id))
@@ -256,6 +358,8 @@ class SaleSyncContractBuilder {
       'returnDate': saleReturn.returnDate.toUtc().toIso8601String(),
       'dueDate': saleReturn.dueDate?.toUtc().toIso8601String(),
       'customerGlobalId': ?customerGlobalId,
+      'employee': ?employee,
+      'commissions': commissions,
       'cashierShiftRef': saleReturn.cashierShiftId == null
           ? null
           : {
@@ -424,6 +528,7 @@ class SaleSyncContractBuilder {
       'quantityScaled': item.quantity,
       'quantityScale': item.quantityScale,
       'measurementType': item.measurementType,
+      'tracksInventory': product.trackInventory,
       'subtotalMinor': item.subtotalCents.toBigInt().toInt(),
       'discountMinor': item.discountCents.toBigInt().toInt(),
       'taxMinor': item.taxCents.toBigInt().toInt(),
@@ -535,9 +640,11 @@ class SaleSyncContractBuilder {
       }
       final purchaseItemId = part['p'] is int ? part['p'] as int : null;
       final supplierIdentityId = part['i'] is int ? part['i'] as int : null;
+      final directSupplierId = part['s'] is int ? part['s'] as int : null;
       final supplierId = await _originSupplier(
         purchaseItemId: purchaseItemId,
         supplierIdentityId: supplierIdentityId,
+        directSupplierId: directSupplierId,
       );
       result.add({
         'quantityScaled': quantity,
@@ -578,6 +685,11 @@ class SaleSyncContractBuilder {
       entityType: 'product',
       localId: item.productId,
     );
+    final variant = item.variantId == null
+        ? null
+        : await (db.select(
+            db.productVariants,
+          )..where((row) => row.id.equals(item.variantId!))).getSingle();
     final variantIdentity = item.variantId == null
         ? null
         : await identities.getOrCreateLocal(
@@ -661,11 +773,16 @@ class SaleSyncContractBuilder {
     return {
       'lineRef': {'databaseId': localDatabaseId, 'localId': item.id},
       'productGlobalId': productIdentity.globalId,
+      'productName': product.name,
+      'productSku': product.sku,
       'variantGlobalId': variantIdentity?.globalId,
+      'variantName': variant?.sku,
+      'variantSku': variant?.sku,
       'selectedSupplier': selectedSupplier,
       'quantityScaled': item.quantity,
       'quantityScale': item.quantityScale,
       'measurementType': item.measurementType,
+      'tracksInventory': product.trackInventory,
       'unitPriceMinor': item.unitPriceCents.toBigInt().toInt(),
       'subtotalMinor': item.subtotalCents.toBigInt().toInt(),
       'discountMinor': item.discountCents.toBigInt().toInt(),
@@ -688,6 +805,67 @@ class SaleSyncContractBuilder {
       'consignmentQuantityScaled': consignmentQuantity,
       'consignmentAllocations': consignmentPayload,
     };
+  }
+
+  Future<Map<String, Object?>?> _employeeSnapshot(int? employeeId) async {
+    if (employeeId == null) return null;
+    final employee = await (db.select(
+      db.employees,
+    )..where((row) => row.id.equals(employeeId))).getSingleOrNull();
+    if (employee == null) return null;
+    return {
+      'localId': employee.id,
+      'name': employee.name,
+      'position': employee.position,
+      'department': employee.department,
+      'defaultCommissionRateBps': employee.defaultCommissionRateBps,
+    };
+  }
+
+  Future<List<Map<String, Object?>>> _commissionSnapshots({
+    int? saleId,
+    int? saleReturnId,
+  }) async {
+    final query = db.select(db.commissions)
+      ..orderBy([(row) => OrderingTerm.asc(row.id)]);
+    if (saleReturnId != null) {
+      query.where((row) => row.saleReturnId.equals(saleReturnId));
+    } else if (saleId != null) {
+      query.where(
+        (row) =>
+            row.saleId.equals(saleId) &
+            row.saleReturnId.isNull() &
+            row.saleReturnAdjustmentId.isNull(),
+      );
+    } else {
+      return const [];
+    }
+    final rows = await query.get();
+    return [
+      for (final commission in rows)
+        {
+          'localId': commission.id,
+          'employeeId': commission.employeeId,
+          // [Commissions.commissionRateBps] is backed by an INTEGER column,
+          // but its legacy Drift converter exposes the domain value as a
+          // double. The synchronization contract is deliberately integer
+          // only, so restore the actual basis-point value at this boundary.
+          'rateBps': _integerCommissionRateBps(commission.commissionRateBps),
+          'amountMinor': commission.commissionAmountCents.toBigInt().toInt(),
+          'status': commission.status,
+          'effectiveDate': commission.effectiveDate?.toUtc().toIso8601String(),
+        },
+    ];
+  }
+
+  int _integerCommissionRateBps(double value) {
+    if (!value.isFinite || value != value.roundToDouble()) {
+      throw const OfflineSyncException(
+        'invalid_commission_rate',
+        'A commission rate must be stored as a whole number of basis points.',
+      );
+    }
+    return value.toInt();
   }
 
   Future<Map<String, Object?>?> _selectedSupplier(int? identityId) async {
@@ -807,9 +985,11 @@ class SaleSyncContractBuilder {
       quantity += partQuantity;
       final purchaseItemId = part['p'] is int ? part['p'] as int : null;
       final supplierIdentityId = part['i'] is int ? part['i'] as int : null;
+      final directSupplierId = part['s'] is int ? part['s'] as int : null;
       final supplierId = await _originSupplier(
         purchaseItemId: purchaseItemId,
         supplierIdentityId: supplierIdentityId,
+        directSupplierId: directSupplierId,
       );
       result.add({
         'quantityScaled': partQuantity,
@@ -841,6 +1021,7 @@ class SaleSyncContractBuilder {
   Future<int?> _originSupplier({
     required int? purchaseItemId,
     required int? supplierIdentityId,
+    required int? directSupplierId,
   }) async {
     int? identitySupplier;
     if (supplierIdentityId != null) {
@@ -883,7 +1064,16 @@ class SaleSyncContractBuilder {
         'The purchase and supplier identity origins disagree.',
       );
     }
-    return identitySupplier ?? purchaseSupplier;
+    if (directSupplierId != null &&
+        ((identitySupplier != null && identitySupplier != directSupplierId) ||
+            (purchaseSupplier != null &&
+                purchaseSupplier != directSupplierId))) {
+      throw const OfflineSyncException(
+        'sale_origin_supplier_conflict',
+        'The direct, purchase and supplier identity origins disagree.',
+      );
+    }
+    return directSupplierId ?? identitySupplier ?? purchaseSupplier;
   }
 
   Future<_DocumentLocation> _location(String table, int id) async {

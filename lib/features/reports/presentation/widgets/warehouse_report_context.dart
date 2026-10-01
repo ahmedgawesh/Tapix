@@ -10,18 +10,27 @@ class WarehouseReportContext extends InheritedWidget {
     required this.scope,
     required this.name,
     required this.code,
+    this.branchName = '',
+    this.isBranchLocation = false,
     required super.child,
   });
   final WarehouseReadScope scope;
   final String name, code;
+  final String branchName;
+  final bool isBranchLocation;
   static WarehouseReportContext? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<WarehouseReportContext>();
-  String get label => '${'warehouse_setup.warehouse'.tr()}: $name · $code';
+  String get label => isBranchLocation
+      ? '${'warehouse_reports.branch_location'.tr()}: $name · $code'
+      : '${'warehouse_setup.warehouse'.tr()}: $name · $code'
+            '${branchName.isEmpty ? '' : ' · $branchName'}';
   CompanyProfile decorateCompany(CompanyProfile profile) =>
       profile.copyWith(name: '${profile.name}\n$label');
   @override
   bool updateShouldNotify(WarehouseReportContext oldWidget) =>
       scope != oldWidget.scope ||
       name != oldWidget.name ||
-      code != oldWidget.code;
+      code != oldWidget.code ||
+      branchName != oldWidget.branchName ||
+      isBranchLocation != oldWidget.isBranchLocation;
 }

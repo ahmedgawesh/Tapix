@@ -17,7 +17,11 @@ class WarehouseTransfers extends Table {
   TextColumn get databaseId =>
       text().references(BusinessContexts, #databaseId)();
   TextColumn get sourceWarehouseId => text()();
-  TextColumn get destinationWarehouseId => text()();
+  TextColumn get destinationWarehouseId => text().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get currencyId => integer().references(Currencies, #id)();
   IntColumn get createdBy => integer().references(Users, #id)();
   TextColumn get requestKey => text().withLength(min: 36, max: 36).unique()();
@@ -34,7 +38,6 @@ class WarehouseTransfers extends Table {
   @override
   List<String> get customConstraints => [
     'FOREIGN KEY (source_warehouse_id, branch_id, organization_id) REFERENCES business_warehouses (id, branch_id, organization_id) ON DELETE RESTRICT',
-    'FOREIGN KEY (destination_warehouse_id, branch_id, organization_id) REFERENCES business_warehouses (id, branch_id, organization_id) ON DELETE RESTRICT',
     'CHECK (source_warehouse_id != destination_warehouse_id)',
     "CHECK (status IN ('draft','in_transit','partially_received','completed','cancelled'))",
     'CHECK (line_count BETWEEN 1 AND 500)',
@@ -53,6 +56,11 @@ class WarehouseTransferLines extends Table {
   IntColumn get productId => integer().references(Products, #id)();
   IntColumn get variantId => integer().references(ProductVariants, #id)();
   IntColumn get quantity => integer()();
+
+  /// Explicit ownership intent. Both values are null only for drafts created
+  /// before schema 10116; new application flows always persist both values.
+  IntColumn get requestedOwnedQuantity => integer().nullable()();
+  IntColumn get requestedConsignmentQuantity => integer().nullable()();
   IntColumn get quantityScale => integer()();
   TextColumn get measurementType => text()();
 

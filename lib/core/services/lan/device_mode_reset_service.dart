@@ -5,7 +5,12 @@ import '../../database/app_database.dart';
 import '../../database/database_reset.dart';
 import 'lan_network_service.dart';
 
-enum FreshDeviceModeTarget { standalone, master }
+enum FreshDeviceModeTarget {
+  standalone,
+  master,
+  independentBranch,
+  branchWarehouseDevice,
+}
 
 class DeviceModeResetPolicy {
   const DeviceModeResetPolicy._();
@@ -15,9 +20,11 @@ class DeviceModeResetPolicy {
     required String? remoteRole,
     required LanMode currentMode,
   }) {
-    return localRole == UserRole.owner &&
-        remoteRole == UserRole.owner.name &&
-        currentMode == LanMode.client;
+    if (localRole != UserRole.owner) return false;
+    if (currentMode == LanMode.client) {
+      return remoteRole == UserRole.owner.name;
+    }
+    return currentMode == LanMode.standalone || currentMode == LanMode.master;
   }
 }
 
@@ -42,7 +49,7 @@ class DeviceModeResetService {
   final LanNetworkService _lan;
   bool _applyingPendingTarget = false;
 
-  Future<void> resetClientToFreshDatabase({
+  Future<void> resetToFreshDatabase({
     required FreshDeviceModeTarget target,
     required UserRole actorRole,
   }) async {
@@ -52,7 +59,7 @@ class DeviceModeResetService {
       currentMode: _lan.snapshot.mode,
     )) {
       throw StateError(
-        'Only the authenticated owner may reset a client device.',
+        'Only the authenticated owner may reinitialize this device.',
       );
     }
 
@@ -66,6 +73,17 @@ class DeviceModeResetService {
     } catch (_) {
       await _preferences.remove(pendingTargetKey);
       rethrow;
+    }
+  }
+
+  Future<void> resetClientToFreshDatabase({
+    required FreshDeviceModeTarget target,
+    required UserRole actorRole,
+  }) => resetToFreshDatabase(target: target, actorRole: actorRole);
+
+  Future<void> clearPendingTarget(FreshDeviceModeTarget target) async {
+    if (_preferences.getString(pendingTargetKey) == target.name) {
+      await _preferences.remove(pendingTargetKey);
     }
   }
 
@@ -92,6 +110,11 @@ class DeviceModeResetService {
         case FreshDeviceModeTarget.master:
           await _lan.startMaster();
           break;
+        case FreshDeviceModeTarget.independentBranch:
+        case FreshDeviceModeTarget.branchWarehouseDevice:
+          // These targets are completed before the first local owner exists:
+          // the router opens branch enrollment or secure device pairing.
+          return;
       }
       await _preferences.remove(pendingTargetKey);
     } finally {

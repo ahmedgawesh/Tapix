@@ -102,9 +102,10 @@ class OfflineSyncEventStore {
     Future<T> Function(OfflineSyncTransaction transaction) action,
   ) => _db.transaction(() => action(OfflineSyncTransaction._(_db, _uuid)));
 
-  /// Records the central provisioning decision that enables local outbox
+  /// Records the coordinator provisioning decision that enables local outbox
   /// capture. The record is immutable and is intentionally absent for normal
-  /// single-branch and LAN-only installations.
+  /// single-branch installations. Independent LAN branches use the local Pro
+  /// coordinator; internet branches use the separately entitled coordinator.
   Future<void> activateWriterRecording({required String enrollmentId}) async {
     final normalized = enrollmentId.trim().toLowerCase();
     if (!Uuid.isValidUUID(fromString: normalized)) {
@@ -148,6 +149,415 @@ class OfflineSyncEventStore {
           )
           .getSingleOrNull() !=
       null;
+
+  /// Registers one durable destination for this database's local stream.
+  ///
+  /// Every destination owns an independent cursor and retry state. Existing
+  /// events are backfilled from [firstSequence], which lets a newly enrolled
+  /// branch initialize from the immutable company stream without changing the
+  /// event or marking it delivered for another branch.
+  Future<void> registerDeliveryPeer({
+    required String targetDatabaseId,
+    required String organizationId,
+    required String branchId,
+    int firstSequence = 1,
+  }) async {
+    final target = targetDatabaseId.trim().toLowerCase();
+    final organization = organizationId.trim().toLowerCase();
+    final branch = branchId.trim().toLowerCase();
+    if (!Uuid.isValidUUID(fromString: target) ||
+        !Uuid.isValidUUID(fromString: organization) ||
+        !Uuid.isValidUUID(fromString: branch) ||
+        firstSequence <= 0) {
+      throw const OfflineSyncException(
+        'invalid_delivery_peer',
+        'The delivery peer identity or first sequence is invalid.',
+      );
+    }
+    final local = await _localIdentity();
+    if (target == local.databaseId) {
+      throw const OfflineSyncException(
+        'local_database_cannot_be_target',
+        'A database cannot deliver its stream to itself.',
+      );
+    }
+    if (organization != local.organizationId) {
+      throw const OfflineSyncException(
+        'organization_mismatch',
+        'The delivery peer belongs to another organization.',
+      );
+    }
+    await _db.transaction(() async {
+      final existing = await _db
+          .customSelect(
+            'SELECT organization_id,branch_id,first_sequence,status '
+            'FROM sync_delivery_peers WHERE target_database_id=?',
+            variables: [Variable.withString(target)],
+          )
+          .getSingleOrNull();
+      if (existing != null) {
+        if (existing.read<String>('organization_id') != organization ||
+            existing.read<String>('branch_id') != branch ||
+            existing.read<int>('first_sequence') != firstSequence ||
+            existing.read<String>('status') == 'revoked') {
+          throw const OfflineSyncException(
+            'delivery_peer_conflict',
+            'The target database is already registered differently.',
+          );
+        }
+        if (existing.read<String>('status') == 'quarantined') {
+          await _db.customStatement(
+            "UPDATE sync_delivery_peers SET status='active',updated_at=? "
+            'WHERE target_database_id=?',
+            [DateTime.now().toUtc().toIso8601String(), target],
+          );
+        }
+      } else {
+        await _db.customStatement(
+          'INSERT INTO sync_delivery_peers(target_database_id,'
+          'organization_id,branch_id,first_sequence) VALUES(?,?,?,?)',
+          [target, organization, branch, firstSequence],
+        );
+      }
+      await _db.customStatement(
+        '''INSERT OR IGNORE INTO sync_outbox_deliveries(
+          target_database_id,event_id,source_sequence,next_attempt_at)
+          SELECT ?,event_id,local_sequence,next_attempt_at
+          FROM sync_outbox_events WHERE local_sequence>=?''',
+        [target, firstSequence],
+      );
+      await _db.customStatement(
+        '''INSERT OR IGNORE INTO sync_relay_deliveries(
+          target_database_id,event_id,source_database_id,source_sequence,
+          next_attempt_at)
+          SELECT ?,event_id,source_database_id,source_sequence,
+            CASE WHEN datetime(occurred_at)<=datetime(projected_at)
+              THEN occurred_at ELSE projected_at END
+          FROM sync_remote_event_projections
+          WHERE organization_id=? AND source_database_id<>?''',
+        [target, organization, target],
+      );
+    });
+  }
+
+  /// Stages an accepted remote event for every other active branch database.
+  ///
+  /// The original envelope is relayed unchanged, so the receiving database
+  /// advances the original source checkpoint and can detect gaps correctly.
+  /// Calling this after a duplicate push is safe and repairs a coordinator
+  /// interruption that happened after projection but before fan-out.
+  Future<void> stageRelayDeliveries(SyncEventEnvelope event) async {
+    _validate(event);
+    final local = await _localIdentity();
+    if (event.organizationId != local.organizationId ||
+        event.sourceDatabaseId == local.databaseId) {
+      throw const OfflineSyncException(
+        'invalid_relay_source',
+        'Only a projected remote event from this organization can be relayed.',
+      );
+    }
+    await _db.transaction(() async {
+      final projection = await _db
+          .customSelect(
+            'SELECT source_database_id,source_sequence,event_hash FROM '
+            'sync_remote_event_projections WHERE event_id=?',
+            variables: [Variable.withString(event.eventId)],
+          )
+          .getSingleOrNull();
+      if (projection == null ||
+          projection.read<String>('source_database_id') !=
+              event.sourceDatabaseId ||
+          projection.read<int>('source_sequence') != event.sequence ||
+          projection.read<String>('event_hash') != event.eventHash) {
+        throw const OfflineSyncException(
+          'relay_projection_mismatch',
+          'The relay event does not match its durable projection.',
+        );
+      }
+      await _db.customStatement(
+        '''INSERT OR IGNORE INTO sync_relay_deliveries(
+          target_database_id,event_id,source_database_id,source_sequence,
+          next_attempt_at)
+          SELECT target_database_id,?,?,?,?
+          FROM sync_delivery_peers
+          WHERE status='active' AND organization_id=?
+            AND target_database_id<>?''',
+        [
+          event.eventId,
+          event.sourceDatabaseId,
+          event.sequence,
+          (event.occurredAt.isBefore(DateTime.now().toUtc())
+                  ? event.occurredAt
+                  : DateTime.now().toUtc())
+              .toIso8601String(),
+          event.organizationId,
+          event.sourceDatabaseId,
+        ],
+      );
+    });
+  }
+
+  /// Claims the contiguous head for one peer without affecting any other
+  /// destination. A failed or leased head blocks later events for that peer.
+  Future<List<SyncEventEnvelope>> claimDispatchBatchForPeer({
+    required String targetDatabaseId,
+    required String leaseToken,
+    int limit = 50,
+    Duration leaseDuration = const Duration(minutes: 2),
+    DateTime? now,
+  }) async {
+    final target = targetDatabaseId.trim().toLowerCase();
+    if (!Uuid.isValidUUID(fromString: target) ||
+        leaseToken.trim().isEmpty ||
+        limit <= 0 ||
+        leaseDuration <= Duration.zero) {
+      throw const OfflineSyncException(
+        'invalid_peer_lease',
+        'Invalid peer outbox lease.',
+      );
+    }
+    final clock = (now ?? DateTime.now()).toUtc();
+    final until = clock.add(leaseDuration).toIso8601String();
+    return _db.transaction(() async {
+      final peer = await _db
+          .customSelect(
+            'SELECT status FROM sync_delivery_peers WHERE target_database_id=?',
+            variables: [Variable.withString(target)],
+          )
+          .getSingleOrNull();
+      if (peer == null || peer.read<String>('status') != 'active') {
+        throw const OfflineSyncException(
+          'delivery_peer_inactive',
+          'The delivery peer is missing or inactive.',
+        );
+      }
+      final rows = await _db
+          .customSelect(
+            '''SELECT e.*,
+          d.state AS delivery_state,d.next_attempt_at AS delivery_next_attempt_at,
+          d.lease_until AS delivery_lease_until
+          FROM sync_outbox_deliveries d
+          JOIN sync_outbox_events e ON e.event_id=d.event_id
+          WHERE d.target_database_id=? AND d.state<>'delivered'
+          ORDER BY d.source_sequence''',
+            variables: [Variable.withString(target)],
+          )
+          .get();
+      final claimed = <QueryRow>[];
+      for (final row in rows) {
+        if (claimed.length == limit) break;
+        final state = row.read<String>('delivery_state');
+        if (state == 'dead_letter') break;
+        final eligible = state == 'pending'
+            ? !DateTime.parse(
+                row.read<String>('delivery_next_attempt_at'),
+              ).toUtc().isAfter(clock)
+            : state == 'leased' &&
+                  !DateTime.parse(
+                    row.read<String>('delivery_lease_until'),
+                  ).toUtc().isAfter(clock);
+        if (!eligible) break;
+        claimed.add(row);
+      }
+      for (final row in claimed) {
+        await _db.customStatement(
+          "UPDATE sync_outbox_deliveries SET state='leased',"
+          'attempt_count=attempt_count+1,lease_token=?,lease_until=?,'
+          'last_error=NULL WHERE target_database_id=? AND event_id=?',
+          [leaseToken, until, target, row.read<String>('event_id')],
+        );
+      }
+      return claimed.map(_fromRow).toList(growable: false);
+    });
+  }
+
+  /// Claims relay work independently per original source stream. A blocked
+  /// source never blocks another source, but later events from the same source
+  /// cannot overtake its pending, leased, or dead-letter head.
+  Future<List<SyncEventEnvelope>> claimRelayBatchForPeer({
+    required String targetDatabaseId,
+    required String leaseToken,
+    int limit = 50,
+    Duration leaseDuration = const Duration(minutes: 2),
+    DateTime? now,
+  }) async {
+    final target = targetDatabaseId.trim().toLowerCase();
+    if (!Uuid.isValidUUID(fromString: target) ||
+        leaseToken.trim().isEmpty ||
+        limit <= 0 ||
+        leaseDuration <= Duration.zero) {
+      throw const OfflineSyncException(
+        'invalid_peer_lease',
+        'Invalid peer relay lease.',
+      );
+    }
+    final clock = (now ?? DateTime.now()).toUtc();
+    final until = clock.add(leaseDuration).toIso8601String();
+    return _db.transaction(() async {
+      final peer = await _db
+          .customSelect(
+            'SELECT status FROM sync_delivery_peers WHERE target_database_id=?',
+            variables: [Variable.withString(target)],
+          )
+          .getSingleOrNull();
+      if (peer == null || peer.read<String>('status') != 'active') {
+        throw const OfflineSyncException(
+          'delivery_peer_inactive',
+          'The delivery peer is missing or inactive.',
+        );
+      }
+      final rows = await _db
+          .customSelect(
+            '''SELECT p.*,
+          d.state AS delivery_state,d.next_attempt_at AS delivery_next_attempt_at,
+          d.lease_until AS delivery_lease_until
+          FROM sync_relay_deliveries d
+          JOIN sync_remote_event_projections p ON p.event_id=d.event_id
+          WHERE d.target_database_id=? AND d.state<>'delivered'
+          ORDER BY d.source_database_id,d.source_sequence''',
+            variables: [Variable.withString(target)],
+          )
+          .get();
+      final claimed = <QueryRow>[];
+      final blockedSources = <String>{};
+      for (final row in rows) {
+        if (claimed.length == limit) break;
+        final source = row.read<String>('source_database_id');
+        if (blockedSources.contains(source)) continue;
+        final state = row.read<String>('delivery_state');
+        if (state == 'dead_letter') {
+          blockedSources.add(source);
+          continue;
+        }
+        final eligible = state == 'pending'
+            ? !DateTime.parse(
+                row.read<String>('delivery_next_attempt_at'),
+              ).toUtc().isAfter(clock)
+            : state == 'leased' &&
+                  !DateTime.parse(
+                    row.read<String>('delivery_lease_until'),
+                  ).toUtc().isAfter(clock);
+        if (!eligible) {
+          blockedSources.add(source);
+          continue;
+        }
+        claimed.add(row);
+      }
+      for (final row in claimed) {
+        await _db.customStatement(
+          "UPDATE sync_relay_deliveries SET state='leased',"
+          'attempt_count=attempt_count+1,lease_token=?,lease_until=?,'
+          'last_error=NULL WHERE target_database_id=? AND event_id=?',
+          [leaseToken, until, target, row.read<String>('event_id')],
+        );
+      }
+      return claimed.map(_fromProjectionRow).toList(growable: false);
+    });
+  }
+
+  Future<void> acknowledgeForPeer({
+    required String targetDatabaseId,
+    required String eventId,
+    required String leaseToken,
+    DateTime? deliveredAt,
+  }) async {
+    final target = targetDatabaseId.trim().toLowerCase();
+    var changed = await _db.customUpdate(
+      "UPDATE sync_outbox_deliveries SET state='delivered',lease_token=NULL,"
+      'lease_until=NULL,delivered_at=?,last_error=NULL '
+      "WHERE target_database_id=? AND event_id=? AND state='leased' AND lease_token=?",
+      variables: [
+        Variable.withString(
+          (deliveredAt ?? DateTime.now()).toUtc().toIso8601String(),
+        ),
+        Variable.withString(target),
+        Variable.withString(eventId),
+        Variable.withString(leaseToken),
+      ],
+      updates: const {},
+    );
+    if (changed == 1) return;
+    changed = await _db.customUpdate(
+      "UPDATE sync_relay_deliveries SET state='delivered',lease_token=NULL,"
+      'lease_until=NULL,delivered_at=?,last_error=NULL '
+      "WHERE target_database_id=? AND event_id=? AND state='leased' AND lease_token=?",
+      variables: [
+        Variable.withString(
+          (deliveredAt ?? DateTime.now()).toUtc().toIso8601String(),
+        ),
+        Variable.withString(target),
+        Variable.withString(eventId),
+        Variable.withString(leaseToken),
+      ],
+      updates: const {},
+    );
+    if (changed == 1) return;
+    final alreadyDelivered = await _db
+        .customSelect(
+          '''SELECT 1 AS found FROM sync_outbox_deliveries
+          WHERE target_database_id=? AND event_id=? AND state='delivered'
+          UNION ALL
+          SELECT 1 AS found FROM sync_relay_deliveries
+          WHERE target_database_id=? AND event_id=? AND state='delivered'
+          LIMIT 1''',
+          variables: [
+            Variable.withString(target),
+            Variable.withString(eventId),
+            Variable.withString(target),
+            Variable.withString(eventId),
+          ],
+        )
+        .getSingleOrNull();
+    if (alreadyDelivered == null) throw _peerLeaseLost;
+  }
+
+  Future<void> recordPeerFailure({
+    required String targetDatabaseId,
+    required String eventId,
+    required String leaseToken,
+    required String error,
+    required DateTime retryAt,
+    int maxAttempts = 8,
+  }) => _db.transaction(() async {
+    if (maxAttempts <= 0) {
+      throw const OfflineSyncException(
+        'invalid_max_attempts',
+        'The maximum attempt count must be positive.',
+      );
+    }
+    final target = targetDatabaseId.trim().toLowerCase();
+    final row = await _db
+        .customSelect(
+          'SELECT attempt_count FROM sync_outbox_deliveries '
+          "WHERE target_database_id=? AND event_id=? AND state='leased' "
+          'AND lease_token=?',
+          variables: [
+            Variable.withString(target),
+            Variable.withString(eventId),
+            Variable.withString(leaseToken),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) throw _peerLeaseLost;
+    final dead = row.read<int>('attempt_count') >= maxAttempts;
+    final changed = await _db.customUpdate(
+      'UPDATE sync_outbox_deliveries SET state=?,lease_token=NULL,'
+      'lease_until=NULL,next_attempt_at=?,last_error=? '
+      "WHERE target_database_id=? AND event_id=? AND state='leased' AND lease_token=?",
+      variables: [
+        Variable.withString(dead ? 'dead_letter' : 'pending'),
+        Variable.withString(retryAt.toUtc().toIso8601String()),
+        Variable.withString(
+          error.trim().isEmpty ? 'unknown_sync_error' : error.trim(),
+        ),
+        Variable.withString(target),
+        Variable.withString(eventId),
+        Variable.withString(leaseToken),
+      ],
+      updates: const {},
+    );
+    if (changed != 1) throw _peerLeaseLost;
+  });
 
   Future<void> enrollSource({
     required String sourceDatabaseId,
@@ -482,9 +892,30 @@ class OfflineSyncEventStore {
     eventHash: row.read<String>('event_hash'),
   );
 
+  SyncEventEnvelope _fromProjectionRow(QueryRow row) => SyncEventEnvelope(
+    eventId: row.read<String>('event_id'),
+    sourceDatabaseId: row.read<String>('source_database_id'),
+    organizationId: row.read<String>('organization_id'),
+    branchId: row.read<String>('branch_id'),
+    sequence: row.read<int>('source_sequence'),
+    eventType: row.read<String>('event_type'),
+    aggregateType: row.read<String>('aggregate_type'),
+    aggregateId: row.read<String>('aggregate_id'),
+    contractVersion: row.read<int>('contract_version'),
+    payload: (jsonDecode(row.read<String>('payload_json')) as Map).map(
+      (key, value) => MapEntry(key.toString(), value as Object?),
+    ),
+    occurredAt: DateTime.parse(row.read<String>('occurred_at')).toUtc(),
+    eventHash: row.read<String>('event_hash'),
+  );
+
   static const _leaseLost = OfflineSyncException(
     'lease_lost',
     'The event is no longer owned by this worker.',
+  );
+  static const _peerLeaseLost = OfflineSyncException(
+    'peer_lease_lost',
+    'The event is no longer leased to this peer worker.',
   );
 }
 
@@ -638,6 +1069,10 @@ class OfflineSyncTransaction {
       eventHash: eventHashFor(draft),
     );
     final stamp = event.occurredAt.toIso8601String();
+    final queuedAt = DateTime.now().toUtc();
+    final readyAt =
+        (event.occurredAt.isBefore(queuedAt) ? event.occurredAt : queuedAt)
+            .toIso8601String();
     await _db.customStatement(
       'INSERT INTO sync_outbox_events(event_id,source_database_id,'
       'organization_id,branch_id,local_sequence,event_type,aggregate_type,'
@@ -656,8 +1091,15 @@ class OfflineSyncTransaction {
         jsonEncode(_canonical(event.payload)),
         event.eventHash,
         stamp,
-        stamp,
+        readyAt,
       ],
+    );
+    await _db.customStatement(
+      '''INSERT OR IGNORE INTO sync_outbox_deliveries(
+        target_database_id,event_id,source_sequence,next_attempt_at)
+        SELECT target_database_id,?,?,?
+        FROM sync_delivery_peers WHERE status='active' AND ?>=first_sequence''',
+      [event.eventId, event.sequence, readyAt, event.sequence],
     );
     return event;
   }

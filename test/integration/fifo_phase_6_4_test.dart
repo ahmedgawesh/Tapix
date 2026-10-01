@@ -504,14 +504,12 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────────
   group('FIFO activation migration (10044 → 10045+)', () {
     test(
-      'a fresh DB has no orphaned opening batches and the schema is at 10082',
+      'a fresh DB has no orphaned opening batches and uses the current schema',
       () async {
         // The migration is exercised on every fresh in-memory DB. We assert:
-        //   - schema is at the expected version (v10060 — re-prefixes legacy
-        //     unlinked-sale-return batches from SR- to SAR-; v10059 added
-        //     adjustment-return commission reversal)
+        //   - schema is at the latest exported version
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10115));
+        expect(db.schemaVersion, equals(10119));
 
         final any = await db
             .customSelect('SELECT COUNT(*) AS c FROM product_batches')

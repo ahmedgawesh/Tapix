@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../../database/daos/settings_dao.dart';
 import '../localization_service.dart';
+import '../sync/sync_inbound_projection_service.dart';
 import 'lan_business_models.dart';
 import 'lan_models.dart';
 
@@ -18,18 +19,29 @@ class LanNetworkService {
   static const String inventoryStockSourcesCapability =
       'inventory-stock-sources-v1';
   static const String warehouseTransfersCapability = 'warehouse-transfers-v1';
+  static const String purchaseInvoicesCapability = 'purchase-invoices-v1';
+  static const String independentBranchEnrollmentCapability =
+      'independent-branch-enrollment-v1';
+  static const String independentBranchSyncCapability =
+      'independent-branch-sync-v1';
   static const Set<String> serverCapabilities = {
     consignmentSourceCapability,
     consignmentAdjustmentReturnCapability,
     consignmentManagementCapability,
     inventoryStockSourcesCapability,
     warehouseTransfersCapability,
+    purchaseInvoicesCapability,
+    independentBranchEnrollmentCapability,
+    independentBranchSyncCapability,
   };
 
   LanNetworkService(
     this._settingsDao, {
     LanMasterAuthGateway? authGateway,
     LanMasterBusinessGateway? businessGateway,
+    LanBranchEnrollmentGateway? branchEnrollmentGateway,
+    LanBranchSyncGateway? branchSyncGateway,
+    SyncInboundProjectionService? branchProjection,
     LocalizationService? localizationService,
   });
 
@@ -42,6 +54,7 @@ class LanNetworkService {
   LanNetworkSnapshot _snapshot = const LanNetworkSnapshot();
 
   LanNetworkSnapshot get snapshot => _snapshot;
+  String? get masterTlsFingerprint => null;
   LanRemoteUser? get remoteUser => null;
   bool get hasRemoteUserSession => false;
   bool supportsCapability(String capability) => false;
@@ -75,6 +88,44 @@ class LanNetworkService {
     required String deviceName,
   }) async {
     return const LanPairResult.failure('LAN is not available on web yet.');
+  }
+
+  Future<LanBranchWriterActivationResult> activateIndependentBranchWriter({
+    required String host,
+    required int port,
+    required String coordinatorFingerprint,
+    required String enrollmentId,
+    required String secret,
+    required String remoteDatabaseId,
+  }) async => const LanBranchWriterActivationResult.failure(
+    'branch_enrollment_not_supported',
+  );
+
+  Future<void> configureIndependentBranchSync({
+    required String host,
+    required int port,
+    required String coordinatorFingerprint,
+    required String enrollmentId,
+    required String coordinatorDatabaseId,
+    required String syncAccessToken,
+  }) async => _unsupported();
+
+  Future<LanBranchSyncRunResult> synchronizeIndependentBranchOnce() async =>
+      _unsupported();
+
+  Future<LanBranchSyncHealthSnapshot> inspectIndependentBranchSync() async {
+    final host = await _settingsDao.getSetting('lan.branch_sync.host.v1');
+    final enrollment = await _settingsDao.getSetting(
+      'lan.branch_sync.enrollment_id.v1',
+    );
+    return LanBranchSyncHealthSnapshot(
+      configured: enrollment != null && enrollment.isNotEmpty,
+      coordinator: false,
+      host: host,
+      pendingDeliveries: 0,
+      deadLetters: 0,
+      activeBranchWriters: 0,
+    );
   }
 
   Future<LanRemoteLoginResult> loginToMaster({
@@ -155,6 +206,28 @@ class LanNetworkService {
       _unsupported();
 
   Future<LanSaleVoidResult> voidRemoteSale(int saleId) async => _unsupported();
+
+  Future<LanPurchasesPage> fetchRemotePurchases({int limit = 500}) async =>
+      _unsupported();
+
+  Future<LanPurchaseDetails> fetchRemotePurchaseDetails(int purchaseId) async =>
+      _unsupported();
+
+  Future<LanPurchaseResult> submitRemotePurchase(
+    LanPurchaseRequest purchase,
+  ) async => _unsupported();
+
+  Future<LanPurchaseResult> postRemotePurchase(int purchaseId) async =>
+      _unsupported();
+
+  Future<LanPurchaseVoidResult> voidRemotePurchase(int purchaseId) async =>
+      _unsupported();
+
+  Future<bool> deleteRemotePurchase(int purchaseId) async => _unsupported();
+
+  Future<Map<String, dynamic>> fetchRemotePurchaseVoidImpact(
+    int purchaseId,
+  ) async => _unsupported();
 
   Future<LanCustomerCheckout> fetchRemoteCustomerCheckout(
     int customerId,
@@ -270,9 +343,24 @@ class LanNetworkService {
 
   Future<void> refreshMasterNetwork() async {}
 
+  Future<void> createDeviceEnrollment({
+    required String warehouseId,
+    required LanDeviceKind deviceKind,
+  }) async => _unsupported();
+
   Future<void> regeneratePairingCode() async => _unsupported();
 
   List<LanMasterDeviceInfo> getMasterDevices() => const [];
+
+  Future<List<LanDeviceWarehouseOption>>
+  getMasterAssignableWarehouses() async => const [];
+
+  Future<bool> assignMasterDeviceWarehouse({
+    required String deviceId,
+    required String warehouseId,
+    required int actorUserId,
+    required String actorUsername,
+  }) async => _unsupported();
 
   Future<bool> logoutMasterDevice({
     required String deviceId,

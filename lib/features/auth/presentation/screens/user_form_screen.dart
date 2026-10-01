@@ -1,5 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +10,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../domain/repositories/user_repository_interface.dart';
 import '../bloc/user_form_bloc.dart';
+import '../models/user_location_option.dart';
 import '../../../employees/domain/repositories/employee_repository.dart';
 import '../../../employees/presentation/bloc/employees_bloc.dart';
 
@@ -61,6 +63,89 @@ class _UserFormContentState extends State<_UserFormContent> {
   bool _isEdit = false;
   String? _selectedSecurityQuestion;
   String? _existingSecurityQuestion;
+  List<BusinessBranch> _branches = const [];
+  List<BusinessWarehouse> _warehouses = const [];
+  String? _selectedBranchId;
+  String? _selectedWarehouseId;
+  bool _hasGlobalLocationAccess = false;
+  bool _locationsLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    final database = sl<AppDatabase>();
+    final branches =
+        await (database.select(database.businessBranches)
+              ..where((row) => row.isActive.equals(true))
+              ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+            .get();
+    final warehouses =
+        await (database.select(database.businessWarehouses)
+              ..where((row) => row.isActive.equals(true))
+              ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+            .get();
+    final contextRow = await (database.select(
+      database.businessContexts,
+    )..where((row) => row.id.equals(1))).getSingleOrNull();
+    if (!mounted) return;
+    setState(() {
+      _branches = branches;
+      _warehouses = warehouses;
+      _selectedBranchId ??=
+          contextRow?.branchId ?? (branches.isEmpty ? null : branches.first.id);
+      final branchWarehouses = UserLocationOption.sortLocations(
+        warehouses.where((row) => row.branchId == _selectedBranchId),
+      );
+      _selectedWarehouseId ??= contextRow?.branchId == _selectedBranchId
+          ? contextRow?.warehouseId
+          : (branchWarehouses.isEmpty ? null : branchWarehouses.first.id);
+      _locationsLoading = false;
+    });
+  }
+
+  List<BusinessWarehouse> get _visibleWarehouses =>
+      UserLocationOption.sortLocations(
+        _warehouses.where((row) => row.branchId == _selectedBranchId),
+      );
+
+  BusinessBranch? _branchFor(String branchId) {
+    for (final branch in _branches) {
+      if (branch.id == branchId) return branch;
+    }
+    return null;
+  }
+
+  UserLocationOption _locationOption(BusinessWarehouse location) {
+    final branch = _branchFor(location.branchId);
+    assert(branch != null, 'Every active location must belong to a branch');
+    return UserLocationOption(
+      location: location,
+      branch:
+          branch ??
+          BusinessBranch(
+            id: location.branchId,
+            organizationId: location.organizationId,
+            code: location.branchId,
+            name: '',
+            isActive: true,
+            createdAt: location.createdAt,
+          ),
+    );
+  }
+
+  bool get _canUseGlobalLocation =>
+      _selectedRole == UserRole.owner ||
+      _selectedRole == UserRole.manager ||
+      _selectedRole == UserRole.accountant;
+
+  bool get _requiresExactWarehouse =>
+      _selectedRole == UserRole.cashier ||
+      _selectedRole == UserRole.warehouseClerk ||
+      _selectedRole == UserRole.salesperson;
 
   List<String> get _securityQuestions => [
     'auth.security_questions.q1'.tr(),
@@ -90,6 +175,8 @@ class _UserFormContentState extends State<_UserFormContent> {
         return 'users.role_accountant_desc'.tr();
       case UserRole.cashier:
         return 'users.role_cashier_desc'.tr();
+      case UserRole.warehouseClerk:
+        return 'users.role_warehouse_clerk_desc'.tr();
       case UserRole.salesperson:
         return 'users.role_salesperson_desc'.tr();
     }
@@ -105,6 +192,8 @@ class _UserFormContentState extends State<_UserFormContent> {
         return 'users.role_accountant'.tr();
       case UserRole.cashier:
         return 'users.role_cashier'.tr();
+      case UserRole.warehouseClerk:
+        return 'users.role_warehouse_clerk'.tr();
       case UserRole.salesperson:
         return 'users.role_salesperson'.tr();
     }
@@ -120,6 +209,8 @@ class _UserFormContentState extends State<_UserFormContent> {
         return Icons.account_balance_outlined;
       case UserRole.cashier:
         return Icons.point_of_sale_outlined;
+      case UserRole.warehouseClerk:
+        return Icons.inventory_2_outlined;
       case UserRole.salesperson:
         return Icons.storefront_outlined;
     }
@@ -135,6 +226,8 @@ class _UserFormContentState extends State<_UserFormContent> {
         return Colors.indigo;
       case UserRole.cashier:
         return Colors.green;
+      case UserRole.warehouseClerk:
+        return Colors.deepOrange;
       case UserRole.salesperson:
         return Colors.teal;
     }
@@ -152,6 +245,9 @@ class _UserFormContentState extends State<_UserFormContent> {
         role: _selectedRole,
         employeeId: _selectedEmployeeId,
         clearEmployeeLink: _selectedEmployeeId == null && _isEdit,
+        branchId: _selectedBranchId,
+        warehouseId: _selectedWarehouseId,
+        hasGlobalLocationAccess: _hasGlobalLocationAccess,
         securityQuestion: _selectedSecurityQuestion,
         securityAnswer: _securityAnswerController.text.trim().isNotEmpty
             ? _securityAnswerController.text.trim()
@@ -218,6 +314,10 @@ class _UserFormContentState extends State<_UserFormContent> {
           _usernameController.text = user.username;
           _selectedRole = user.role;
           _selectedEmployeeId = user.employeeId;
+          _selectedBranchId = user.branchId;
+          _selectedWarehouseId = user.warehouseId;
+          _hasGlobalLocationAccess =
+              user.isOwner || user.hasGlobalLocationAccess;
           _isEdit = true;
           _loadSelectedEmployeeName(user.employeeId);
           setState(() {});
@@ -554,8 +654,14 @@ class _UserFormContentState extends State<_UserFormContent> {
                                     ),
                                     label: Text(_roleLabel(role)),
                                     selected: isSelected,
-                                    onSelected: (_) =>
-                                        setState(() => _selectedRole = role),
+                                    onSelected: (_) => setState(() {
+                                      _selectedRole = role;
+                                      if (role == UserRole.owner) {
+                                        _hasGlobalLocationAccess = true;
+                                      } else if (!_canUseGlobalLocation) {
+                                        _hasGlobalLocationAccess = false;
+                                      }
+                                    }),
                                     selectedColor: color.withValues(
                                       alpha: 0.15,
                                     ),
@@ -616,6 +722,165 @@ class _UserFormContentState extends State<_UserFormContent> {
 
                               const SizedBox(height: 24),
 
+                              _SectionHeader(
+                                icon: Icons.location_on_outlined,
+                                title: 'users.location_scope'.tr(),
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'users.location_scope_desc'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              if (_locationsLoading)
+                                const Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else ...[
+                                if (_canUseGlobalLocation)
+                                  SwitchListTile.adaptive(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(
+                                      'users.all_company_locations'.tr(),
+                                    ),
+                                    subtitle: Text(
+                                      'users.all_company_locations_desc'.tr(),
+                                    ),
+                                    value: _hasGlobalLocationAccess,
+                                    onChanged: _selectedRole == UserRole.owner
+                                        ? null
+                                        : (value) => setState(
+                                            () => _hasGlobalLocationAccess =
+                                                value,
+                                          ),
+                                  ),
+                                if (!_hasGlobalLocationAccess) ...[
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    initialValue:
+                                        _branches.any(
+                                          (row) => row.id == _selectedBranchId,
+                                        )
+                                        ? _selectedBranchId
+                                        : null,
+                                    isExpanded: true,
+                                    decoration: InputDecoration(
+                                      labelText: 'users.assigned_branch'.tr(),
+                                      prefixIcon: const Icon(
+                                        Icons.store_outlined,
+                                      ),
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    items: _branches
+                                        .map(
+                                          (row) => DropdownMenuItem(
+                                            value: row.id,
+                                            child: Text(
+                                              row.name.trim().isEmpty
+                                                  ? row.code
+                                                  : row.name,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(growable: false),
+                                    onChanged: (value) => setState(() {
+                                      _selectedBranchId = value;
+                                      final options =
+                                          UserLocationOption.sortLocations(
+                                            _warehouses.where(
+                                              (row) => row.branchId == value,
+                                            ),
+                                          );
+                                      _selectedWarehouseId = options.isEmpty
+                                          ? null
+                                          : options.first.id;
+                                    }),
+                                    validator: (_) =>
+                                        _hasGlobalLocationAccess ||
+                                            _selectedBranchId != null
+                                        ? null
+                                        : 'users.branch_required'.tr(),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  DropdownButtonFormField<String>(
+                                    key: ValueKey(
+                                      'warehouse-$_selectedBranchId-'
+                                      '$_selectedWarehouseId',
+                                    ),
+                                    initialValue:
+                                        _visibleWarehouses.any(
+                                          (row) =>
+                                              row.id == _selectedWarehouseId,
+                                        )
+                                        ? _selectedWarehouseId
+                                        : null,
+                                    isExpanded: true,
+                                    decoration: InputDecoration(
+                                      labelText: 'users.assigned_location'.tr(),
+                                      helperText: _requiresExactWarehouse
+                                          ? 'users.warehouse_required_hint'.tr()
+                                          : 'users.warehouse_optional_hint'
+                                                .tr(),
+                                      prefixIcon: const Icon(
+                                        Icons.warehouse_outlined,
+                                      ),
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    items: _visibleWarehouses
+                                        .map((row) {
+                                          final option = _locationOption(row);
+                                          return DropdownMenuItem(
+                                            value: row.id,
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  option.isBranchSalesFloor
+                                                      ? Icons
+                                                            .storefront_outlined
+                                                      : Icons
+                                                            .warehouse_outlined,
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    option.label(
+                                                      salesFloorLabel:
+                                                          'users.branch_sales_floor'
+                                                              .tr(),
+                                                      warehouseLabel:
+                                                          'users.independent_warehouse'
+                                                              .tr(),
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        })
+                                        .toList(growable: false),
+                                    onChanged: (value) => setState(
+                                      () => _selectedWarehouseId = value,
+                                    ),
+                                    validator: (_) =>
+                                        !_requiresExactWarehouse ||
+                                            _selectedWarehouseId != null
+                                        ? null
+                                        : 'users.warehouse_required'.tr(),
+                                  ),
+                                ],
+                              ],
+
+                              const SizedBox(height: 24),
+
                               // Link to Employee Section
                               _SectionHeader(
                                 icon: Icons.link_outlined,
@@ -624,8 +889,10 @@ class _UserFormContentState extends State<_UserFormContent> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                (_selectedRole == UserRole.cashier
-                                        ? 'users.link_employee_cashier_required'
+                                ((_selectedRole == UserRole.cashier ||
+                                            _selectedRole ==
+                                                UserRole.warehouseClerk)
+                                        ? 'users.link_employee_operator_required'
                                         : 'users.link_employee_desc')
                                     .tr(),
                                 style: theme.textTheme.bodySmall?.copyWith(

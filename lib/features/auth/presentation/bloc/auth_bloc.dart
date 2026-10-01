@@ -106,6 +106,10 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
       }
     } on RemoteAuthenticationRequiredException {
       emit(AuthError(message: 'auth.remote_login_pending'.tr()));
+    } on RemoteAuthenticationRejectedException catch (error) {
+      final key = 'auth.${error.code}';
+      final translated = key.tr();
+      emit(AuthError(message: translated == key ? error.code : translated));
     } catch (e) {
       emit(const AuthError(message: 'Invalid username or password'));
     }

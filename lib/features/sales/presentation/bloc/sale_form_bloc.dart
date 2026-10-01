@@ -8,6 +8,7 @@ import '../../../../core/money/money.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
+import '../../../../core/pricing/pricing_preview_fingerprint.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/promotions/promotion_engine.dart';
 import '../../../../core/promotions/promotion_margin_policy.dart';
@@ -1061,9 +1062,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   int _lineCounter = 0;
   final String _remoteIdempotencyKey = const Uuid().v4();
 
-  bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+  bool get _isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
   Map<int, String> _colorNames = {};
   Map<int, String?> _colorHexes = {};
@@ -1396,7 +1395,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         ),
       );
       // Auto-load loyalty data for the selected customer
-      if (!_isRemoteClient && _loyaltyRepository != null) {
+      if (_isRemoteClient || _loyaltyRepository != null) {
         add(SaleLoyaltyDataRequested(event.customerId!));
       }
     }
@@ -1863,17 +1862,26 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
               priceTier: priceTier,
               salespersonId: item.employeeId,
               discountType:
-                  state.manualPricing.lines[index].totalLineDiscount.cents == 0
+                  state.manualPricing.lines[index].local.discount.cents == 0
                   ? 'none'
                   : 'fixed',
               discountValue:
-                  state.manualPricing.lines[index].totalLineDiscount.cents,
+                  state.manualPricing.lines[index].local.discount.cents,
             ),
           );
         }
         final result = await _lan!.submitRemoteSale(
           LanSaleRequest(
             idempotencyKey: _remoteIdempotencyKey,
+            loyaltyPointsToRedeem: state.loyaltyPointsToRedeem,
+            loyaltyValueCents: state.loyaltyDiscountCents,
+            overallDiscountCents: state.discountMode == SaleDiscountMode.invoice
+                ? state.invoiceDiscountCents.toBigInt().toInt()
+                : 0,
+            expectedPricingFingerprint: pricingPreviewFingerprint(
+              state.pricing,
+              taxInclusive: state.taxInclusivePricing,
+            ),
             customerId: state.customerId,
             salespersonId: state.employeeId,
             paymentMethod: paymentMethodStr,
@@ -1924,7 +1932,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           subtotalCents: state.subtotalCents,
           discountCents: state.totalDiscountCents,
           taxCents: state.taxCents,
-          totalCents: state.totalCents,
+          totalCents: state.totalBeforeLoyaltyCents,
+          loyaltyPointsToRedeem: state.loyaltyPointsToRedeem,
+          loyaltyValueCents: state.loyaltyDiscountCents,
           paidAmountCents: effectivePaidCents,
           paymentMethod: paymentMethodStr,
           items: items,
@@ -1938,24 +1948,6 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         );
 
         await _logBelowCostOverrides(saleId);
-
-        // Redeem loyalty points if applicable (non-critical, outside transaction)
-        if (state.loyaltyRedemptionEnabled &&
-            state.loyaltyPointsToRedeem > 0 &&
-            state.customerId != null &&
-            _loyaltyRepository != null) {
-          try {
-            await _loyaltyRepository.redeemPoints(
-              customerId: state.customerId!,
-              points: state.loyaltyPointsToRedeem,
-              reason: 'Points redeemed at checkout for sale #$saleId',
-              referenceId: saleId,
-              referenceType: 'sale_redemption',
-            );
-          } catch (_) {
-            // Loyalty redemption failure should not block the sale
-          }
-        }
 
         CrashlyticsService.instance.logAction('sale_created', {
           'sale_id': saleId.toString(),
@@ -2071,6 +2063,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
                 'settings.network.sale.below_cost_reason_required',
               'discount_exceeds_max' =>
                 'settings.network.sale.discount_exceeds_max',
+              'pricing_preview_changed' => 'sales.remote_pricing_changed',
+              'loyalty_balance_or_policy_changed' =>
+                'sales.loyalty_refresh_required',
+              'server_capability_missing' =>
+                'sales.remote_server_update_required',
+              'lan_capability_required' =>
+                'sales.remote_server_update_required',
               _ => e.message,
             };
       emit(state.copyWith(isSubmitting: false, error: errorKey));
@@ -2101,7 +2100,14 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         stackTrace: st,
         reason: 'SaleFormBloc._onSubmitted failed',
       );
-      emit(state.copyWith(isSubmitting: false, error: e.toString()));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: e.toString().contains('loyalty_')
+              ? 'sales.loyalty_refresh_required'
+              : e.toString(),
+        ),
+      );
     }
   }
 
@@ -2303,7 +2309,43 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleLoyaltyDataRequested event,
     Emitter<SaleFormState> emit,
   ) async {
-    if (_isRemoteClient || _loyaltyRepository == null) return;
+    if (_isRemoteClient) {
+      try {
+        final data = await _lan!.fetchRemoteCustomerCheckout(event.customerId);
+        if (state.customerId != event.customerId) return;
+        final now = DateTime.now();
+        emit(
+          state.copyWith(
+            loyaltyPointsBalance: data.pointsBalance,
+            loyaltySettings: LoyaltySettings(
+              id: 0,
+              pointsPerCurrencyUnit: 0,
+              minSpendForPoints: 0,
+              referralBonusPoints: 0,
+              signupBonusPoints: 0,
+              reviewBonusPoints: 0,
+              isEnabled: data.redemptionEnabled,
+              allowPointsRedemption:
+                  data.redemptionEnabled && data.currencyId == state.currencyId,
+              pointValueCents: data.pointValueCents,
+              minRedemptionPoints: data.minRedemptionPoints,
+              maxRedemptionPercentBps: data.maxRedemptionPercentBps,
+              createdAt: now,
+              updatedAt: now,
+            ),
+            loyaltyPointsToRedeem: 0,
+            loyaltyDiscountCents: 0,
+            loyaltyRedemptionEnabled: false,
+          ),
+        );
+      } catch (_) {
+        if (state.customerId == event.customerId) {
+          emit(state.copyWith(clearLoyalty: true));
+        }
+      }
+      return;
+    }
+    if (_loyaltyRepository == null) return;
     try {
       final settings = await _loyaltyRepository.getLoyaltySettings();
       if (state.customerId != event.customerId) return;
@@ -2381,7 +2423,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         : 0;
 
     // Clamp requested points to valid range
-    final pointsToRedeem = event.pointsToRedeem.clamp(0, maxRedeemablePoints);
+    final requested = event.pointsToRedeem.clamp(0, maxRedeemablePoints);
+    final pointsToRedeem = requested < settings.minRedemptionPoints
+        ? 0
+        : requested;
     final discountCents = pointsToRedeem * pointValueCents;
 
     emit(

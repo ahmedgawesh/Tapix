@@ -13,6 +13,21 @@ Future<void> removeBusinessWarehouseStockTriggers(AppDatabase db) async {
   }
 }
 
+Future<void> installBusinessWarehouseStockScopeGuard(AppDatabase db) async {
+  await db.customStatement('DROP TRIGGER IF EXISTS business_stock_scope');
+  await db.customStatement('''
+    CREATE TRIGGER business_stock_scope BEFORE INSERT ON business_warehouse_stocks
+    WHEN NOT EXISTS (
+      SELECT 1
+      FROM business_warehouses w
+      JOIN business_branches b ON b.id = w.branch_id
+        AND b.organization_id = w.organization_id AND b.is_active = 1
+      JOIN business_contexts c ON c.organization_id = w.organization_id
+      WHERE c.id = 1 AND w.id = NEW.warehouse_id AND w.is_active = 1)
+    BEGIN SELECT RAISE(ABORT, 'Warehouse outside organization'); END
+  ''');
+}
+
 /// Atomic compatibility bridge during the transition to location-aware posting.
 /// Legacy writers and warehouse writers share the same committed primary
 /// balance. Secondary warehouses are storage only: no posting API enables them.
@@ -72,12 +87,6 @@ Future<void> installBusinessWarehouseStock(AppDatabase db) async {
     final statements = <String>[
       '''CREATE INDEX IF NOT EXISTS business_stock_by_variant
          ON business_warehouse_stocks(variant_id)''',
-      '''CREATE TRIGGER business_stock_scope BEFORE INSERT ON business_warehouse_stocks
-         WHEN NOT EXISTS (
-           SELECT 1 FROM business_warehouses w JOIN business_contexts c
-             ON c.organization_id = w.organization_id AND c.branch_id = w.branch_id
-           WHERE c.id = 1 AND w.id = NEW.warehouse_id)
-         BEGIN SELECT RAISE(ABORT, 'Warehouse outside local branch'); END''',
       '''CREATE TRIGGER business_stock_no_replace BEFORE INSERT ON business_warehouse_stocks
          WHEN EXISTS (SELECT 1 FROM business_warehouse_stocks
            WHERE warehouse_id = NEW.warehouse_id AND variant_id = NEW.variant_id)
@@ -158,5 +167,6 @@ Future<void> installBusinessWarehouseStock(AppDatabase db) async {
     for (final statement in statements) {
       await db.customStatement(statement);
     }
+    await installBusinessWarehouseStockScopeGuard(db);
   });
 }

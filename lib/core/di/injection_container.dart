@@ -1,11 +1,19 @@
+import '../services/business/warehouse_operation_scope.dart';
 import '../../features/reports/presentation/bloc/supplier_sales_report_bloc.dart';
 import '../services/business/warehouse_read_scope.dart';
 import '../services/business/branch_currency_policy_store.dart';
 import '../services/business/warehouse_stocktake_service.dart';
 import '../../features/business/data/warehouse_setup_service.dart';
+import '../../features/business/data/lan_branch_enrollment_service.dart';
+import '../../features/business/data/lan_branch_enrollment_gateway.dart';
+import '../../features/business/data/lan_branch_provisioning_service.dart';
+import '../../features/business/data/lan_branch_sync_service.dart';
 import '../../features/business/data/online_branches_entitlement.dart';
 import '../../features/business/data/online_branches_purchase_service.dart';
 import '../../features/business/data/warehouse_transfer_access_service.dart';
+import '../../features/business/data/warehouse_transfer_arrival_notification_service.dart';
+import '../../features/business/data/distributed_transfer_receipt_service.dart';
+import '../../features/business/data/distributed_transfer_dispatch_service.dart';
 import '../../features/business/data/warehouse_transfer_application_service.dart';
 import '../../features/business/data/warehouse_transfer_dispatch_service.dart';
 import '../../features/business/data/warehouse_transfer_receipt_service.dart';
@@ -229,7 +237,11 @@ import '../services/connectivity_service.dart';
 import '../services/lan/lan_network_service.dart';
 import '../services/lan/device_mode_reset_service.dart';
 import '../services/sync/offline_sync_event_store.dart';
+import '../services/sync/branch_operational_projection_service.dart';
+import '../services/sync/branch_catalogue_sync_service.dart';
+import '../services/sync/branch_location_directory_sync_service.dart';
 import '../services/sync/sync_entity_identity_store.dart';
+import '../services/sync/sync_inbound_projection_service.dart';
 import '../services/remote_security_service.dart';
 import '../services/code_integrity_service.dart';
 import '../services/app_guard_service.dart';
@@ -248,7 +260,44 @@ Future<void> init() async {
   // Database
   sl.registerLazySingleton(() => AppDatabase());
   sl.registerLazySingleton(() => OfflineSyncEventStore(sl<AppDatabase>()));
+  sl.registerLazySingleton(
+    () => BranchCatalogueSyncService(
+      sl<AppDatabase>(),
+      sl<OfflineSyncEventStore>(),
+      sl<SyncEntityIdentityStore>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => BranchLocationDirectorySyncService(
+      sl<AppDatabase>(),
+      sl<OfflineSyncEventStore>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferArrivalNotificationService(
+      sl<AppDatabase>(),
+      sl<SharedPreferences>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => BranchOperationalProjectionService(
+      sl<AppDatabase>(),
+      catalogue: sl<BranchCatalogueSyncService>(),
+      locations: sl<BranchLocationDirectorySyncService>(),
+      events: sl<OfflineSyncEventStore>(),
+      recallResolutionHandler: (event) =>
+          sl<DistributedTransferDispatchService>().applyRecallResolution(event),
+    ),
+  );
   sl.registerLazySingleton(() => SyncEntityIdentityStore(sl<AppDatabase>()));
+  sl.registerLazySingleton(
+    () => SyncInboundProjectionService(
+      sl<AppDatabase>(),
+      sl<OfflineSyncEventStore>(),
+      operationalProjector: sl<BranchOperationalProjectionService>().apply,
+      appliedObserver: sl<WarehouseTransferArrivalNotificationService>().handle,
+    ),
+  );
 
   // DAOs
   sl.registerLazySingleton(() => ProductDao(sl()));
@@ -272,7 +321,13 @@ Future<void> init() async {
   sl.registerLazySingleton(() => EmployeeDao(sl()));
   sl.registerLazySingleton(() => SupplierDao(sl()));
   sl.registerLazySingleton(() => AccountingDao(sl()));
-  sl.registerLazySingleton(() => AdjustmentReturnDao(sl()));
+  sl.registerLazySingleton(
+    () => AdjustmentReturnDao(
+      sl(),
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
+    ),
+  );
   sl.registerLazySingleton(() => InventoryAdjustmentDao(sl()));
   sl.registerLazySingleton(() => BatchAuditDao(sl()));
   sl.registerLazySingleton(() => const MedicineNormalizationService());
@@ -379,6 +434,10 @@ Future<void> init() async {
       adjustmentService: sl<InventoryAdjustmentService>(),
       // Phase B4 — enforce free-tier 100-product cumulative cap.
       freeQuotaService: sl<FreeQuotaService>(),
+      canEditSharedCatalogue:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueAuthority,
+      isSharedCatalogueDistributed:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueDistributed,
     ),
   );
   sl.registerLazySingleton<ProductVariantRepository>(
@@ -515,6 +574,8 @@ Future<void> init() async {
       db: sl<AppDatabase>(),
       dao: sl<InventoryAdjustmentDao>(),
       journal: sl<JournalEntryService>(),
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
 
@@ -539,6 +600,8 @@ Future<void> init() async {
       sl<SessionService>(),
       sl<JournalEntryService>(),
       sl<AppDatabase>(),
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
 
@@ -628,6 +691,10 @@ Future<void> init() async {
       sl<JournalEntryService>(),
       sl<AppDatabase>(),
       sl<AuditLogService>(),
+      canEditSharedCatalogue:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueAuthority,
+      isSharedCatalogueDistributed:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueDistributed,
     ),
   );
 
@@ -718,7 +785,9 @@ Future<void> init() async {
   sl.registerFactory(() => ExportBloc(sl<ExportService>()));
 
   // Purchases Blocs
-  sl.registerFactory(() => PurchasesBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(
+    () => PurchasesBloc(sl<PurchaseRepository>(), lan: sl<LanNetworkService>()),
+  );
   sl.registerFactory(
     () => PurchaseFormBloc(
       sl<PurchaseRepository>(),
@@ -726,6 +795,7 @@ Future<void> init() async {
       sl<ProductRepository>(),
       pharmacyDao: sl<PharmacyDao>(),
       supplierSourcePreviewer: PurchaseSupplierSourceService(sl<AppDatabase>()),
+      lan: sl<LanNetworkService>(),
     ),
   );
   sl.registerFactory(
@@ -1332,8 +1402,26 @@ Future<void> init() async {
       stocktake: sl<WarehouseStocktakeService>(),
       adjustments: sl<InventoryAdjustmentService>(),
       operatingCurrencyCode: () => sl<CurrencyService>().getCurrency().code,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      locationDirectory: sl<BranchLocationDirectorySyncService>(),
+      catalogue: sl<BranchCatalogueSyncService>(),
       isRemoteClient: () =>
           sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => LanBranchEnrollmentService(
+      sl<AppDatabase>(),
+      sl<SessionService>(),
+      sl<WarehouseSetupEntitlement>(),
+      sl<OfflineSyncEventStore>(),
+      isDependentLanClient: () =>
+          sl<LanNetworkService>().snapshot.mode == LanMode.client,
+      currencyPolicy: sl<BranchCurrencyPolicyStore>(),
+      taxPolicy: sl<BranchTaxPolicyStore>(),
+      operatingCurrencyCode: () => sl<CurrencyService>().getCurrency().code,
+      catalogue: sl<BranchCatalogueSyncService>(),
+      locations: sl<BranchLocationDirectorySyncService>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1377,6 +1465,27 @@ Future<void> init() async {
     ),
   );
   sl.registerLazySingleton(
+    () => DistributedTransferReceiptService(
+      sl<AppDatabase>(),
+      authorizeWarehouse:
+          sl<WarehouseTransferAccessService>().authorizeInboundWarehouse,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
+      consignmentAgreements: sl<ConsignmentAgreementService>(),
+      consignmentReceipts: sl<ConsignmentReceiptService>(),
+      consignmentCustody: sl<ConsignmentCustodyService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => DistributedTransferDispatchService(
+      sl<AppDatabase>(),
+      authorize:
+          sl<WarehouseTransferAccessService>().authorizeDistributedOutbound,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      identities: sl<SyncEntityIdentityStore>(),
+    ),
+  );
+  sl.registerLazySingleton(
     () => WarehouseTransferRecallService(
       sl<AppDatabase>(),
       authorize: sl<WarehouseTransferAccessService>().authorize,
@@ -1395,9 +1504,12 @@ Future<void> init() async {
     () => AppSettingsService(
       sl<SharedPreferences>(),
       taxStore: sl<BranchTaxPolicyStore>(),
+      database: sl<AppDatabase>(),
+      settingsDao: sl<SettingsDao>(),
     ),
   );
   await sl<AppSettingsService>().initializeTaxPolicy();
+  await sl<AppSettingsService>().initializeSharedFeaturePolicy();
 
   // Inventory Valuation Service — single source of truth for the
   // business-wide inventory valuation method (WAC | FIFO). Lives in the
@@ -1448,12 +1560,41 @@ Future<void> init() async {
       warehouseEntitlement: sl<WarehouseSetupEntitlement>(),
     ),
   );
+  sl.registerLazySingleton<LanBranchEnrollmentGateway>(
+    () => LanBranchEnrollmentGatewayImpl(sl<LanBranchEnrollmentService>()),
+  );
+  sl.registerLazySingleton(
+    () => LanBranchSyncService(
+      database: sl<AppDatabase>(),
+      events: sl<OfflineSyncEventStore>(),
+      projections: sl<SyncInboundProjectionService>(),
+      catalogue: sl<BranchCatalogueSyncService>(),
+      locations: sl<BranchLocationDirectorySyncService>(),
+    ),
+  );
+  sl.registerLazySingleton<LanBranchSyncGateway>(
+    () => sl<LanBranchSyncService>(),
+  );
   sl.registerLazySingleton(
     () => LanNetworkService(
       sl<SettingsDao>(),
       authGateway: sl<LanMasterAuthGateway>(),
       businessGateway: sl<LanMasterBusinessGateway>(),
+      branchEnrollmentGateway: sl<LanBranchEnrollmentGateway>(),
+      branchSyncGateway: sl<LanBranchSyncGateway>(),
+      branchProjection: sl<SyncInboundProjectionService>(),
       localizationService: sl<LocalizationService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => LanBranchProvisioningService(
+      database: sl<AppDatabase>(),
+      entitlement: sl<WarehouseSetupEntitlement>(),
+      network: sl<LanNetworkService>(),
+      syncEvents: sl<OfflineSyncEventStore>(),
+      settings: sl<AppSettingsService>(),
+      catalogue: sl<BranchCatalogueSyncService>(),
+      locations: sl<BranchLocationDirectorySyncService>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1467,13 +1608,42 @@ Future<void> init() async {
     ),
   );
   sl.registerLazySingleton(
-    () => RemoteWarehouseTransferApplicationService(sl<LanNetworkService>()),
+    () => BranchWarehouseTransferApplicationService(
+      local: sl<LocalWarehouseTransferApplicationService>(),
+      outbound: sl<DistributedTransferDispatchService>(),
+      inbound: sl<DistributedTransferReceiptService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => RemoteWarehouseTransferApplicationService(
+      sl<LanNetworkService>(),
+      onTransfersLoaded: (documents) async {
+        final assigned = sl<LanNetworkService>().snapshot.assignedWarehouseId;
+        if (assigned == null || assigned.isEmpty) return;
+        for (final document in documents) {
+          if (document.destinationWarehouseId == assigned &&
+              const {
+                'in_transit',
+                'partially_received',
+              }.contains(document.status)) {
+            await sl<WarehouseTransferArrivalNotificationService>()
+                .notifyRemoteTransfer(
+                  transferId: document.id,
+                  lineCount: document.lineCount,
+                );
+          }
+        }
+      },
+    ),
   );
   sl.registerLazySingleton<WarehouseTransferApplicationService>(
     () => AdaptiveWarehouseTransferApplicationService(
-      local: sl<LocalWarehouseTransferApplicationService>(),
+      local: sl<BranchWarehouseTransferApplicationService>(),
       remote: sl<RemoteWarehouseTransferApplicationService>(),
       network: sl<LanNetworkService>(),
+      localWarehouseId: () async => (await WarehouseOperationScope.resolve(
+        sl<AppDatabase>(),
+      )).warehouseId,
     ),
   );
   sl.registerLazySingleton(

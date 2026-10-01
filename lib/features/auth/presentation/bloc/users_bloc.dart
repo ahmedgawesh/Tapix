@@ -51,6 +51,9 @@ class UsersBloc extends RealtimeBloc<List<UserEntity>, UsersEvent> {
 
   UsersBloc(this._repository) : super(const RealtimeLoading());
 
+  Future<UserDeleteResult> deleteUser(int userId) =>
+      _repository.deleteUser(userId);
+
   @override
   Stream<List<UserEntity>> get dataStream => _repository.watchAllUsers();
 

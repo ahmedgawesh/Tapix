@@ -30,6 +30,9 @@ import '../../services/returns/posted_return.dart';
 import '../../services/returns/return_approval_decision.dart';
 import '../../services/returns/return_approval_exceptions.dart';
 import '../../services/returns/return_approval_service.dart';
+import '../../services/sync/adjustment_return_sync_contract.dart';
+import '../../services/sync/offline_sync_event_store.dart';
+import '../../services/sync/sync_entity_identity_store.dart';
 
 part 'adjustment_return_dao.g.dart';
 
@@ -217,7 +220,78 @@ class SaleAdjReturnWithParty {
 )
 class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     with _$AdjustmentReturnDaoMixin {
-  AdjustmentReturnDao(super.db);
+  AdjustmentReturnDao(
+    super.db, {
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
+  }) : _syncEvents = syncEvents,
+       _syncIdentities = syncIdentities;
+
+  final OfflineSyncEventStore? _syncEvents;
+  final SyncEntityIdentityStore? _syncIdentities;
+
+  OfflineSyncEventStore get _effectiveSyncEvents =>
+      _syncEvents ?? OfflineSyncEventStore(attachedDatabase);
+
+  SyncEntityIdentityStore get _effectiveSyncIdentities =>
+      _syncIdentities ?? SyncEntityIdentityStore(attachedDatabase);
+
+  Future<void> _appendPurchaseAdjustmentEvent(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required bool voided,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final header = await getPurchaseAdjReturnById(returnId);
+    if (header == null) throw StateError('Adjustment return not found');
+    final builder = AdjustmentReturnSyncContractBuilder(
+      attachedDatabase,
+      _effectiveSyncIdentities,
+    );
+    final payload = voided
+        ? await builder.buildVoidedPurchase(header: header)
+        : await builder.buildPostedPurchase(header: header);
+    await transaction.appendOnce(
+      producerKey:
+          'purchase_adjustment_return:${voided ? 'voided' : 'posted'}:$returnId',
+      eventType:
+          'purchase_adjustment_return.${voided ? 'voided' : 'posted'}.v1',
+      aggregateType: 'purchase_adjustment_return',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: voided
+          ? header.voidedAt
+          : header.postedAt ?? header.returnDate,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendSaleAdjustmentEvent(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required bool voided,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final header = await getSaleAdjReturnById(returnId);
+    if (header == null) throw StateError('Adjustment return not found');
+    final builder = AdjustmentReturnSyncContractBuilder(
+      attachedDatabase,
+      _effectiveSyncIdentities,
+    );
+    final payload = voided
+        ? await builder.buildVoidedSale(header: header)
+        : await builder.buildPostedSale(header: header);
+    await transaction.appendOnce(
+      producerKey:
+          'sale_adjustment_return:${voided ? 'voided' : 'posted'}:$returnId',
+      eventType: 'sale_adjustment_return.${voided ? 'voided' : 'posted'}.v1',
+      aggregateType: 'sale_adjustment_return',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: voided
+          ? header.voidedAt
+          : header.postedAt ?? header.returnDate,
+      payload: payload,
+    );
+  }
 
   Future<bool> _tracksInventory(int productId) async {
     final row = await (select(
@@ -938,7 +1012,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     bool allowOverHistory = false,
     WarehouseOperationScope? scope,
   }) {
-    return transaction(() async {
+    return _effectiveSyncEvents.transaction((syncTransaction) async {
       final operationScope = await DocumentPostingScope.validate(
         attachedDatabase,
         InventoryPostingDocument.purchaseAdjustment,
@@ -1383,6 +1457,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           );
         }
       }
+      await _appendPurchaseAdjustmentEvent(
+        syncTransaction,
+        returnId: returnId,
+        voided: false,
+      );
     });
   }
 
@@ -1452,7 +1531,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     String? voidReason,
     WarehouseOperationScope? scope,
   }) {
-    return transaction(() async {
+    return _effectiveSyncEvents.transaction((syncTransaction) async {
       final operationScope = await DocumentPostingScope.validate(
         attachedDatabase,
         InventoryPostingDocument.purchaseAdjustment,
@@ -1693,6 +1772,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           voidReason: Value(voidReason),
           updatedAt: Value(DateTime.now()),
         ),
+      );
+      await _appendPurchaseAdjustmentEvent(
+        syncTransaction,
+        returnId: returnId,
+        voided: true,
       );
     });
   }
@@ -1943,7 +2027,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     LoyaltyPointsService? loyaltyPointsService,
     WarehouseOperationScope? scope,
   }) {
-    return transaction(() async {
+    return _effectiveSyncEvents.transaction((syncTransaction) async {
       final operationScope = await DocumentPostingScope.validate(
         attachedDatabase,
         InventoryPostingDocument.saleAdjustment,
@@ -2499,6 +2583,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           updatedAt: Value(DateTime.now()),
         ),
       );
+      await _appendSaleAdjustmentEvent(
+        syncTransaction,
+        returnId: returnId,
+        voided: false,
+      );
     });
   }
 
@@ -2581,7 +2670,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     LoyaltyPointsService? loyaltyPointsService,
     WarehouseOperationScope? scope,
   }) {
-    return transaction(() async {
+    return _effectiveSyncEvents.transaction((syncTransaction) async {
       final operationScope = await DocumentPostingScope.validate(
         attachedDatabase,
         InventoryPostingDocument.saleAdjustment,
@@ -2877,6 +2966,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           voidReason: Value(voidReason),
           updatedAt: Value(DateTime.now()),
         ),
+      );
+      await _appendSaleAdjustmentEvent(
+        syncTransaction,
+        returnId: returnId,
+        voided: true,
       );
     });
   }

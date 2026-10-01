@@ -178,7 +178,7 @@ void main() {
       final db = memoryDb();
       addTearDown(db.close);
       final scope = await BusinessFoundationRepository(db).getScope();
-      expect(db.schemaVersion, 10115);
+      expect(db.schemaVersion, 10119);
       expect(scope.organizationId, hasLength(36));
       expect({
         scope.organizationId,
@@ -424,6 +424,11 @@ void main() {
             .single,
         'ok',
       );
+      // A file-only backup must be taken after WAL content is checkpointed.
+      // Production backups use DatabaseBackupService's snapshot routine; make
+      // this lower-level migration fixture equally deterministic under the
+      // parallel test runner.
+      await db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
       await db.close();
       // Closed SQLite file copy models a restored backup, not shared-file LAN.
       final restored = await file.copy('${dir.path}/restored.db');

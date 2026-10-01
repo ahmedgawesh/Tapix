@@ -28,7 +28,7 @@ void main() {
     }
   });
 
-  test('local role cannot bypass master identity or device mode', () {
+  test('local roles cannot bypass owner identity', () {
     expect(
       DeviceModeResetPolicy.canReset(
         localRole: UserRole.owner,
@@ -37,13 +37,18 @@ void main() {
       ),
       isFalse,
     );
-    expect(
-      DeviceModeResetPolicy.canReset(
-        localRole: UserRole.owner,
-        remoteRole: 'owner',
-        currentMode: LanMode.master,
-      ),
-      isFalse,
-    );
+  });
+
+  test('local owner may reinitialize a standalone or master database', () {
+    for (final mode in [LanMode.standalone, LanMode.master]) {
+      expect(
+        DeviceModeResetPolicy.canReset(
+          localRole: UserRole.owner,
+          remoteRole: null,
+          currentMode: mode,
+        ),
+        isTrue,
+      );
+    }
   });
 }

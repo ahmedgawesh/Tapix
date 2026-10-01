@@ -14,6 +14,22 @@ Future<void> removeWarehouseTransferGuards(AppDatabase db) async {
 
 Future<void> installWarehouseTransferGuards(AppDatabase db) async {
   await removeWarehouseTransferGuards(db);
+  final transferLineColumns = await db
+      .customSelect('PRAGMA table_info(warehouse_transfer_lines)')
+      .map((row) => row.read<String>('name'))
+      .get();
+  final hasOwnershipIntent =
+      transferLineColumns.contains('requested_owned_quantity') &&
+      transferLineColumns.contains('requested_consignment_quantity');
+  final ownershipIntentGuard = hasOwnershipIntent
+      ? '''
+      OR ((NEW.requested_owned_quantity IS NULL) !=
+          (NEW.requested_consignment_quantity IS NULL))
+      OR (NEW.requested_owned_quantity IS NOT NULL AND
+          (NEW.requested_owned_quantity<0 OR
+           NEW.requested_consignment_quantity<0 OR
+           NEW.requested_owned_quantity+NEW.requested_consignment_quantity!=NEW.quantity))'''
+      : '';
 
   for (final table in [
     'warehouse_transfers',
@@ -55,10 +71,27 @@ Future<void> installWarehouseTransferGuards(AppDatabase db) async {
     CREATE TRIGGER warehouse_transfers_creation
     BEFORE INSERT ON warehouse_transfers
     WHEN NEW.status!='draft' OR NEW.sealed!=0 OR NOT EXISTS(
-      SELECT 1 FROM business_contexts c WHERE c.id=1
+      SELECT 1 FROM business_contexts c
+      JOIN business_warehouses source
+        ON source.id=NEW.source_warehouse_id
+        AND source.organization_id=c.organization_id
+        AND source.branch_id=NEW.branch_id AND source.is_active=1
+      JOIN business_warehouses destination
+        ON destination.id=NEW.destination_warehouse_id
+        AND destination.organization_id=c.organization_id
+        AND destination.is_active=1
+      JOIN business_branches source_branch
+        ON source_branch.id=source.branch_id
+        AND source_branch.organization_id=c.organization_id
+        AND source_branch.is_active=1
+      JOIN business_branches destination_branch
+        ON destination_branch.id=destination.branch_id
+        AND destination_branch.organization_id=c.organization_id
+        AND destination_branch.is_active=1
+      WHERE c.id=1
         AND c.database_id=NEW.database_id
         AND c.organization_id=NEW.organization_id
-        AND c.branch_id=NEW.branch_id)
+        AND NEW.source_warehouse_id!=NEW.destination_warehouse_id)
       OR EXISTS(SELECT 1 FROM warehouse_transfers WHERE request_key=NEW.request_key)
     BEGIN SELECT RAISE(ABORT,'Invalid transfer creation'); END
   ''');
@@ -79,6 +112,7 @@ Future<void> installWarehouseTransferGuards(AppDatabase db) async {
       WHERE t.id=NEW.transfer_id AND t.status='draft' AND t.sealed=0)
       OR EXISTS(SELECT 1 FROM warehouse_transfer_lines
         WHERE transfer_id=NEW.transfer_id AND variant_id=NEW.variant_id)
+      $ownershipIntentGuard
     BEGIN SELECT RAISE(ABORT,'Transfer lines cannot change after sealing'); END
   ''');
   await db.customStatement('''

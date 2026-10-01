@@ -53,6 +53,10 @@ abstract class PurchaseRepository {
     /// Payments already handed over at checkout. They stay attached to the
     /// draft and are journaled when the purchase is posted.
     List<CheckoutPaymentAllocation> initialPayments = const [],
+
+    /// Explicit actor for delegated LAN operations. Local callers omit it and
+    /// continue to use the active application session.
+    int? actorUserId,
   });
 
   /// Update an existing purchase and replace its items
@@ -78,10 +82,10 @@ abstract class PurchaseRepository {
   });
 
   /// Post purchase (update variant stocks and costs)
-  Future<void> postPurchase(int purchaseId);
+  Future<void> postPurchase(int purchaseId, {int? actorUserId});
 
   /// Void purchase (reverse stock if posted)
-  Future<void> voidPurchase(int purchaseId);
+  Future<void> voidPurchase(int purchaseId, {int? actorUserId});
 
   /// Edit a posted purchase by voiding the original and creating a new one.
   /// Returns the new purchase ID.
@@ -108,7 +112,7 @@ abstract class PurchaseRepository {
   });
 
   /// Delete purchase (only if draft)
-  Future<int> deletePurchase(int purchaseId);
+  Future<int> deletePurchase(int purchaseId, {int? actorUserId});
 
   /// Update purchase status
   Future<bool> updatePurchaseStatus(int purchaseId, String status);
@@ -180,6 +184,9 @@ abstract class PurchaseRepository {
     /// Optional structured refund legs. Pending cheques are allocations, not
     /// settled cash; an unallocated remainder stays on the supplier account.
     List<CheckoutPaymentAllocation> settlementAllocations = const [],
+
+    /// Explicit actor for delegated LAN operations.
+    int? actorUserId,
   });
 
   /// Post purchase return (update variant stock).
@@ -190,10 +197,11 @@ abstract class PurchaseRepository {
   Future<void> postPurchaseReturn(
     int returnId, {
     bool allowNegativeStock = false,
+    int? actorUserId,
   });
 
   /// Void purchase return (reverse stock if posted)
-  Future<void> voidPurchaseReturn(int returnId);
+  Future<void> voidPurchaseReturn(int returnId, {int? actorUserId});
 
   // ==================== PURCHASE PAYMENTS ====================
 

@@ -12,7 +12,7 @@ void main() {
   });
 
   test(
-    '10112 to 10115 preserves data and installs receipt and recall provenance',
+    '10112 to 10119 preserves data and installs transfer provenance and ownership intent',
     () async {
       final schema = await verifier.schemaAt(10112);
       addTearDown(schema.close);
@@ -44,7 +44,7 @@ void main() {
       ''');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10115);
+      await verifier.migrateAndValidate(db, 10119);
       addTearDown(db.close);
 
       expect(
@@ -91,6 +91,17 @@ void main() {
           )
           .get();
       expect(consumptionColumns, hasLength(1));
+      final ownershipColumns = await db
+          .customSelect(
+            "SELECT name FROM pragma_table_info('warehouse_transfer_lines') "
+            "WHERE name IN ('requested_owned_quantity',"
+            "'requested_consignment_quantity') ORDER BY name",
+          )
+          .get();
+      expect(ownershipColumns.map((row) => row.read<String>('name')).toList(), [
+        'requested_consignment_quantity',
+        'requested_owned_quantity',
+      ]);
       final recallTables = await db
           .customSelect(
             "SELECT name FROM sqlite_master WHERE type='table' "
@@ -108,7 +119,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        10115,
+        10119,
       );
     },
   );

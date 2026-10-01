@@ -7,12 +7,14 @@ class UserCard extends StatelessWidget {
   final UserEntity user;
   final VoidCallback? onTap;
   final VoidCallback? onToggleActive;
+  final VoidCallback? onDelete;
 
   const UserCard({
     super.key,
     required this.user,
     this.onTap,
     this.onToggleActive,
+    this.onDelete,
   });
 
   Color _roleColor(UserRole role) {
@@ -25,6 +27,8 @@ class UserCard extends StatelessWidget {
         return Colors.indigo;
       case UserRole.cashier:
         return Colors.green;
+      case UserRole.warehouseClerk:
+        return Colors.deepOrange;
       case UserRole.salesperson:
         return Colors.teal;
     }
@@ -40,6 +44,8 @@ class UserCard extends StatelessWidget {
         return Icons.account_balance_outlined;
       case UserRole.cashier:
         return Icons.point_of_sale_outlined;
+      case UserRole.warehouseClerk:
+        return Icons.inventory_2_outlined;
       case UserRole.salesperson:
         return Icons.storefront_outlined;
     }
@@ -55,6 +61,8 @@ class UserCard extends StatelessWidget {
         return 'users.role_accountant'.tr();
       case UserRole.cashier:
         return 'users.role_cashier'.tr();
+      case UserRole.warehouseClerk:
+        return 'users.role_warehouse_clerk'.tr();
       case UserRole.salesperson:
         return 'users.role_salesperson'.tr();
     }
@@ -196,6 +204,9 @@ class UserCard extends StatelessWidget {
                     case 'toggle':
                       onToggleActive?.call();
                       break;
+                    case 'delete':
+                      onDelete?.call();
+                      break;
                   }
                 },
                 itemBuilder: (context) => [
@@ -235,6 +246,24 @@ class UserCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onDelete != null)
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: colorScheme.error,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'users.delete'.tr(),
+                            style: TextStyle(color: colorScheme.error),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ],

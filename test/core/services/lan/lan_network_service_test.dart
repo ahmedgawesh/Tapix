@@ -16,11 +16,95 @@ import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/settings_dao.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
 import 'package:tapix/core/services/lan/lan_network_service.dart';
+import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/core/services/localization_service.dart';
 import 'package:tapix/features/auth/data/services/lan_master_auth_gateway.dart';
 import 'package:tapix/features/auth/data/services/password_service.dart';
 import 'package:tapix/features/auth/data/services/permission_service.dart';
 import 'package:tapix/features/auth/domain/entities/permission_constants.dart';
+
+class _FakeBranchEnrollmentGateway implements LanBranchEnrollmentGateway {
+  final requests = <LanBranchWriterActivationRequest>[];
+
+  @override
+  Future<LanBranchWriterBinding> activateWriter(
+    LanBranchWriterActivationRequest request,
+  ) async {
+    if (request.secret != 'valid-branch-secret') {
+      throw StateError('rejected');
+    }
+    requests.add(request);
+    return const LanBranchWriterBinding(
+      organizationId: '11111111-1111-4111-8111-111111111111',
+      coordinatorBranchId: '22222222-2222-4222-8222-222222222222',
+      branchId: '33333333-3333-4333-8333-333333333333',
+      warehouseId: '44444444-4444-4444-8444-444444444444',
+      coordinatorDatabaseId: '55555555-5555-4555-8555-555555555555',
+      accountingCurrencyCode: 'USD',
+      taxPolicy: {
+        'enabled': true,
+        'salesRateBps': 1400,
+        'purchaseRateBps': 1400,
+        'inclusivePricing': false,
+        'registrationNumber': '',
+      },
+      syncAccessToken: 'test-sync-token-01234567890123456789012345678901',
+    );
+  }
+}
+
+class _FakeBranchSyncGateway implements LanBranchSyncGateway {
+  final pushed = <Map<String, Object?>>[];
+  final acknowledged = <String>[];
+  late Map<String, Object?> outbound;
+  String? remoteDatabaseId;
+  String? accessToken;
+  var pulled = false;
+
+  @override
+  Future<LanBranchSyncPushResult> push(
+    LanBranchSyncAuth auth,
+    List<Map<String, Object?>> events,
+  ) async {
+    remoteDatabaseId = auth.remoteDatabaseId;
+    accessToken = auth.accessToken;
+    pushed.addAll(events);
+    return LanBranchSyncPushResult(
+      acceptedEventIds: events
+          .map((event) => event['eventId']!.toString())
+          .toList(),
+      nextExpectedSequence: events.length + 1,
+    );
+  }
+
+  @override
+  Future<LanBranchSyncPullResult> pull(
+    LanBranchSyncAuth auth, {
+    int limit = 50,
+  }) async {
+    if (pulled) {
+      return const LanBranchSyncPullResult(
+        leaseToken: 'empty-lease',
+        events: [],
+      );
+    }
+    pulled = true;
+    return LanBranchSyncPullResult(
+      leaseToken: 'coordinator-lease',
+      events: [outbound],
+    );
+  }
+
+  @override
+  Future<void> acknowledge(
+    LanBranchSyncAuth auth, {
+    required String leaseToken,
+    required List<String> eventIds,
+  }) async {
+    expect(leaseToken, 'coordinator-lease');
+    acknowledged.addAll(eventIds);
+  }
+}
 
 void main() {
   late AppDatabase masterDb;
@@ -34,7 +118,7 @@ void main() {
     required String username,
     required String password,
     required String role,
-  }) {
+  }) async {
     final now = DateTime.now();
     return masterDb
         .into(masterDb.users)
@@ -43,14 +127,26 @@ void main() {
             username: username,
             passwordHash: PasswordService().hashPassword(password),
             role: role,
+            globalLocationAccess: const Value(true),
             createdAt: now,
             updatedAt: now,
           ),
         );
   }
 
+  Future<void> issueEnrollment({
+    LanDeviceKind kind = LanDeviceKind.pointOfSale,
+  }) async {
+    final scope = await LocalBranchScope.read(masterDb);
+    await master.createDeviceEnrollment(
+      warehouseId: scope.warehouseId,
+      deviceKind: kind,
+    );
+  }
+
   Future<void> pairClient([String name = 'Test cashier']) async {
     await master.startMaster(port: 0);
+    await issueEnrollment();
     final result = await client.pairWithMaster(
       host: '127.0.0.1',
       port: master.snapshot.port,
@@ -69,7 +165,7 @@ void main() {
     bool authorizeDevice = true,
   }) async {
     final http = HttpClient();
-    final fingerprint = master.snapshot.pairingCode!.split(':').last;
+    final fingerprint = master.masterTlsFingerprint!;
     http.badCertificateCallback = (certificate, host, port) =>
         sha256.convert(certificate.der).toString() == fingerprint;
     try {
@@ -197,6 +293,244 @@ void main() {
   });
 
   test(
+    'configured independent branch automatically serves dependent devices',
+    () async {
+      await client.stop();
+      final settings = SettingsDao(clientDb);
+      await settings.saveSetting(
+        'lan.branch_sync.enrollment_id.v1',
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      );
+      await settings.saveSetting('lan.mode', LanMode.standalone.name);
+      await settings.saveSetting('lan.port', '0');
+      final local = await LocalBranchScope.read(clientDb);
+      const otherBranch = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      await clientDb
+          .into(clientDb.businessBranches)
+          .insert(
+            BusinessBranchesCompanion.insert(
+              id: otherBranch,
+              organizationId: local.organizationId,
+              code: 'OTHER-BRANCH',
+            ),
+          );
+      await clientDb
+          .into(clientDb.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+              organizationId: local.organizationId,
+              branchId: otherBranch,
+              code: 'OTHER-WH',
+            ),
+          );
+
+      client = LanNetworkService(settings);
+      await client.initialize();
+
+      expect(client.snapshot.mode, LanMode.master);
+      expect(client.snapshot.status, LanConnectionStatus.online);
+      expect(client.snapshot.port, greaterThan(0));
+      final assignable = await client.getMasterAssignableWarehouses();
+      expect(assignable, isNotEmpty);
+      expect(assignable.every((row) => row.branchId == local.branchId), isTrue);
+    },
+  );
+
+  test(
+    'independent branch activation uses pinned TLS without becoming cashier client',
+    () async {
+      await master.stop();
+      final enrollment = _FakeBranchEnrollmentGateway();
+      master = LanNetworkService(
+        SettingsDao(masterDb),
+        authGateway: LanMasterAuthGatewayImpl(
+          database: masterDb,
+          permissionService: PermissionService(),
+          auditLogService: AuditLogService(masterDb),
+        ),
+        businessGateway: businessGateway,
+        branchEnrollmentGateway: enrollment,
+        localizationService: masterLocalization,
+      );
+      await master.initialize();
+      await master.startMaster(port: 0);
+      final fingerprint = master.masterTlsFingerprint!;
+      final remote = await LocalBranchScope.read(clientDb);
+
+      final rejected = await client.activateIndependentBranchWriter(
+        host: '127.0.0.1',
+        port: master.snapshot.port,
+        coordinatorFingerprint: fingerprint,
+        enrollmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        secret: 'wrong',
+        remoteDatabaseId: remote.databaseId,
+      );
+      expect(rejected.success, isFalse);
+      expect(rejected.message, 'branch_enrollment_rejected');
+      expect(enrollment.requests, isEmpty);
+
+      final activated = await client.activateIndependentBranchWriter(
+        host: '127.0.0.1',
+        port: master.snapshot.port,
+        coordinatorFingerprint: fingerprint,
+        enrollmentId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        secret: 'valid-branch-secret',
+        remoteDatabaseId: remote.databaseId,
+      );
+      expect(activated.success, isTrue, reason: activated.message);
+      expect(
+        activated.binding?.branchId,
+        '33333333-3333-4333-8333-333333333333',
+      );
+      expect(enrollment.requests, hasLength(1));
+      expect(enrollment.requests.single.remoteDatabaseId, remote.databaseId);
+      expect(client.snapshot.mode, LanMode.standalone);
+    },
+  );
+
+  test(
+    'independent branch exchanges and acknowledges events over pinned TLS',
+    () async {
+      await master.stop();
+      final gateway = _FakeBranchSyncGateway();
+      master = LanNetworkService(
+        SettingsDao(masterDb),
+        authGateway: LanMasterAuthGatewayImpl(
+          database: masterDb,
+          permissionService: PermissionService(),
+          auditLogService: AuditLogService(masterDb),
+        ),
+        businessGateway: businessGateway,
+        branchSyncGateway: gateway,
+        localizationService: masterLocalization,
+      );
+      await master.initialize();
+      await master.startMaster(port: 0);
+      final fingerprint = master.masterTlsFingerprint!;
+      final clientScope = await LocalBranchScope.read(clientDb);
+      final coordinatorDatabaseId = (await LocalBranchScope.read(
+        masterDb,
+      )).databaseId;
+      const coordinatorBranchId = '88888888-8888-4888-8888-888888888888';
+      const relayedDatabaseId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const relayedBranchId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const enrollmentId = '99999999-9999-4999-8999-999999999999';
+      const token = 'network-sync-token-012345678901234567890123456789';
+      final store = OfflineSyncEventStore(clientDb);
+      await store.registerDeliveryPeer(
+        targetDatabaseId: coordinatorDatabaseId,
+        organizationId: clientScope.organizationId,
+        branchId: coordinatorBranchId,
+      );
+      await store.enrollSource(
+        sourceDatabaseId: coordinatorDatabaseId,
+        organizationId: clientScope.organizationId,
+        branchId: coordinatorBranchId,
+      );
+      final localEvent = await store.transaction(
+        (transaction) => transaction.append(
+          eventType: 'sale.posted.v1',
+          aggregateType: 'sale',
+          aggregateId: 'local-network-sale',
+          payload: const {'totalMinor': 1250},
+        ),
+      );
+      final draft = SyncEventEnvelope(
+        eventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        sourceDatabaseId: relayedDatabaseId,
+        organizationId: clientScope.organizationId,
+        branchId: relayedBranchId,
+        sequence: 1,
+        eventType: 'sale.posted.v1',
+        aggregateType: 'sale',
+        aggregateId: 'coordinator-sale',
+        contractVersion: 1,
+        payload: const {'totalMinor': 800},
+        occurredAt: DateTime.utc(2026, 9, 28, 12),
+        eventHash: '',
+      );
+      gateway.outbound = SyncEventEnvelope(
+        eventId: draft.eventId,
+        sourceDatabaseId: draft.sourceDatabaseId,
+        organizationId: draft.organizationId,
+        branchId: draft.branchId,
+        sequence: draft.sequence,
+        eventType: draft.eventType,
+        aggregateType: draft.aggregateType,
+        aggregateId: draft.aggregateId,
+        contractVersion: draft.contractVersion,
+        payload: draft.payload,
+        occurredAt: draft.occurredAt,
+        eventHash: OfflineSyncTransaction.eventHashFor(draft),
+      ).toJson();
+      final settings = SettingsDao(clientDb);
+      await settings.saveSetting('lan.branch_sync.host.v1', '127.0.0.1');
+      await settings.saveSetting(
+        'lan.branch_sync.port.v1',
+        master.snapshot.port.toString(),
+      );
+      await settings.saveSetting(
+        'lan.branch_sync.coordinator_fingerprint.v1',
+        fingerprint,
+      );
+      await settings.saveSetting(
+        'lan.branch_sync.enrollment_id.v1',
+        enrollmentId,
+      );
+      await settings.saveSetting(
+        'lan.branch_sync.coordinator_database_id.v1',
+        coordinatorDatabaseId,
+      );
+      await const FlutterSecureStorage().write(
+        key: 'lan.branch_sync.token.v1.$enrollmentId',
+        value: token,
+      );
+
+      final result = await client.synchronizeIndependentBranchOnce();
+
+      expect(result.uploaded, 1);
+      expect(result.downloaded, 1);
+      expect(gateway.remoteDatabaseId, clientScope.databaseId);
+      expect(gateway.accessToken, token);
+      expect(gateway.pushed.single['eventId'], localEvent.eventId);
+      expect(gateway.acknowledged, [draft.eventId]);
+      final relayedSource = await clientDb
+          .customSelect(
+            'SELECT branch_id,next_sequence FROM sync_source_checkpoints '
+            'WHERE source_database_id=?',
+            variables: [Variable.withString(relayedDatabaseId)],
+          )
+          .getSingle();
+      expect(relayedSource.read<String>('branch_id'), relayedBranchId);
+      expect(relayedSource.read<int>('next_sequence'), 2);
+      expect(
+        await clientDb
+            .customSelect(
+              'SELECT COUNT(*) AS n FROM sync_remote_event_projections',
+            )
+            .map((row) => row.read<int>('n'))
+            .getSingle(),
+        1,
+      );
+      expect(
+        await clientDb
+            .customSelect(
+              'SELECT state FROM sync_outbox_deliveries '
+              'WHERE target_database_id=? AND event_id=?',
+              variables: [
+                Variable.withString(coordinatorDatabaseId),
+                Variable.withString(localEvent.eventId),
+              ],
+            )
+            .map((row) => row.read<String>('state'))
+            .getSingle(),
+        'delivered',
+      );
+    },
+  );
+
+  test(
     'checkout balance and points require a paired authenticated cashier',
     () async {
       await pairClient();
@@ -291,6 +625,7 @@ void main() {
     'master rejects a wrong code then pairs and authenticates a client device',
     () async {
       await master.startMaster(port: 0);
+      await issueEnrollment();
 
       expect(master.snapshot.mode, LanMode.master);
       expect(master.snapshot.status, LanConnectionStatus.online);
@@ -300,7 +635,7 @@ void main() {
       final rejected = await client.pairWithMaster(
         host: '127.0.0.1',
         port: master.snapshot.port,
-        pairingCode: '000000:${master.snapshot.pairingCode!.split(':').last}',
+        pairingCode: '000000:${master.masterTlsFingerprint!}',
         deviceName: 'Test cashier',
       );
       expect(rejected.success, isFalse);
@@ -331,7 +666,7 @@ void main() {
         host: '127.0.0.1',
         port: master.snapshot.port,
         pairingCode: correctCode,
-        deviceName: 'Test cashier',
+        deviceName: 'كاشير فرع القاهرة',
       );
 
       expect(paired.success, isTrue, reason: paired.message);
@@ -340,7 +675,7 @@ void main() {
       expect(client.snapshot.status, LanConnectionStatus.paired);
       expect(master.snapshot.pairedDevices, 1);
       expect(master.snapshot.connectedDevices, 1);
-      expect(master.snapshot.pairingCode, isNot(correctCode));
+      expect(master.snapshot.pairingCode, isNull);
       expect(await client.testConnection(), isTrue);
 
       final audit = await masterDb.select(masterDb.auditLogs).get();
@@ -512,6 +847,207 @@ void main() {
   );
 
   test(
+    'master assigns a paired device to an active warehouse and scopes business requests',
+    () async {
+      final ownerId = await addMasterUser(
+        username: 'warehouse-owner',
+        password: 'owner-secret',
+        role: 'owner',
+      );
+      final scope = await LocalBranchScope.read(masterDb);
+      const secondaryId = 'abababab-abab-4bab-8bab-abababababab';
+      await masterDb
+          .into(masterDb.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: secondaryId,
+              organizationId: scope.organizationId,
+              branchId: scope.branchId,
+              code: 'BACK',
+              name: const Value('Back warehouse'),
+            ),
+          );
+      await pairClient('Back register');
+
+      final options = await master.getMasterAssignableWarehouses();
+      expect(options.map((value) => value.id), contains(secondaryId));
+      final device = master.getMasterDevices().single;
+      expect(
+        await master.assignMasterDeviceWarehouse(
+          deviceId: device.id,
+          warehouseId: secondaryId,
+          actorUserId: ownerId,
+          actorUsername: 'warehouse-owner',
+        ),
+        isTrue,
+      );
+      expect(master.getMasterDevices().single.warehouseId, secondaryId);
+      expect(master.getMasterDevices().single.warehouseName, 'Back warehouse');
+
+      final session = await rawLogin();
+      final catalog = await rawRequest(path: '/v1/catalog', userToken: session);
+      expect(catalog.status, 200);
+      expect(businessGateway.lastWarehouseId, secondaryId);
+      expect(await client.testConnection(), isTrue);
+      expect(client.snapshot.assignedWarehouseId, secondaryId);
+      expect(client.snapshot.assignedWarehouseName, 'Back warehouse');
+
+      await expectLater(
+        master.assignMasterDeviceWarehouse(
+          deviceId: device.id,
+          warehouseId: scope.warehouseId,
+          actorUserId: ownerId,
+          actorUsername: 'warehouse-owner',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'device_location_requires_logout',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'location-bound invitation enrolls a device in another branch permanently',
+    () async {
+      final scope = await LocalBranchScope.read(masterDb);
+      const branchId = 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd';
+      const warehouseId = 'dededede-dede-4ede-8ede-dededededede';
+      await masterDb
+          .into(masterDb.businessBranches)
+          .insert(
+            BusinessBranchesCompanion.insert(
+              id: branchId,
+              organizationId: scope.organizationId,
+              code: 'CAIRO',
+              name: const Value('Cairo branch'),
+            ),
+          );
+      await masterDb
+          .into(masterDb.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: warehouseId,
+              organizationId: scope.organizationId,
+              branchId: branchId,
+              code: 'CAIRO-MAIN',
+              name: const Value('Cairo warehouse'),
+            ),
+          );
+
+      await master.startMaster(port: 0);
+      await master.createDeviceEnrollment(
+        warehouseId: warehouseId,
+        deviceKind: LanDeviceKind.warehouseWorkstation,
+      );
+      final paired = await client.pairWithMaster(
+        host: '127.0.0.1',
+        port: master.snapshot.port,
+        pairingCode: master.snapshot.pairingCode!,
+        deviceName: '',
+      );
+      expect(paired.success, isTrue, reason: paired.message);
+      expect(client.snapshot.assignedBranchId, branchId);
+      expect(client.snapshot.assignedWarehouseId, warehouseId);
+      expect(client.snapshot.assignedBranchName, 'Cairo branch');
+      expect(client.snapshot.assignedWarehouseName, 'Cairo warehouse');
+      expect(
+        client.snapshot.assignedDeviceKind,
+        LanDeviceKind.warehouseWorkstation,
+      );
+      expect(master.snapshot.pairingCode, isNull);
+
+      final device = master.getMasterDevices().single;
+      expect(device.name, 'Cairo warehouse');
+      expect(device.scopeVerified, isTrue);
+      expect(device.branchId, branchId);
+      expect(device.warehouseId, warehouseId);
+      expect(device.deviceKind, LanDeviceKind.warehouseWorkstation);
+
+      final session = await rawLogin();
+      final catalog = await rawRequest(path: '/v1/catalog', userToken: session);
+      expect(catalog.status, 200);
+      expect(businessGateway.lastWarehouseId, warehouseId);
+      expect(await client.testConnection(), isTrue);
+    },
+  );
+
+  test(
+    'coordinator does not enroll a workstation into a delegated branch writer',
+    () async {
+      final ownerId = await addMasterUser(
+        username: 'delegation-owner',
+        password: 'owner-secret',
+        role: 'owner',
+      );
+      final scope = await LocalBranchScope.read(masterDb);
+      const branchId = '11111111-2222-4333-8444-555555555555';
+      const warehouseId = '66666666-7777-4888-8999-aaaaaaaaaaaa';
+      const remoteDatabaseId = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
+      await masterDb
+          .into(masterDb.businessBranches)
+          .insert(
+            BusinessBranchesCompanion.insert(
+              id: branchId,
+              organizationId: scope.organizationId,
+              code: 'DELEGATED',
+              name: const Value('Delegated branch'),
+            ),
+          );
+      await masterDb
+          .into(masterDb.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: warehouseId,
+              organizationId: scope.organizationId,
+              branchId: branchId,
+              code: 'DELEGATED-WH',
+              name: const Value('Delegated warehouse'),
+            ),
+          );
+      await masterDb.customStatement(
+        '''INSERT INTO lan_branch_enrollments(
+          enrollment_id,organization_id,branch_id,warehouse_id,
+          coordinator_database_id,secret_hash,status,issued_by,expires_at,
+          remote_database_id,activated_at)
+          VALUES(?,?,?,?,?,?,'active',?,?,?,?)''',
+        [
+          '12345678-1234-4234-8234-123456789abc',
+          scope.organizationId,
+          branchId,
+          warehouseId,
+          scope.databaseId,
+          'a' * 64,
+          ownerId,
+          DateTime.now().toUtc().add(const Duration(days: 1)).toIso8601String(),
+          remoteDatabaseId,
+          DateTime.now().toUtc().toIso8601String(),
+        ],
+      );
+
+      await master.startMaster(port: 0);
+      final options = await master.getMasterAssignableWarehouses();
+      expect(options.map((value) => value.id), isNot(contains(warehouseId)));
+      await expectLater(
+        master.createDeviceEnrollment(
+          warehouseId: warehouseId,
+          deviceKind: LanDeviceKind.warehouseWorkstation,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'branch_server_required',
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
     'two paired clients keep isolated sessions and revocation affects only its device',
     () async {
       final ownerId = await addMasterUser(
@@ -537,6 +1073,7 @@ void main() {
       final secondClient = LanNetworkService(SettingsDao(secondDb));
       try {
         await secondClient.initialize();
+        await issueEnrollment();
         final secondPair = await secondClient.pairWithMaster(
           host: '127.0.0.1',
           port: master.snapshot.port,
@@ -1233,6 +1770,72 @@ void main() {
     );
   });
 
+  test('manager uses the complete remote purchase invoice lifecycle', () async {
+    await addMasterUser(
+      username: 'manager-purchase-invoices',
+      password: 'manager-secret',
+      role: 'manager',
+    );
+    await pairClient('Purchase invoice terminal');
+    expect(
+      (await client.loginToMaster(
+        username: 'manager-purchase-invoices',
+        password: 'manager-secret',
+      )).success,
+      isTrue,
+    );
+
+    final page = await client.fetchRemotePurchases();
+    expect(page.purchases.single.purchaseNumber, 'PI-202608-0071');
+    expect(page.stats.postedCount, 1);
+    final details = await client.fetchRemotePurchaseDetails(71);
+    expect(details.lines.single.productName, 'Milk');
+    expect(details.lines.single.quantity, 1000);
+    expect(details.supplierBalanceCents, 800);
+
+    const request = LanPurchaseRequest(
+      idempotencyKey: 'lan-purchase-invoice-safe-retry-001',
+      supplierId: 6,
+      paymentMethod: 'credit',
+      paidAmountCents: 0,
+      lines: [
+        LanPurchaseLineRequest(
+          productId: 7,
+          quantity: 1000,
+          unitCostCents: 400,
+        ),
+      ],
+    );
+    final created = await client.submitRemotePurchase(request);
+    final replayed = await client.submitRemotePurchase(request);
+    expect(created.purchaseId, 71);
+    expect(created.status, 'draft');
+    expect(created.duplicate, isFalse);
+    expect(replayed.purchaseId, created.purchaseId);
+    expect(replayed.duplicate, isTrue);
+    expect(businessGateway.createdPurchaseKeys, hasLength(1));
+    expect(businessGateway.lastPurchaseRequest?.lines.single.quantity, 1000);
+
+    final posted = await client.postRemotePurchase(created.purchaseId);
+    final replayedPost = await client.postRemotePurchase(created.purchaseId);
+    expect(posted.status, 'posted');
+    expect(posted.duplicate, isFalse);
+    expect(replayedPost.duplicate, isTrue);
+
+    final impact = await client.fetchRemotePurchaseVoidImpact(
+      created.purchaseId,
+    );
+    expect(impact['hasBlockers'], isFalse);
+    final voided = await client.voidRemotePurchase(created.purchaseId);
+    final replayedVoid = await client.voidRemotePurchase(created.purchaseId);
+    expect(voided.status, 'voided');
+    expect(replayedVoid.duplicate, isTrue);
+    expect(businessGateway.voidedPurchaseId, created.purchaseId);
+
+    expect(await client.deleteRemotePurchase(created.purchaseId), isTrue);
+    expect(businessGateway.deletedPurchaseId, created.purchaseId);
+  });
+
   test(
     'accountant can inspect purchase returns but cannot create or void them',
     () async {
@@ -1392,6 +1995,26 @@ void main() {
   );
 
   test(
+    'refresh recreates a stored master listener after it was lost',
+    () async {
+      await master.startMaster(port: 0);
+      final port = master.snapshot.port;
+
+      // Mirrors a master that failed during startup while its network interface
+      // was unavailable: the selected role survives, but no listener exists.
+      await master.stop();
+      expect(master.snapshot.mode, LanMode.master);
+
+      await master.refreshMasterNetwork();
+
+      expect(master.snapshot.mode, LanMode.master);
+      expect(master.snapshot.status, LanConnectionStatus.online);
+      expect(master.snapshot.port, port);
+      expect(master.snapshot.pairingCode, isNull);
+    },
+  );
+
+  test(
     'standalone mode closes the master listener and persists the role',
     () async {
       await master.startMaster(port: 0);
@@ -1493,11 +2116,11 @@ void main() {
   });
   test('certificate identity survives recreating the master service', () async {
     await pairClient();
-    final fingerprint = master.snapshot.pairingCode!.split(':').last;
+    final fingerprint = master.masterTlsFingerprint!;
     await master.stop();
     master = LanNetworkService(SettingsDao(masterDb));
     await master.initialize();
-    expect(master.snapshot.pairingCode!.split(':').last, fingerprint);
+    expect(master.masterTlsFingerprint!, fingerprint);
     expect(await client.testConnection(), isTrue);
   });
 
@@ -1573,10 +2196,12 @@ void main() {
       final token = await rawLogin();
       final response = await rawRequest(userToken: token);
       expect(response.status, 200);
-      expect(
-        response.body['scope'],
-        (await LocalBranchScope.read(masterDb)).toJson(),
-      );
+      final localScope = await LocalBranchScope.read(masterDb);
+      final expectedScope = <String, Object?>{
+        ...localScope.toJson(),
+        'allowedWarehouseIds': [localScope.warehouseId],
+      };
+      expect(response.body['scope'], expectedScope);
       final health = await rawRequest(
         path: '/v1/health',
         authorizeDevice: false,
@@ -1816,6 +2441,8 @@ void main() {
             productId: 7,
             variantId: 70,
             quantity: 2,
+            ownedQuantity: 0,
+            consignmentQuantity: 2,
           ),
         ],
       );
@@ -1824,6 +2451,11 @@ void main() {
       expect(created.id, replayed.id);
       expect(transferGateway.createCalls, 2);
       expect(transferGateway.uniqueCreateKeys, hasLength(1));
+      expect(transferGateway.lastCreateRequest?.lines.single.ownedQuantity, 0);
+      expect(
+        transferGateway.lastCreateRequest?.lines.single.consignmentQuantity,
+        2,
+      );
 
       final dispatched = await client.dispatchRemoteWarehouseTransfer(
         transferId: created.id,
@@ -1853,7 +2485,22 @@ void main() {
   );
 }
 
-class _FakeBusinessGateway implements LanMasterBusinessGateway {
+class _FakeBusinessGateway
+    implements
+        LanMasterBusinessGateway,
+        LanWarehouseScopedBusinessGateway,
+        LanPurchaseInvoiceGateway {
+  String? lastWarehouseId;
+
+  @override
+  Future<T> runForWarehouse<T>(
+    String warehouseId,
+    Future<T> Function() operation,
+  ) async {
+    lastWarehouseId = warehouseId;
+    return operation();
+  }
+
   @override
   Future<LanProductStockSourceSnapshot> fetchInventoryStockSources({
     required int productId,
@@ -1900,6 +2547,8 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   final Set<String> createdAdjustmentReturnKeys = <String>{};
   final Set<String> createdPurchaseReturnKeys = <String>{};
   final Set<String> createdPurchaseAdjustmentReturnKeys = <String>{};
+  final Set<String> createdPurchaseKeys = <String>{};
+  final Set<int> postedPurchaseIds = <int>{};
   LanCashierShiftSnapshot? currentShift;
   LanCashierShiftSnapshot? lastClosedShift;
   LanSaleRequest? lastRequest;
@@ -1907,10 +2556,158 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   LanSaleAdjustmentReturnRequest? lastAdjustmentReturnRequest;
   LanPurchaseReturnRequest? lastPurchaseReturnRequest;
   LanPurchaseAdjustmentReturnRequest? lastPurchaseAdjustmentReturnRequest;
+  LanPurchaseRequest? lastPurchaseRequest;
   String? productImagePath;
   int? voidedSaleId;
   int? voidedPurchaseReturnId;
+  int? voidedPurchaseId;
+  int? deletedPurchaseId;
   LanBusinessException? nextSaleError;
+
+  LanPurchaseSummary _purchaseSummary({String status = 'posted'}) {
+    final now = DateTime.utc(2026, 8, 25);
+    return LanPurchaseSummary(
+      id: 71,
+      purchaseNumber: 'PI-202608-0071',
+      supplierId: 6,
+      supplierName: 'Network Supplier',
+      supplierPhone: '01000000000',
+      subtotalCents: 800,
+      discountCents: 0,
+      taxCents: 0,
+      totalCents: 800,
+      paidAmountCents: 0,
+      currencyId: 1,
+      status: status,
+      paymentMethod: 'credit',
+      purchaseDate: now,
+      taxInclusiveAtPost: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  @override
+  Future<LanPurchasesPage> fetchPurchases({required int limit}) async =>
+      LanPurchasesPage(
+        purchases: [_purchaseSummary()],
+        stats: const LanPurchaseDashboardStats(
+          totalCount: 1,
+          draftCount: 0,
+          postedCount: 1,
+          totalPayableCents: 800,
+          totalPaidCents: 0,
+          overdueCount: 0,
+          returnsCount: 0,
+        ),
+        productSearchTerms: const {
+          71: ['Milk', 'MILK-1'],
+        },
+        currencyCode: 'USD',
+        currencySymbol: r'$',
+        currencyDecimalDigits: 2,
+        currencySymbolAfter: false,
+      );
+
+  @override
+  Future<LanPurchaseDetails?> fetchPurchaseDetails({
+    required int purchaseId,
+  }) async {
+    if (purchaseId != 71) return null;
+    return LanPurchaseDetails(
+      purchase: _purchaseSummary(),
+      lines: [
+        LanPurchaseDetailLine(
+          id: 88,
+          purchaseId: 71,
+          productId: 7,
+          productName: 'Milk',
+          supplierIdentityRequested: false,
+          quantity: 1000,
+          quantityScale: 1000,
+          measurementType: 'volume',
+          unitCostCents: 400,
+          subtotalCents: 400,
+          discountCents: 0,
+          taxCents: 0,
+          totalCents: 400,
+          createdAt: DateTime.utc(2026, 8, 25),
+        ),
+      ],
+      supplierBalanceCents: 800,
+      currencyCode: 'USD',
+      currencySymbol: r'$',
+      currencyDecimalDigits: 2,
+      currencySymbolAfter: false,
+    );
+  }
+
+  @override
+  Future<LanPurchaseResult> createPurchase({
+    required LanRemoteUser actor,
+    required LanPurchaseRequest request,
+  }) async {
+    lastPurchaseRequest = request;
+    final duplicate = !createdPurchaseKeys.add(request.idempotencyKey);
+    return LanPurchaseResult(
+      purchaseId: 71,
+      purchaseNumber: 'PI-202608-0071',
+      subtotalCents: 400,
+      discountCents: 0,
+      taxCents: 0,
+      totalCents: 400,
+      paidAmountCents: 0,
+      status: 'draft',
+      duplicate: duplicate,
+    );
+  }
+
+  @override
+  Future<LanPurchaseResult> postPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    final duplicate = !postedPurchaseIds.add(purchaseId);
+    return LanPurchaseResult(
+      purchaseId: purchaseId,
+      purchaseNumber: 'PI-202608-0071',
+      subtotalCents: 400,
+      discountCents: 0,
+      taxCents: 0,
+      totalCents: 400,
+      paidAmountCents: 0,
+      status: 'posted',
+      duplicate: duplicate,
+    );
+  }
+
+  @override
+  Future<LanPurchaseVoidResult> voidPurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    final duplicate = voidedPurchaseId == purchaseId;
+    voidedPurchaseId = purchaseId;
+    return LanPurchaseVoidResult(
+      purchaseId: purchaseId,
+      status: 'voided',
+      duplicate: duplicate,
+    );
+  }
+
+  @override
+  Future<bool> deletePurchase({
+    required LanRemoteUser actor,
+    required int purchaseId,
+  }) async {
+    deletedPurchaseId = purchaseId;
+    return true;
+  }
+
+  @override
+  Future<Map<String, dynamic>?> inspectPurchaseVoidImpact({
+    required int purchaseId,
+  }) async => {'hasBlockers': false, 'purchaseId': purchaseId};
 
   @override
   Future<LanSalesPage> fetchSales({required int limit}) async {
@@ -2557,6 +3354,7 @@ class _FakeWarehouseTransferBusinessGateway extends _FakeBusinessGateway
   final Set<String> uniqueCreateKeys = {};
   int createCalls = 0;
   LanRemoteUser? lastActor;
+  LanWarehouseTransferCreateRequest? lastCreateRequest;
   LanWarehouseTransferDocument? document;
 
   @override
@@ -2617,6 +3415,7 @@ class _FakeWarehouseTransferBusinessGateway extends _FakeBusinessGateway
     required LanWarehouseTransferCreateRequest request,
   }) async {
     lastActor = actor;
+    lastCreateRequest = request;
     createCalls++;
     uniqueCreateKeys.add(request.requestKey);
     return document ??= LanWarehouseTransferDocument(

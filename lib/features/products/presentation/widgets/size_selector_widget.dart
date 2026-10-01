@@ -46,7 +46,7 @@ class SizeSelectorWidget extends StatelessWidget {
               initialValue: effectiveSelected,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'product_form_variantSize'.tr(),
+                labelText: 'product_form.variantSize'.tr(),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(LucideIcons.ruler),
               ),

@@ -32,7 +32,7 @@ class ColorPickerWidget extends StatelessWidget {
               initialValue: selectedColorId,
               isExpanded: true,
               decoration: InputDecoration(
-                labelText: 'product_form_variantColor'.tr(),
+                labelText: 'product_form.variantColor'.tr(),
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(LucideIcons.palette),
               ),

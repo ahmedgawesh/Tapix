@@ -10,6 +10,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../domain/repositories/supplier_repository.dart';
@@ -320,7 +321,10 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                   scaffoldMessenger.showSnackBar(
                     SnackBar(
                       content: Text(
-                        failure?.messageKey.tr() ?? error.toString(),
+                        error is SharedCatalogueAuthorityRequired
+                            ? 'business_locations.catalogue_authority.write_denied'
+                                  .tr()
+                            : failure?.messageKey.tr() ?? 'common.error'.tr(),
                       ),
                     ),
                   );
@@ -360,7 +364,13 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       if (!context.mounted) return;
       final failure = SupplierIdentityException.fromError(error);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text((failure?.messageKey ?? 'common.error').tr())),
+        SnackBar(
+          content: Text(
+            error is SharedCatalogueAuthorityRequired
+                ? 'business_locations.catalogue_authority.write_denied'.tr()
+                : (failure?.messageKey ?? 'common.error').tr(),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isChangingActive = false);
@@ -1815,6 +1825,18 @@ class _TransactionTile extends StatelessWidget {
         color = Colors.red;
         typeLabel = 'suppliers.transaction_adj_return_reversal'.tr();
         break;
+      case 'consignment_ownership_conversion':
+        icon = Icons.swap_horiz_rounded;
+        color = Colors.amber.shade700;
+        typeLabel = 'suppliers.transaction_consignment_ownership_conversion'
+            .tr();
+        break;
+      case 'consignment_ownership_conversion_void':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel =
+            'suppliers.transaction_consignment_ownership_conversion_void'.tr();
+        break;
       default:
         icon = LucideIcons.fileText;
         color = theme.colorScheme.outline;
@@ -1849,11 +1871,15 @@ class _TransactionTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        typeLabel,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: color,
+                      Flexible(
+                        child: Text(
+                          typeLabel,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
                         ),
                       ),
                       if (transaction.transactionType == 'discount' &&
@@ -1889,9 +1915,9 @@ class _TransactionTile extends StatelessWidget {
                         fontSize: 10,
                       ),
                     ),
-                  if (transaction.description != null)
+                  if (_localizedDescription() case final description?)
                     Text(
-                      transaction.description!,
+                      description,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -1933,6 +1959,51 @@ class _TransactionTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String? _localizedDescription() {
+    final raw = transaction.description?.trim();
+    if (raw == null || raw.isEmpty) return null;
+
+    String replaceKnownPrefix(String prefix, String translationKey) {
+      if (!raw.toLowerCase().startsWith(prefix.toLowerCase())) return raw;
+      final suffix = raw.substring(prefix.length).trimLeft();
+      final translated = translationKey.tr();
+      return suffix.isEmpty ? translated : '$translated $suffix';
+    }
+
+    switch (transaction.transactionType) {
+      case 'consignment_ownership_conversion':
+        return replaceKnownPrefix(
+          'Consignment ownership conversion',
+          'suppliers.description_consignment_ownership_conversion',
+        );
+      case 'consignment_ownership_conversion_void':
+        final converted = replaceKnownPrefix(
+          'Consignment ownership conversion void',
+          'suppliers.description_consignment_ownership_conversion_void',
+        );
+        if (converted != raw) return converted;
+        return replaceKnownPrefix(
+          'Voided consignment ownership conversion',
+          'suppliers.description_consignment_ownership_conversion_void',
+        );
+      case 'purchase':
+        return replaceKnownPrefix('Purchase', 'suppliers.description_purchase');
+      case 'payment':
+        if (raw.startsWith('Issued cheque')) return raw;
+        return replaceKnownPrefix(
+          'Payment for',
+          'suppliers.description_payment_for',
+        );
+      case 'return':
+        return replaceKnownPrefix(
+          'Purchase return',
+          'suppliers.description_purchase_return',
+        );
+      default:
+        return raw;
+    }
   }
 
   void _showTxReceiptOptions(BuildContext context) {

@@ -553,7 +553,7 @@ class _FormView extends StatelessWidget {
 
   void _showProductPicker(BuildContext context) async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final page = await lan.fetchRemoteCatalog(limit: 200, management: true);
       final rows = <AdjReturnLineItem>[];
       for (final product in page.products) {
@@ -907,7 +907,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
   void _showSupplierPicker(BuildContext context) async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final suppliers = await lan.fetchRemoteSuppliers(limit: 200);
       if (!context.mounted) return;
       final selected = await showModalBottomSheet<LanSupplierSummary>(

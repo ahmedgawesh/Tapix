@@ -144,6 +144,7 @@ class _AccountingHealthView extends StatelessWidget {
                         ? 'reports.all_entries_balanced'.tr()
                         : reconciliation.issues
                               .where((i) => i.contains('Unbalanced'))
+                              .map((issue) => _localizeIssue(issue, cs))
                               .join('\n'),
                   ),
 
@@ -164,7 +165,7 @@ class _AccountingHealthView extends StatelessWidget {
                       color: colorScheme.errorContainer,
                       child: ListTile(
                         leading: Icon(Icons.error, color: colorScheme.error),
-                        title: Text(issue),
+                        title: Text(_localizeIssue(issue, cs)),
                       ),
                     ),
                   ),
@@ -177,6 +178,86 @@ class _AccountingHealthView extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String _localizeIssue(String issue, CurrencyService cs) {
+    RegExpMatch? match = RegExp(
+      r'^Trial balance mismatch: Debits=(-?\d+), Credits=(-?\d+)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_trial_balance_mismatch'.tr(
+        args: [
+          cs.formatCents(int.parse(match.group(1)!)),
+          cs.formatCents(int.parse(match.group(2)!)),
+        ],
+      );
+    }
+
+    match = RegExp(r'^Unbalanced posted entry: (.+)$').firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_unbalanced_entry'.tr(args: [match.group(1)!]);
+    }
+
+    match = RegExp(
+      r'^Invalid account type for (.*?) \((.*)\): (.*)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_invalid_account_type'.tr(
+        args: [match.group(1)!, match.group(2)!, match.group(3)!],
+      );
+    }
+
+    match = RegExp(
+      r'^Account type mismatch for (.*?) \((.*)\): expected (.*), found (.*)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_account_type_mismatch'.tr(
+        args: [
+          match.group(1)!,
+          match.group(2)!,
+          match.group(3)!,
+          match.group(4)!,
+        ],
+      );
+    }
+
+    match = RegExp(
+      r'^Accounts receivable mismatch: GL(?:\(journal_lines\)|\(1100\+customer 1030\))=(-?\d+), Customers=(-?\d+)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_receivables_mismatch'.tr(
+        args: [
+          cs.formatCents(int.parse(match.group(1)!)),
+          cs.formatCents(int.parse(match.group(2)!)),
+        ],
+      );
+    }
+
+    match = RegExp(
+      r'^Accounts payable mismatch: GL(?:\(journal_lines\)|\(2000-supplier 1030\))=(-?\d+), Suppliers=(-?\d+)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_payables_mismatch'.tr(
+        args: [
+          cs.formatCents(int.parse(match.group(1)!)),
+          cs.formatCents(int.parse(match.group(2)!)),
+        ],
+      );
+    }
+
+    match = RegExp(
+      r'^Inventory mismatch: GL\(journal_lines\)=(-?\d+), Σ\(stock×cost\)=(-?\d+)$',
+    ).firstMatch(issue);
+    if (match != null) {
+      return 'reports.issue_inventory_mismatch'.tr(
+        args: [
+          cs.formatCents(int.parse(match.group(1)!)),
+          cs.formatCents(int.parse(match.group(2)!)),
+        ],
+      );
+    }
+
+    return issue;
   }
 
   String _formatTimestamp(DateTime ts) {

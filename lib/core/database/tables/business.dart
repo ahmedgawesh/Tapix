@@ -46,6 +46,17 @@ class BusinessWarehouses extends Table {
   TextColumn get branchId => text()();
   TextColumn get code => text().withLength(min: 1, max: 32)();
   TextColumn get name => text().withDefault(const Constant(''))();
+
+  /// A branch sales location is the branch's own sellable stock. Additional
+  /// warehouses are separate physical balances even when they belong to the
+  /// same branch.
+  TextColumn get locationKind => text()
+      .withDefault(const Constant('warehouse'))
+      .check(
+        const CustomExpression<bool>(
+          "location_kind IN ('branch_store','warehouse')",
+        ),
+      )();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 

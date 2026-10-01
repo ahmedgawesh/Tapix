@@ -349,6 +349,16 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
                           icon: const Icon(LucideIcons.shoppingCart),
                           label: Text('settings.network.open_sale'.tr()),
                         ),
+                      if (permissions.contains('handle_returns')) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _working
+                              ? null
+                              : () => context.push('/sales/returns'),
+                          icon: const Icon(LucideIcons.undo2),
+                          label: Text('sales.returns'.tr()),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       OutlinedButton.icon(
                         onPressed: _working ? null : _switchUser,

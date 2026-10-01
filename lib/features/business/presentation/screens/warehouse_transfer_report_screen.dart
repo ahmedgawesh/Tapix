@@ -6,9 +6,16 @@ import '../../../reports/presentation/widgets/warehouse_report_context.dart';
 import '../../data/warehouse_transfer_reporting_service.dart';
 
 class WarehouseTransferReportScreen extends StatefulWidget {
-  const WarehouseTransferReportScreen({super.key, this.service});
+  const WarehouseTransferReportScreen({
+    super.key,
+    this.service,
+    this.warehouseIds,
+    this.scopeLabel,
+  });
 
   final WarehouseTransferReportingService? service;
+  final Set<String>? warehouseIds;
+  final String? scopeLabel;
 
   @override
   State<WarehouseTransferReportScreen> createState() =>
@@ -36,11 +43,15 @@ class _WarehouseTransferReportScreenState
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final warehouse = WarehouseReportContext.maybeOf(
+    final contextWarehouse = WarehouseReportContext.maybeOf(
       context,
     )?.scope.warehouseId;
-    if (warehouse != null && warehouse != _loadedWarehouse) {
-      _loadedWarehouse = warehouse;
+    final configured = widget.warehouseIds;
+    final reportKey = configured == null || configured.isEmpty
+        ? contextWarehouse
+        : (configured.toList()..sort()).join(',');
+    if (reportKey != null && reportKey != _loadedWarehouse) {
+      _loadedWarehouse = reportKey;
       _load();
     }
   }
@@ -81,15 +92,27 @@ class _WarehouseTransferReportScreenState
         _range.end.month,
         _range.end.day + 1,
       );
-      final data = await _service.report(
-        warehouseId: warehouse,
-        from: start,
-        toExclusive: end,
-        direction: _direction,
-        ownership: _ownership,
-        status: _status,
-        search: _search.text,
-      );
+      final configured = widget.warehouseIds;
+      final data = configured == null || configured.isEmpty
+          ? await _service.report(
+              warehouseId: warehouse,
+              from: start,
+              toExclusive: end,
+              direction: _direction,
+              ownership: _ownership,
+              status: _status,
+              search: _search.text,
+            )
+          : await _service.reportForWarehouses(
+              warehouseIds: configured,
+              reportId: warehouse,
+              from: start,
+              toExclusive: end,
+              direction: _direction,
+              ownership: _ownership,
+              status: _status,
+              search: _search.text,
+            );
       if (mounted) setState(() => _data = data);
     } catch (_) {
       if (mounted) setState(() => _error = 'warehouse_transfer_report.failed');
@@ -138,7 +161,7 @@ class _WarehouseTransferReportScreenState
                       padding: const EdgeInsets.all(16),
                       children: [
                         _ReportHeader(
-                          warehouse: warehouse.label,
+                          warehouse: widget.scopeLabel ?? warehouse.label,
                           range: _range,
                           busy: _busy,
                           onRange: _chooseRange,

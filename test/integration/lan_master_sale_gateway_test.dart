@@ -1,6 +1,12 @@
+import 'package:tapix/core/pricing/line_item_pricing_engine.dart';
+import 'package:tapix/core/pricing/invoice_pricing_engine.dart';
+import 'package:tapix/core/pricing/discount.dart';
+import 'package:tapix/core/money/money.dart';
 import 'package:tapix/features/sales/presentation/bloc/sale_adj_return_form_bloc.dart';
 import 'package:tapix/core/services/business/branch_tax_policy.dart';
 import 'package:tapix/core/services/business/branch_tax_policy_store.dart';
+import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
+import 'package:tapix/core/services/business/warehouse_operation_scope.dart';
 import 'package:tapix/core/pricing/pricing_preview_fingerprint.dart';
 import 'package:tapix/features/purchases/presentation/bloc/purchase_adj_return_form_bloc.dart';
 import 'package:tapix/core/database/migrations/business_warehouse_stock.dart';
@@ -9,6 +15,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tapix/core/database/app_database.dart';
@@ -37,6 +44,9 @@ import 'package:tapix/features/sales/data/repositories/sale_repository_impl.dart
 import 'package:tapix/features/sales/data/services/lan_master_business_gateway.dart';
 import 'package:tapix/features/sales/domain/repositories/sale_repository.dart';
 import 'package:tapix/features/settings/data/services/app_settings_service.dart';
+import 'package:tapix/features/business/data/warehouse_setup_service.dart';
+import 'package:tapix/features/business/data/warehouse_transfer_repository.dart';
+import 'package:tapix/core/services/business/warehouse_transfer_preflight.dart';
 
 void main() {
   late AppDatabase db;
@@ -97,6 +107,7 @@ void main() {
       promotions: PromotionRepository(db, AuditLogService(db)),
       featureGate: _ProFeatureGate(),
       auditLog: AuditLogService(db),
+      warehouseEntitlement: const _ProWarehouseEntitlement(),
     );
 
     final currency = await (db.select(
@@ -171,6 +182,437 @@ void main() {
     permissions: const ['create_sales', 'process_sales'],
   );
 
+  test(
+    'remote loyalty is tender: tax, replay, partial return, void and GL agree',
+    () async {
+      await settings.patch(
+        (s) =>
+            s.copyWith(enableTaxCalculations: true, taxInclusivePricing: false),
+      );
+      await (db.update(
+        db.products,
+      )..where((p) => p.id.equals(productId))).write(
+        const ProductsCompanion(
+          isTaxable: Value(true),
+          salesTaxRateBps: Value(1000),
+        ),
+      );
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Loyalty customer',
+              currencyId: currencyId,
+              loyaltyPointsBalance: const Value(1000),
+            ),
+          );
+      await db.delete(db.loyaltySettingsTable).go();
+      await db
+          .into(db.loyaltySettingsTable)
+          .insert(
+            LoyaltySettingsTableCompanion.insert(
+              isEnabled: const Value(true),
+              allowPointsRedemption: const Value(true),
+              minRedemptionPoints: const Value(1),
+              maxRedemptionPercentBps: const Value(10000),
+              pointValueCents: const Value(1),
+              pointsPerCurrencyUnit: const Value(0),
+            ),
+          );
+      final checkout = await gateway.fetchCustomerCheckout(customerId);
+      expect(checkout.redemptionEnabled, isTrue);
+      expect(checkout.pointsBalance, 1000);
+      final request = LanSaleRequest(
+        idempotencyKey: 'loyalty-checkout-atomic-001',
+        customerId: customerId,
+        paymentMethod: 'cash',
+        paidAmountCents: 560,
+        loyaltyPointsToRedeem: 100,
+        loyaltyValueCents: 100,
+        lines: [
+          LanSaleLineRequest(
+            productId: productId,
+            variantId: variantId,
+            quantity: 500,
+          ),
+        ],
+      );
+      final result = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest.fromJson(request.toJson()),
+      );
+      expect(result.totalCents, 660);
+      expect(result.taxCents, 60);
+      expect(result.paidAmountCents, 660);
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        900,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.balanceCents,
+        Decimal.zero,
+      );
+      final payments = await db.saleDao.getSalePayments(result.saleId);
+      expect(
+        payments.singleWhere((p) => p.paymentMethod == 'loyalty').amountCents,
+        Decimal.fromInt(100),
+      );
+      final replay = await gateway.createSale(actor: actor(), request: request);
+      expect(replay.duplicate, isTrue);
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        900,
+      );
+      final shift = await shiftService.getOpenShiftForUser(actorId);
+      final summary = await shiftService.getSummary(shift!.shift.id);
+      expect(summary.cashReceivedCents, 560);
+      final item = (await db.saleDao.getSaleItems(result.saleId)).single;
+      final returned = await gateway.createSaleReturn(
+        actor: actor(),
+        request: LanSaleReturnRequest(
+          idempotencyKey: 'loyalty-partial-return-001',
+          saleId: result.saleId,
+          dispositionType: 'restock',
+          refundMethod: 'cash',
+          lines: [LanSaleReturnLineRequest(saleItemId: item.id, quantity: 250)],
+        ),
+      );
+      expect(returned.totalCents, 330);
+      expect(
+        (await shiftService.getSummary(shift.shift.id)).cashRefundedCents,
+        280,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        950,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.balanceCents,
+        Decimal.zero,
+      );
+      final cashRefund = await db
+          .customSelect(
+            "SELECT SUM(amount_cents) AS amount FROM customer_transactions WHERE transaction_type='return_settlement_cash'",
+          )
+          .getSingle();
+      expect(cashRefund.data['amount'], 280);
+      await repository.voidSaleReturn(returned.returnId);
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        900,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.balanceCents,
+        Decimal.zero,
+      );
+      await repository.voidSale(result.saleId);
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        1000,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.balanceCents,
+        Decimal.zero,
+      );
+      final sums = await db
+          .customSelect(
+            'SELECT SUM(debit_cents) d,SUM(credit_cents) c FROM journal_entry_lines',
+          )
+          .getSingle();
+      expect(sums.data['d'], sums.data['c']);
+      final remainingGl = await db
+          .customSelect(
+            'SELECT account_id FROM journal_entry_lines GROUP BY account_id HAVING SUM(debit_cents) != SUM(credit_cents)',
+          )
+          .get();
+      expect(remainingGl, isEmpty);
+    },
+  );
+
+  test(
+    'stale loyalty balance rejects sale without stock, receipts or money changes',
+    () async {
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Insufficient points',
+              currencyId: currencyId,
+              loyaltyPointsBalance: const Value(50),
+            ),
+          );
+      await db.delete(db.loyaltySettingsTable).go();
+      await db
+          .into(db.loyaltySettingsTable)
+          .insert(
+            LoyaltySettingsTableCompanion.insert(
+              minRedemptionPoints: const Value(1),
+              pointValueCents: const Value(1),
+            ),
+          );
+      final stock = (await (db.select(
+        db.productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingle()).stockQuantity;
+      await expectLater(
+        gateway.createSale(
+          actor: actor(),
+          request: LanSaleRequest(
+            idempotencyKey: 'loyalty-stale-balance-001',
+            customerId: customerId,
+            paymentMethod: 'cash',
+            paidAmountCents: 500,
+            loyaltyPointsToRedeem: 100,
+            loyaltyValueCents: 100,
+            lines: [
+              LanSaleLineRequest(
+                productId: productId,
+                variantId: variantId,
+                quantity: 500,
+              ),
+            ],
+          ),
+        ),
+        throwsA(anything),
+      );
+      expect(await db.select(db.sales).get(), isEmpty);
+      expect(
+        (await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle()).stockQuantity,
+        stock,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        50,
+      );
+    },
+  );
+
+  test(
+    'payment failure rolls back points and allows same request retry',
+    () async {
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Rollback points',
+              currencyId: currencyId,
+              loyaltyPointsBalance: const Value(1000),
+            ),
+          );
+      await db.delete(db.loyaltySettingsTable).go();
+      await db
+          .into(db.loyaltySettingsTable)
+          .insert(
+            LoyaltySettingsTableCompanion.insert(
+              minRedemptionPoints: const Value(1),
+              pointValueCents: const Value(1),
+              pointsPerCurrencyUnit: const Value(0),
+            ),
+          );
+      final request = LanSaleRequest(
+        idempotencyKey: 'loyalty-payment-failure-001',
+        customerId: customerId,
+        paymentMethod: 'cash',
+        paidAmountCents: 500,
+        loyaltyPointsToRedeem: 100,
+        loyaltyValueCents: 100,
+        lines: [
+          LanSaleLineRequest(
+            productId: productId,
+            variantId: variantId,
+            quantity: 500,
+          ),
+        ],
+      );
+      await db.customStatement(
+        "CREATE TRIGGER fail_loyalty_payment BEFORE INSERT ON sale_payments WHEN NEW.payment_method='loyalty' BEGIN SELECT RAISE(ABORT,'test payment failure'); END",
+      );
+      await expectLater(
+        gateway.createSale(actor: actor(), request: request),
+        throwsA(anything),
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        1000,
+      );
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.balanceCents,
+        Decimal.zero,
+      );
+      expect(await db.select(db.sales).get(), isEmpty);
+      expect(await db.select(db.loyaltyPointTransactions).get(), isEmpty);
+      expect(
+        (await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle()).stockQuantity,
+        5000,
+      );
+      await db.customStatement('DROP TRIGGER fail_loyalty_payment');
+      final saved = await gateway.createSale(actor: actor(), request: request);
+      expect(saved.duplicate, isFalse);
+      expect(
+        (await db.customerDao.getCustomer(customerId))!.loyaltyPointsBalance,
+        900,
+      );
+    },
+  );
+
+  for (final inclusive in [false, true]) {
+    for (final invoiceDiscount in [false, true]) {
+      test(
+        'cashier discount tax and partial return parity inclusive=$inclusive invoice=$invoiceDiscount',
+        () async {
+          await settings.patch(
+            (s) => s.copyWith(
+              enableTaxCalculations: true,
+              taxInclusivePricing: inclusive,
+            ),
+          );
+          await (db.update(
+            db.products,
+          )..where((p) => p.id.equals(productId))).write(
+            const ProductsCompanion(
+              isTaxable: Value(true),
+              salesTaxRateBps: Value(1000),
+            ),
+          );
+          final preview = InvoicePricingEngine.compute(
+            InvoicePricingInput(
+              lines: [
+                LineItemPricingInput(
+                  unitPrice: Money.fromCents(1200),
+                  quantity: 500,
+                  quantityScale: 1000,
+                  discount: invoiceDiscount
+                      ? Discount.none
+                      : Discount.fixed(Money.fromCents(60)),
+                  isTaxable: true,
+                  productTaxRateBps: 1000,
+                ),
+              ],
+              overallDiscount: invoiceDiscount
+                  ? Discount.fixed(Money.fromCents(60))
+                  : Discount.none,
+              enableTaxCalculations: true,
+              defaultTaxRateBps: 0,
+              taxInclusivePricing: inclusive,
+            ),
+          );
+          final request = LanSaleRequest(
+            idempotencyKey: 'cashier-discount-tax-$inclusive-$invoiceDiscount',
+            paymentMethod: 'cash',
+            overallDiscountCents: invoiceDiscount ? 60 : 0,
+            expectedPricingFingerprint: pricingPreviewFingerprint(
+              preview,
+              taxInclusive: inclusive,
+            ),
+            lines: [
+              LanSaleLineRequest(
+                productId: productId,
+                variantId: variantId,
+                quantity: 500,
+                discountType: invoiceDiscount ? 'none' : 'fixed',
+                discountValue: invoiceDiscount ? 0 : 60,
+              ),
+            ],
+          );
+          final created = await gateway.createSale(
+            actor: actor(),
+            request: LanSaleRequest.fromJson(request.toJson()),
+          );
+          expect(created.totalCents, inclusive ? 540 : 594);
+          expect(created.taxCents, inclusive ? 49 : 54);
+          final item = await (db.select(
+            db.saleItems,
+          )..where((i) => i.saleId.equals(created.saleId))).getSingle();
+          expect(
+            item.itemDiscountAtPostCents!.toBigInt().toInt(),
+            invoiceDiscount ? 0 : 60,
+          );
+          expect(
+            item.invoiceDiscountAtPostCents!.toBigInt().toInt(),
+            invoiceDiscount ? 60 : 0,
+          );
+          final retry = await gateway.createSale(
+            actor: actor(),
+            request: request,
+          );
+          expect(retry.saleId, created.saleId);
+          expect(retry.duplicate, isTrue);
+          final returned = await gateway.createSaleReturn(
+            actor: actor(),
+            request: LanSaleReturnRequest(
+              idempotencyKey:
+                  'partial-discount-return-$inclusive-$invoiceDiscount',
+              saleId: created.saleId,
+              dispositionType: 'restock',
+              refundMethod: 'cash',
+              lines: [
+                LanSaleReturnLineRequest(saleItemId: item.id, quantity: 250),
+              ],
+            ),
+          );
+          expect(returned.totalCents, inclusive ? 270 : 297);
+          final journal = await db
+              .customSelect(
+                'SELECT COALESCE(SUM(debit_cents),0) AS d, COALESCE(SUM(credit_cents),0) AS c FROM journal_entry_lines',
+              )
+              .getSingle();
+          expect(journal.data['d'], journal.data['c']);
+        },
+      );
+    }
+  }
+  test(
+    'changed cashier pricing rejects before stock or journals change',
+    () async {
+      final beforeStock = (await (db.select(
+        db.productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingle()).stockQuantity;
+      final beforeEntries = (await db.select(db.journalEntries).get()).length;
+      await expectLater(
+        gateway.createSale(
+          actor: actor(),
+          request: LanSaleRequest(
+            idempotencyKey: 'stale-cashier-price-001',
+            paymentMethod: 'cash',
+            expectedPricingFingerprint: 'outdated-preview',
+            lines: [
+              LanSaleLineRequest(
+                productId: productId,
+                variantId: variantId,
+                quantity: 500,
+              ),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (e) => e.code,
+            'code',
+            'pricing_preview_changed',
+          ),
+        ),
+      );
+      expect((await db.select(db.sales).get()), isEmpty);
+      expect((await db.select(db.journalEntries).get()).length, beforeEntries);
+      expect(
+        (await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle()).stockQuantity,
+        beforeStock,
+      );
+      expect(
+        (await db
+            .customSelect(
+              "SELECT * FROM lan_request_receipts WHERE idempotency_key='stale-cashier-price-001'",
+            )
+            .get()),
+        isEmpty,
+      );
+    },
+  );
   Future<void> expectPayloadConflict(Future<Object?> Function() action) async {
     await expectLater(
       action(),
@@ -582,6 +1024,355 @@ void main() {
       expect(product.quantityScale, 1000);
       expect(product.stockQuantity, 5000);
       expect(product.toJson(), isNot(contains('costCents')));
+    },
+  );
+
+  test(
+    'warehouse-scoped gateway reads and posts only the assigned warehouse',
+    () async {
+      await BranchCurrencyPolicyStore(db).bind('USD');
+      final primary = await db
+          .customSelect(
+            'SELECT organization_id,branch_id,warehouse_id FROM business_contexts WHERE id=1',
+          )
+          .getSingle();
+      const secondaryId = 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd';
+      await db
+          .into(db.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: secondaryId,
+              organizationId: primary.read<String>('organization_id'),
+              branchId: primary.read<String>('branch_id'),
+              code: 'LAN-BACK',
+              name: const Value('LAN back warehouse'),
+            ),
+          );
+      await db
+          .into(db.businessWarehouseStocks)
+          .insert(
+            BusinessWarehouseStocksCompanion.insert(
+              warehouseId: secondaryId,
+              variantId: variantId,
+              quantity: const Value(2000),
+              unitCostCents: const Value(800),
+            ),
+          );
+
+      final catalog = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.fetchCatalog(query: 'fabric', offset: 0, limit: 20),
+      );
+      expect(catalog.products.single.stockQuantity, 2000);
+
+      final created = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.createSale(
+          actor: actor(),
+          request: const LanSaleRequest(
+            idempotencyKey: 'secondary-warehouse-sale-001',
+            paymentMethod: 'cash',
+            paidAmountCents: 600,
+            lines: [
+              LanSaleLineRequest(productId: 1, variantId: 1, quantity: 500),
+            ],
+          ),
+        ),
+      );
+      expect(created.duplicate, isFalse);
+      final secondary =
+          await (db.select(db.businessWarehouseStocks)..where(
+                (row) =>
+                    row.warehouseId.equals(secondaryId) &
+                    row.variantId.equals(variantId),
+              ))
+              .getSingle();
+      final primaryStock =
+          await (db.select(db.businessWarehouseStocks)..where(
+                (row) =>
+                    row.warehouseId.equals(
+                      primary.read<String>('warehouse_id'),
+                    ) &
+                    row.variantId.equals(variantId),
+              ))
+              .getSingle();
+      expect(secondary.quantity, 1500);
+      expect(primaryStock.quantity, 5000);
+      final location = await db
+          .customSelect(
+            "SELECT warehouse_id FROM business_document_locations WHERE source_table='sales' AND source_id=?",
+            variables: [Variable.withInt(created.saleId)],
+          )
+          .getSingle();
+      expect(location.read<String>('warehouse_id'), secondaryId);
+    },
+  );
+
+  test(
+    'warehouse purchase draft posts once and linked return reverses the same branch supplier balance',
+    () async {
+      await BranchCurrencyPolicyStore(db).bind('USD');
+      await settings.patch(
+        (current) => current.copyWith(enablePharmacyFeatures: true),
+      );
+      await db.customStatement(
+        "UPDATE products SET inventory_tracking_type='batch_expiry', "
+        "costing_method='fifo' WHERE id=?",
+        [productId],
+      );
+      final pharmacy = PharmacyDao(db);
+      final ingredient = await pharmacy.saveActiveIngredient(
+        canonicalName: 'Remote purchase ingredient',
+      );
+      await pharmacy.saveMedicineProfile(
+        MedicineProfileDraft(
+          productId: productId,
+          dosageForm: 'suspension',
+          administrationRoute: 'oral',
+          ingredients: [
+            MedicineIngredientDraft(
+              ingredientId: ingredient.id,
+              value: '10',
+              unit: 'mg',
+              basisValue: '1',
+              basisUnit: 'ml',
+            ),
+          ],
+        ),
+      );
+      final supplierId = await db
+          .into(db.suppliers)
+          .insert(
+            SuppliersCompanion.insert(
+              name: 'Warehouse invoice supplier',
+              currencyId: currencyId,
+            ),
+          );
+      final context = await db.select(db.businessContexts).getSingle();
+      const secondaryId = 'bcbcbcbc-bcbc-4bcb-8bcb-bcbcbcbcbcbc';
+      await db
+          .into(db.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: secondaryId,
+              organizationId: context.organizationId,
+              branchId: context.branchId,
+              code: 'PURCHASE-WH',
+              name: const Value('Purchase warehouse'),
+            ),
+          );
+      await db
+          .into(db.businessWarehouseStocks)
+          .insert(
+            BusinessWarehouseStocksCompanion.insert(
+              warehouseId: secondaryId,
+              variantId: variantId,
+              quantity: const Value(0),
+              unitCostCents: const Value(800),
+            ),
+          );
+
+      Future<LanPurchaseResult> create(
+        String key, {
+        DateTime? expiryDate,
+        String? lot,
+      }) => gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.createPurchase(
+          actor: actor(),
+          request: LanPurchaseRequest(
+            idempotencyKey: key,
+            supplierId: supplierId,
+            paymentMethod: 'credit',
+            paidAmountCents: 0,
+            lines: [
+              LanPurchaseLineRequest(
+                productId: productId,
+                variantId: variantId,
+                quantity: 500,
+                unitCostCents: 800,
+                expiryDate: expiryDate,
+                manufacturerLotNumber: lot,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await expectLater(
+        create('warehouse-purchase-missing-expiry-001'),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'purchase_expiry_required',
+          ),
+        ),
+      );
+      await expectLater(
+        create(
+          'warehouse-purchase-missing-lot-001',
+          expiryDate: DateTime.utc(2027, 12, 31),
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'manufacturer_lot_required',
+          ),
+        ),
+      );
+
+      const key = 'warehouse-purchase-valid-001';
+      final created = await create(
+        key,
+        expiryDate: DateTime.utc(2027, 12, 31),
+        lot: 'LOT-LAN-001',
+      );
+      final replayedDraft = await create(
+        key,
+        expiryDate: DateTime.utc(2027, 12, 31),
+        lot: 'LOT-LAN-001',
+      );
+      expect(created.status, 'draft');
+      expect(created.totalCents, 400);
+      expect(replayedDraft.purchaseId, created.purchaseId);
+      expect(replayedDraft.duplicate, isTrue);
+
+      Future<BusinessWarehouseStock> stockAt(String warehouseId) =>
+          (db.select(db.businessWarehouseStocks)..where(
+                (row) =>
+                    row.warehouseId.equals(warehouseId) &
+                    row.variantId.equals(variantId),
+              ))
+              .getSingle();
+      Future<Supplier> supplier() => (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(supplierId))).getSingle();
+
+      expect((await stockAt(secondaryId)).quantity, 0);
+      expect((await stockAt(context.warehouseId)).quantity, 5000);
+      expect((await supplier()).balanceCents, Decimal.zero);
+      expect(
+        await gateway.fetchPurchaseDetails(purchaseId: created.purchaseId),
+        isNull,
+      );
+      await expectLater(
+        gateway.postPurchase(actor: actor(), purchaseId: created.purchaseId),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'purchase_not_found',
+          ),
+        ),
+      );
+
+      final posted = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.postPurchase(
+          actor: actor(),
+          purchaseId: created.purchaseId,
+        ),
+      );
+      final replayedPost = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.postPurchase(
+          actor: actor(),
+          purchaseId: created.purchaseId,
+        ),
+      );
+      expect(posted.status, 'posted');
+      expect(replayedPost.duplicate, isTrue);
+      expect((await stockAt(secondaryId)).quantity, 500);
+      expect((await stockAt(context.warehouseId)).quantity, 5000);
+      expect((await supplier()).balanceCents, Decimal.fromInt(400));
+
+      final details = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.fetchPurchaseDetails(purchaseId: created.purchaseId),
+      );
+      expect(details, isNotNull);
+      expect(details!.lines.single.quantity, 500);
+      expect(details.lines.single.quantityScale, 1000);
+      expect(details.lines.single.manufacturerLotNumber, 'LOT-LAN-001');
+      final lineExpiry = details.lines.single.expiryDate!;
+      expect(
+        (lineExpiry.year, lineExpiry.month, lineExpiry.day),
+        (2027, 12, 31),
+      );
+      final batch =
+          await (db.select(db.productBatches)..where(
+                (row) =>
+                    row.purchaseItemId.equals(details.lines.single.id) &
+                    row.warehouseId.equals(secondaryId),
+              ))
+              .getSingle();
+      expect(batch.manufacturerLotNumber, 'LOT-LAN-001');
+      final batchExpiry = batch.expiryDate!;
+      expect(
+        (batchExpiry.year, batchExpiry.month, batchExpiry.day),
+        (2027, 12, 31),
+      );
+      expect(batch.remainingQuantity, 500);
+
+      final list = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.fetchPurchases(limit: 20),
+      );
+      expect(
+        list.purchases.map((purchase) => purchase.id),
+        contains(created.purchaseId),
+      );
+      final primaryList = await gateway.fetchPurchases(limit: 20);
+      expect(
+        primaryList.purchases.map((purchase) => purchase.id),
+        isNot(contains(created.purchaseId)),
+      );
+
+      const returnKey = 'warehouse-purchase-return-001';
+      final returnRequest = LanPurchaseReturnRequest(
+        idempotencyKey: returnKey,
+        purchaseId: created.purchaseId,
+        dispositionType: 'restock',
+        refundMethod: 'credit',
+        lines: [
+          LanPurchaseReturnLineRequest(
+            purchaseItemId: details.lines.single.id,
+            quantity: 500,
+          ),
+        ],
+      );
+      final returned = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.createPurchaseReturn(
+          actor: actor(),
+          request: returnRequest,
+        ),
+      );
+      final replayedReturn = await gateway.runForWarehouse(
+        secondaryId,
+        () => gateway.createPurchaseReturn(
+          actor: actor(),
+          request: returnRequest,
+        ),
+      );
+      await expectLater(
+        gateway.createPurchaseReturn(actor: actor(), request: returnRequest),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'purchase_return_not_found',
+          ),
+        ),
+      );
+      expect(returned.totalCents, 400);
+      expect(replayedReturn.returnId, returned.returnId);
+      expect(replayedReturn.duplicate, isTrue);
+      expect((await stockAt(secondaryId)).quantity, 0);
+      expect((await stockAt(context.warehouseId)).quantity, 5000);
+      expect((await supplier()).balanceCents, Decimal.zero);
     },
   );
 
@@ -2003,160 +2794,203 @@ void main() {
   );
 
   test(
-    'remote linked purchase return preserves stock supplier balance and journal',
+    'invalid purchase dispositions fail before posting or reserving a request',
     () async {
-      final supplierId = await db
-          .into(db.suppliers)
-          .insert(
-            SuppliersCompanion.insert(
-              name: 'LAN return supplier',
-              currencyId: currencyId,
+      for (final sample in [
+        ('repair', 'credit', 'invalid_disposition'),
+        ('replace', 'cash', 'replacement_requires_credit'),
+        ('write_off', 'credit', 'supplier_write_off_reason_required'),
+      ]) {
+        await expectLater(
+          gateway.createPurchaseReturn(
+            actor: actor(),
+            request: LanPurchaseReturnRequest(
+              idempotencyKey: 'invalid-disposition-${sample.$1}',
+              purchaseId: 99999,
+              dispositionType: sample.$1,
+              refundMethod: sample.$2,
+              lines: const [
+                LanPurchaseReturnLineRequest(purchaseItemId: 1, quantity: 1),
+              ],
             ),
-          );
-      final purchaseId = await db
-          .into(db.purchases)
-          .insert(
-            PurchasesCompanion.insert(
-              purchaseNumber: 'PI-LAN-RETURN-001',
-              supplierId: supplierId,
-              subtotalCents: Decimal.fromInt(800),
-              taxCents: Decimal.zero,
-              totalCents: Decimal.fromInt(800),
-              paidAmountCents: Value(Decimal.zero),
-              currencyId: currencyId,
-              status: const Value('draft'),
-              paymentMethod: const Value('credit'),
-            ),
-          );
-      final purchaseItemId = await db
-          .into(db.purchaseItems)
-          .insert(
-            PurchaseItemsCompanion.insert(
-              purchaseId: purchaseId,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 1000,
-              unitCostCents: Decimal.fromInt(800),
-              subtotalCents: Decimal.fromInt(800),
-              totalCents: Decimal.fromInt(800),
-            ),
-          );
-      await db.purchaseDao.postPurchase(purchaseId);
-
-      final before = await (db.select(
-        db.productVariants,
-      )..where((row) => row.id.equals(variantId))).getSingle();
-      final returnable = await gateway.fetchReturnablePurchase(
-        purchaseId: purchaseId,
-      );
-      expect(returnable, isNotNull);
-      expect(returnable!.lines.single.availableQuantity, 1000);
-
-      const idempotencyKey = 'lan-linked-purchase-return-001';
-      final request = LanPurchaseReturnRequest(
-        idempotencyKey: idempotencyKey,
-        purchaseId: purchaseId,
-        dispositionType: 'restock',
-        refundMethod: 'credit',
-        lines: [
-          LanPurchaseReturnLineRequest(
-            purchaseItemId: purchaseItemId,
-            quantity: 500,
           ),
-        ],
-      );
-      final created = await gateway.createPurchaseReturn(
-        actor: actor(),
-        request: request,
-      );
-      final replayed = await gateway.createPurchaseReturn(
-        actor: actor(),
-        request: request,
-      );
-      await expectPayloadConflict(
-        () => gateway.createPurchaseReturn(
-          actor: actor(),
-          request: LanPurchaseReturnRequest(
-            idempotencyKey: idempotencyKey,
-            purchaseId: purchaseId,
-            dispositionType: 'restock',
-            refundMethod: 'credit',
-            lines: [
-              LanPurchaseReturnLineRequest(
-                purchaseItemId: purchaseItemId,
-                quantity: 400,
-              ),
-            ],
+          throwsA(
+            isA<LanBusinessException>().having(
+              (e) => e.code,
+              'code',
+              sample.$3,
+            ),
           ),
-        ),
-      );
-      expect(created.duplicate, isFalse);
-      expect(replayed.duplicate, isTrue);
-      expect(replayed.returnId, created.returnId);
-      expect(created.totalCents, 400);
-
-      final details = await gateway.fetchPurchaseReturnDetails(
-        returnId: created.returnId,
-        adjustment: false,
-      );
-      expect(details, isNotNull);
-      expect(details!.summary.purchaseNumber, 'PI-LAN-RETURN-001');
-      expect(details.lines.single.quantity, 500);
-      expect(details.lines.single.totalCents, 400);
-
-      final after = await (db.select(
-        db.productVariants,
-      )..where((row) => row.id.equals(variantId))).getSingle();
-      expect(after.stockQuantity, before.stockQuantity - 500);
-      final supplier = await (db.select(
-        db.suppliers,
-      )..where((row) => row.id.equals(supplierId))).getSingle();
-      expect(supplier.balanceCents, Decimal.fromInt(400));
-
-      final journalLines = await db
-          .customSelect(
-            'SELECT jl.debit_cents, jl.credit_cents '
-            'FROM journal_entry_lines jl '
-            'JOIN journal_entries je ON je.id = jl.journal_entry_id '
-            "WHERE je.source_table = 'purchase_returns' AND je.source_id = ?",
-            variables: [Variable.withInt(created.returnId)],
-          )
-          .get();
-      expect(journalLines, isNotEmpty);
-      final debits = journalLines.fold<int>(
-        0,
-        (sum, row) => sum + row.read<int>('debit_cents'),
-      );
-      final credits = journalLines.fold<int>(
-        0,
-        (sum, row) => sum + row.read<int>('credit_cents'),
-      );
-      expect(debits, credits);
-
-      await gateway.voidPurchaseReturn(
-        actor: actor(),
-        returnId: created.returnId,
-        adjustment: false,
-      );
-      await gateway.voidPurchaseReturn(
-        actor: actor(),
-        returnId: created.returnId,
-        adjustment: false,
-      );
-      final voided = await (db.select(
-        db.purchaseReturns,
-      )..where((row) => row.id.equals(created.returnId))).getSingle();
-      final restored = await (db.select(
-        db.productVariants,
-      )..where((row) => row.id.equals(variantId))).getSingle();
-      final restoredSupplier = await (db.select(
-        db.suppliers,
-      )..where((row) => row.id.equals(supplierId))).getSingle();
-      expect(voided.status, 'voided');
-      expect(restored.stockQuantity, before.stockQuantity);
-      expect(restoredSupplier.balanceCents, Decimal.fromInt(800));
+        );
+      }
+      expect(await db.select(db.purchaseReturns).get(), isEmpty);
     },
   );
+
+  for (final disposition in ['restock', 'replace', 'write_off']) {
+    test(
+      'remote $disposition purchase return preserves stock supplier balance and journal',
+      () async {
+        final supplierId = await db
+            .into(db.suppliers)
+            .insert(
+              SuppliersCompanion.insert(
+                name: 'LAN return supplier',
+                currencyId: currencyId,
+              ),
+            );
+        final purchaseId = await db
+            .into(db.purchases)
+            .insert(
+              PurchasesCompanion.insert(
+                purchaseNumber: 'PI-LAN-RETURN-001',
+                supplierId: supplierId,
+                subtotalCents: Decimal.fromInt(800),
+                taxCents: Decimal.zero,
+                totalCents: Decimal.fromInt(800),
+                paidAmountCents: Value(Decimal.zero),
+                currencyId: currencyId,
+                status: const Value('draft'),
+                paymentMethod: const Value('credit'),
+              ),
+            );
+        final purchaseItemId = await db
+            .into(db.purchaseItems)
+            .insert(
+              PurchaseItemsCompanion.insert(
+                purchaseId: purchaseId,
+                productId: productId,
+                variantId: Value(variantId),
+                quantity: 1000,
+                unitCostCents: Decimal.fromInt(800),
+                subtotalCents: Decimal.fromInt(800),
+                totalCents: Decimal.fromInt(800),
+              ),
+            );
+        await db.purchaseDao.postPurchase(purchaseId);
+
+        final before = await (db.select(
+          db.productVariants,
+        )..where((row) => row.id.equals(variantId))).getSingle();
+        final returnable = await gateway.fetchReturnablePurchase(
+          purchaseId: purchaseId,
+        );
+        expect(returnable, isNotNull);
+        expect(returnable!.lines.single.availableQuantity, 1000);
+
+        const idempotencyKey = 'lan-linked-purchase-return-001';
+        final request = LanPurchaseReturnRequest(
+          idempotencyKey: idempotencyKey,
+          purchaseId: purchaseId,
+          dispositionType: disposition,
+          reason: disposition == 'write_off'
+              ? 'Vendor approved disposal RMA-12'
+              : null,
+          refundMethod: 'credit',
+          lines: [
+            LanPurchaseReturnLineRequest(
+              purchaseItemId: purchaseItemId,
+              quantity: 500,
+            ),
+          ],
+        );
+        final created = await gateway.createPurchaseReturn(
+          actor: actor(),
+          request: request,
+        );
+        final replayed = await gateway.createPurchaseReturn(
+          actor: actor(),
+          request: request,
+        );
+        await expectPayloadConflict(
+          () => gateway.createPurchaseReturn(
+            actor: actor(),
+            request: LanPurchaseReturnRequest(
+              idempotencyKey: idempotencyKey,
+              purchaseId: purchaseId,
+              dispositionType: disposition,
+              reason: disposition == 'write_off'
+                  ? 'Vendor approved disposal RMA-12'
+                  : null,
+              refundMethod: 'credit',
+              lines: [
+                LanPurchaseReturnLineRequest(
+                  purchaseItemId: purchaseItemId,
+                  quantity: 400,
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(created.duplicate, isFalse);
+        expect(replayed.duplicate, isTrue);
+        expect(replayed.returnId, created.returnId);
+        expect(created.totalCents, 400);
+
+        final details = await gateway.fetchPurchaseReturnDetails(
+          returnId: created.returnId,
+          adjustment: false,
+        );
+        expect(details, isNotNull);
+        expect(details!.summary.purchaseNumber, 'PI-LAN-RETURN-001');
+        expect(details.summary.dispositionType, disposition);
+        expect(details.lines.single.quantity, 500);
+        expect(details.lines.single.totalCents, 400);
+
+        final after = await (db.select(
+          db.productVariants,
+        )..where((row) => row.id.equals(variantId))).getSingle();
+        expect(after.stockQuantity, before.stockQuantity - 500);
+        final supplier = await (db.select(
+          db.suppliers,
+        )..where((row) => row.id.equals(supplierId))).getSingle();
+        expect(supplier.balanceCents, Decimal.fromInt(400));
+
+        final journalLines = await db
+            .customSelect(
+              'SELECT jl.debit_cents, jl.credit_cents '
+              'FROM journal_entry_lines jl '
+              'JOIN journal_entries je ON je.id = jl.journal_entry_id '
+              "WHERE je.source_table = 'purchase_returns' AND je.source_id = ?",
+              variables: [Variable.withInt(created.returnId)],
+            )
+            .get();
+        expect(journalLines, isNotEmpty);
+        final debits = journalLines.fold<int>(
+          0,
+          (sum, row) => sum + row.read<int>('debit_cents'),
+        );
+        final credits = journalLines.fold<int>(
+          0,
+          (sum, row) => sum + row.read<int>('credit_cents'),
+        );
+        expect(debits, credits);
+
+        await gateway.voidPurchaseReturn(
+          actor: actor(),
+          returnId: created.returnId,
+          adjustment: false,
+        );
+        await gateway.voidPurchaseReturn(
+          actor: actor(),
+          returnId: created.returnId,
+          adjustment: false,
+        );
+        final voided = await (db.select(
+          db.purchaseReturns,
+        )..where((row) => row.id.equals(created.returnId))).getSingle();
+        final restored = await (db.select(
+          db.productVariants,
+        )..where((row) => row.id.equals(variantId))).getSingle();
+        final restoredSupplier = await (db.select(
+          db.suppliers,
+        )..where((row) => row.id.equals(supplierId))).getSingle();
+        expect(voided.status, 'voided');
+        expect(restored.stockQuantity, before.stockQuantity);
+        expect(restoredSupplier.balanceCents, Decimal.fromInt(800));
+      },
+    );
+  }
 
   for (final scenario in [
     (
@@ -3196,6 +4030,239 @@ void main() {
         'UPDATE product_variants SET stock_quantity = 0, cost_cents = 99999',
       );
     });
+    test(
+      'managed branch catalog creates only selected zero balances before use',
+      () async {
+        final context = await db.select(db.businessContexts).getSingle();
+        const branchId = '00000000-0000-4000-8000-000000000097';
+        const warehouseId = '00000000-0000-4000-8000-000000000098';
+        await db
+            .into(db.businessBranches)
+            .insert(
+              BusinessBranchesCompanion.insert(
+                id: branchId,
+                organizationId: context.organizationId,
+                code: 'MANAGED-BRANCH',
+                name: const Value('Managed branch'),
+              ),
+            );
+        await db
+            .into(db.businessWarehouses)
+            .insert(
+              BusinessWarehousesCompanion.insert(
+                id: warehouseId,
+                organizationId: context.organizationId,
+                branchId: branchId,
+                code: 'MANAGED-WH',
+                locationKind: const Value('branch_store'),
+              ),
+            );
+        final excludedProductId = await db
+            .into(db.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value('LAN-EXCLUDED-1'),
+                name: 'Excluded product',
+                costCents: Decimal.fromInt(250),
+                priceCents: Decimal.fromInt(400),
+                currencyId: Value(currencyId),
+              ),
+            );
+        final excludedVariantId = await db
+            .into(db.productVariants)
+            .insert(
+              ProductVariantsCompanion.insert(
+                productId: excludedProductId,
+                costCents: Decimal.fromInt(250),
+                priceCents: Decimal.fromInt(400),
+              ),
+            );
+        await db.customStatement(
+          '''INSERT INTO app_settings(key,value,description,updated_at)
+          VALUES(?,?,?,CURRENT_TIMESTAMP)''',
+          [
+            'lan.branch_catalogue.policy.v1.$branchId',
+            '{"version":1,"mode":"managed_assortment","categoryIds":[],"productIds":[$productId],"excludedProductIds":[]}',
+            'test policy',
+          ],
+        );
+
+        final page = await gateway.runForWarehouse(
+          warehouseId,
+          () => gateway.fetchCatalog(query: '', offset: 0, limit: 20),
+        );
+
+        expect(page.products.map((row) => row.id), [productId]);
+        expect(page.products.single.stockQuantity, 0);
+        expect(page.products.single.costCents, 800);
+        final selectedBalance =
+            await (db.select(db.businessWarehouseStocks)..where(
+                  (row) =>
+                      row.warehouseId.equals(warehouseId) &
+                      row.variantId.equals(variantId),
+                ))
+                .getSingle();
+        expect(selectedBalance.quantity, 0);
+        expect(selectedBalance.unitCostCents, 800);
+        expect(
+          await (db.select(db.businessWarehouseStocks)..where(
+                (row) =>
+                    row.warehouseId.equals(warehouseId) &
+                    row.variantId.equals(excludedVariantId),
+              ))
+              .getSingleOrNull(),
+          isNull,
+        );
+
+        final transferLocations = await gateway.fetchTransferWarehouses(
+          actor: LanRemoteUser(
+            id: actorId,
+            username: 'warehouse-clerk',
+            role: 'warehouseClerk',
+            branchId: branchId,
+            warehouseId: warehouseId,
+            isActive: true,
+            createdAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+            permissions: const ['adjust_stock'],
+          ),
+        );
+        expect(transferLocations.map((row) => row.id), contains(warehouseId));
+        expect(
+          transferLocations.map((row) => row.id),
+          contains(context.warehouseId),
+        );
+        final assigned = transferLocations.singleWhere(
+          (row) => row.id == warehouseId,
+        );
+        expect(assigned.branchName, 'Managed branch');
+        expect(assigned.isBranchLocation, isTrue);
+        expect(assigned.canSource, isTrue);
+        expect(
+          transferLocations
+              .where((row) => row.id != warehouseId)
+              .every((row) => !row.canSource),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'warehouse clerk transfer list skips unrelated company documents',
+      () async {
+        final context = await db.select(db.businessContexts).getSingle();
+        const branchId = '00000000-0000-4000-8000-000000000095';
+        const warehouseId = '00000000-0000-4000-8000-000000000096';
+        await db
+            .into(db.businessBranches)
+            .insert(
+              BusinessBranchesCompanion.insert(
+                id: branchId,
+                organizationId: context.organizationId,
+                code: 'SCOPED-BRANCH',
+                name: const Value('Scoped branch'),
+              ),
+            );
+        await db
+            .into(db.businessWarehouses)
+            .insert(
+              BusinessWarehousesCompanion.insert(
+                id: warehouseId,
+                organizationId: context.organizationId,
+                branchId: branchId,
+                code: 'SCOPED-WH',
+              ),
+            );
+        await db
+            .into(db.businessWarehouseStocks)
+            .insert(
+              BusinessWarehouseStocksCompanion.insert(
+                warehouseId: warehouseId,
+                variantId: variantId,
+                unitCostCents: const Value(800),
+              ),
+            );
+
+        await BranchCurrencyPolicyStore(db).bind('USD');
+        final source = await WarehouseOperationScope.resolve(db);
+        final destination =
+            await WarehouseOperationScope.resolveForOrganization(
+              db,
+              warehouseId: warehouseId,
+            );
+        final preflight = WarehouseTransferPreflight(
+          db,
+          authorizeWarehouse: (_) async {},
+        );
+        final preview = await preflight.preview(
+          source: source,
+          destination: destination,
+          lines: [
+            WarehouseTransferRequestLine(
+              productId: productId,
+              variantId: variantId,
+              quantity: 1000,
+            ),
+          ],
+        );
+        final repository = WarehouseTransferRepository(
+          db,
+          preflight: preflight,
+          authorize: (action, sourceId, destinationId) async => actorId,
+        );
+        final visible = await repository.create(
+          requestKey: const Uuid().v4(),
+          preview: preview,
+          notes: 'Visible destination transfer',
+        );
+
+        // This intentionally incomplete draft belongs to another branch. If
+        // the gateway enumerates the whole company before applying scope, its
+        // repository integrity check will throw and hide the valid transfer.
+        await db.customStatement(
+          '''INSERT INTO warehouse_transfers(
+            id,organization_id,branch_id,database_id,source_warehouse_id,
+            destination_warehouse_id,currency_id,created_by,request_key,
+            request_hash,notes,line_count,status,sealed)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+          [
+            const Uuid().v4(),
+            context.organizationId,
+            context.branchId,
+            context.databaseId,
+            context.warehouseId,
+            '00000000-0000-4000-8000-000000000099',
+            currencyId,
+            actorId,
+            const Uuid().v4(),
+            '0000000000000000000000000000000000000000000000000000000000000000',
+            'Unrelated invalid draft',
+            1,
+            'draft',
+            0,
+          ],
+        );
+
+        final documents = await gateway.fetchWarehouseTransfers(
+          actor: LanRemoteUser(
+            id: actorId,
+            username: 'scoped-warehouse-clerk',
+            role: 'warehouseClerk',
+            branchId: branchId,
+            warehouseId: warehouseId,
+            isActive: true,
+            createdAt: DateTime.utc(2026),
+            updatedAt: DateTime.utc(2026),
+            permissions: const ['adjust_stock'],
+          ),
+          statuses: const {'draft'},
+          limit: 100,
+        );
+
+        expect(documents.map((row) => row.id), [visible.header.id]);
+      },
+    );
+
     test('catalog ignores stale mirrors and remote balances', () async {
       final page = await gateway.fetchCatalog(query: '', offset: 0, limit: 20);
       final product = page.products.singleWhere((p) => p.id == productId);
@@ -3556,6 +4623,13 @@ void main() {
       ]);
     });
   });
+}
+
+class _ProWarehouseEntitlement implements WarehouseSetupEntitlement {
+  const _ProWarehouseEntitlement();
+
+  @override
+  Future<bool> permits(WarehouseOperationScope scope) async => true;
 }
 
 class _ProFeatureGate extends ChangeNotifier implements FeatureGateService {

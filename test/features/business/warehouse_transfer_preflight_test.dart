@@ -1,5 +1,5 @@
 import 'package:decimal/decimal.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
@@ -96,6 +96,30 @@ void main() {
       await expectLater(service.validateUnchanged(result), throwsStateError);
     },
   );
+  test('first transfer may preview an empty destination lazily', () async {
+    await (db.delete(db.businessWarehouseStocks)..where(
+          (row) =>
+              row.warehouseId.equals(destination.warehouseId) &
+              row.variantId.equals(variant),
+        ))
+        .go();
+
+    final result = await preview();
+
+    expect(result.valueCents, 2000);
+    expect(result.lines.single.sourceAvailable, 5);
+    expect(result.lines.single.destinationAvailable, 0);
+    expect(
+      await (db.select(db.businessWarehouseStocks)..where(
+            (row) =>
+                row.warehouseId.equals(destination.warehouseId) &
+                row.variantId.equals(variant),
+          ))
+          .getSingleOrNull(),
+      isNull,
+    );
+    await service.validateUnchanged(result);
+  });
   test(
     'same location, insufficient quantity and duplicate lines are rejected',
     () async {

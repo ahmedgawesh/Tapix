@@ -140,6 +140,30 @@ class WarehouseTransferReportingService {
     int? supplierId,
     String search = '',
     int limit = 1000,
+  }) => reportForWarehouses(
+    warehouseIds: {warehouseId},
+    reportId: warehouseId,
+    from: from,
+    toExclusive: toExclusive,
+    direction: direction,
+    ownership: ownership,
+    status: status,
+    supplierId: supplierId,
+    search: search,
+    limit: limit,
+  );
+
+  Future<WarehouseTransferReportData> reportForWarehouses({
+    required Set<String> warehouseIds,
+    required String reportId,
+    required DateTime from,
+    required DateTime toExclusive,
+    String direction = 'all',
+    String ownership = 'all',
+    String status = 'all',
+    int? supplierId,
+    String search = '',
+    int limit = 1000,
   }) => db.transaction(() async {
     if (!const {'all', 'incoming', 'outgoing'}.contains(direction)) {
       throw ArgumentError.value(direction, 'direction');
@@ -163,31 +187,46 @@ class WarehouseTransferReportingService {
       throw ArgumentError('Invalid transfer report period');
     }
     if (limit < 1 || limit > 5000) throw ArgumentError.value(limit, 'limit');
-    await authorizeWarehouse(warehouseId);
-    final scope = await WarehouseReadScope.resolve(
-      db,
-      warehouseId: warehouseId,
-    );
-    await scope.validate(db);
+    final ids =
+        warehouseIds
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+    if (ids.isEmpty) throw ArgumentError.value(warehouseIds, 'warehouseIds');
+    for (final warehouseId in ids) {
+      await authorizeWarehouse(warehouseId);
+      final scope = await WarehouseReadScope.resolve(
+        db,
+        warehouseId: warehouseId,
+        organizationWide: true,
+      );
+      await scope.validate(db);
+    }
 
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final locationClause =
+        '(t.source_warehouse_id IN ($placeholders) OR '
+        't.destination_warehouse_id IN ($placeholders))';
     final where = <String>[
       'd.sealed=1',
-      '(t.source_warehouse_id=? OR t.destination_warehouse_id=?)',
+      locationClause,
       'CAST(d.dispatched_at AS TEXT)>=?',
       'CAST(d.dispatched_at AS TEXT)<?',
     ];
     final variables = <Variable<Object>>[
-      Variable.withString(warehouseId),
-      Variable.withString(warehouseId),
+      ...ids.map(Variable.withString),
+      ...ids.map(Variable.withString),
       Variable.withString(start.toIso8601String()),
       Variable.withString(end.toIso8601String()),
     ];
     if (direction == 'incoming') {
-      where.add('t.destination_warehouse_id=?');
-      variables.add(Variable.withString(warehouseId));
+      where.add('t.destination_warehouse_id IN ($placeholders)');
+      variables.addAll(ids.map(Variable.withString));
     } else if (direction == 'outgoing') {
-      where.add('t.source_warehouse_id=?');
-      variables.add(Variable.withString(warehouseId));
+      where.add('t.source_warehouse_id IN ($placeholders)');
+      variables.addAll(ids.map(Variable.withString));
     }
     if (ownership != 'all') {
       where.add('a.owner_type=?');
@@ -314,7 +353,7 @@ class WarehouseTransferReportingService {
       );
     }
     return WarehouseTransferReportData(
-      warehouseId: warehouseId,
+      warehouseId: reportId,
       from: start,
       toExclusive: end,
       rows: List.unmodifiable(rows),

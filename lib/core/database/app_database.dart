@@ -23,6 +23,7 @@ import 'migrations/warehouse_transfer_provenance.dart';
 import 'migrations/sale_adjustment_return_item_immutability.dart';
 import 'migrations/inventory_revaluation_audit.dart';
 import 'migrations/lan_request_receipts.dart';
+import 'migrations/lan_branch_enrollment.dart';
 import 'migrations/offline_sync_ledger.dart';
 import 'dart:convert';
 import 'dart:developer' as developer;
@@ -89,7 +90,7 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10115;
+const _currentDatabaseSchemaVersion = 10119;
 
 @DriftDatabase(
   tables: [
@@ -3019,6 +3020,7 @@ END
         await installWarehouseTransferProvenanceGuards(this);
         await installInventoryRevaluationAudit(this);
         await initializeBusinessFoundation(this);
+        await ensureBusinessWarehouseLocationKinds(this);
         await installBusinessDocumentLocations(this);
         await installBusinessWarehouseStock(this);
         // The warehouse installer deliberately replaces every
@@ -3036,6 +3038,7 @@ END
         await _ensureDocumentSequencesTable();
         await installLanRequestReceiptLedger(this);
         await installOfflineSyncLedger(this);
+        await installLanBranchEnrollmentRegistry(this);
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
         await _installPartyAccountPaymentTriggers();
@@ -5617,6 +5620,80 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           });
         }
 
+        // Explicit transfer ownership intent. Existing sealed drafts retain
+        // null/null and therefore preserve their historical owned-first rule;
+        // every new UI/LAN draft writes an exact owned/consignment split.
+        if (from < 10116) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'warehouse_transfer_lines',
+              'requested_owned_quantity',
+              'INTEGER NULL',
+            );
+            await _safeAddColumn(
+              'warehouse_transfer_lines',
+              'requested_consignment_quantity',
+              'INTEGER NULL',
+            );
+            await installWarehouseTransferGuards(this);
+          });
+        }
+
+        // Device invitations own the hardware identity and location. User
+        // accounts keep their existing RBAC role while gaining an explicit
+        // organization location boundary. Legacy operators are assigned to
+        // the database's current primary location; owners retain company-wide
+        // access so an upgrade cannot lock the administration account out.
+        if (from < 10117) {
+          await transaction(() async {
+            await _safeAddColumn('users', 'branch_id', 'TEXT NULL');
+            await _safeAddColumn('users', 'warehouse_id', 'TEXT NULL');
+            await _safeAddColumn(
+              'users',
+              'global_location_access',
+              'INTEGER NOT NULL DEFAULT 0 CHECK (global_location_access IN (0,1))',
+            );
+            await customStatement('''
+              UPDATE users
+              SET global_location_access = CASE WHEN role = 'owner' THEN 1 ELSE 0 END,
+                  branch_id = CASE WHEN role = 'owner' THEN NULL
+                    ELSE (SELECT branch_id FROM business_contexts WHERE id = 1) END,
+                  warehouse_id = CASE WHEN role = 'owner' THEN NULL
+                    ELSE (SELECT warehouse_id FROM business_contexts WHERE id = 1) END
+              WHERE branch_id IS NULL AND warehouse_id IS NULL
+            ''');
+          });
+        }
+
+        // A central company database may hold operational locations for more
+        // than one branch. Rebuild immutable document and transfer guards so
+        // authenticated LAN operations can route stock anywhere inside the
+        // same organization while cross-organization writes remain blocked.
+        if (from < 10118) {
+          await transaction(() async {
+            await removeWarehouseTransferGuards(this);
+            await m.alterTable(TableMigration(warehouseTransfers));
+            await installBusinessDocumentLocations(this);
+            await installBusinessWarehouseStockScopeGuard(this);
+            await installWarehouseTransferGuards(this);
+          });
+        }
+
+        // A branch owns one sales stock location. Any additional location is
+        // an independent warehouse with its own balance and device scope.
+        // Keep this in a separate version because 10118 had already shipped
+        // during station-six testing before the location kind was introduced.
+        if (from < 10119) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'business_warehouses',
+              'location_kind',
+              "TEXT NOT NULL DEFAULT 'warehouse' CHECK (location_kind IN ('branch_store','warehouse'))",
+            );
+            await ensureBusinessWarehouseLocationKinds(this);
+          });
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -5632,8 +5709,22 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         await _ensureDocumentSequencesTable();
         await installLanRequestReceiptLedger(this);
         await installOfflineSyncLedger(this);
+        await installLanBranchEnrollmentRegistry(this);
         await _installPartyAccountPaymentTriggers();
         await _ensureSchemaIntegrity();
+        // Repair development databases that had already reported 10118 while
+        // missing the location discriminator. Normal installations receive
+        // the same column through migration 10119 above.
+        await _safeAddColumn(
+          'business_warehouses',
+          'location_kind',
+          "TEXT NOT NULL DEFAULT 'warehouse' CHECK (location_kind IN ('branch_store','warehouse'))",
+        );
+        await ensureBusinessWarehouseLocationKinds(this);
+        // Central LAN coordination may operate any active warehouse in this
+        // organization. Ordinary local services still resolve only the local
+        // branch; the database guard blocks cross-organization writes.
+        await installBusinessWarehouseStockScopeGuard(this);
         // Trigger-only hardening is reinstalled on every open so clients
         // already at the current schema version receive the same guards.
         await installWarehouseTransferGuards(this);
@@ -5686,6 +5777,11 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
   Future<void> createIndexesForTest() => _createIndexes();
 
   Future<void> _createIndexes() async {
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_business_warehouses_branch_store '
+      'ON business_warehouses(organization_id, branch_id) '
+      "WHERE location_kind = 'branch_store'",
+    );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_cheque_instruments_source '
       'ON cheque_instruments(source_table, source_id)',
@@ -6556,9 +6652,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     Future<void> upsertColor({required String name, String? hexCode}) async {
       final existing = await (select(
         productColors,
-      )..where((c) => c.name.equals(name))).getSingleOrNull();
+      )..where((c) => c.name.equals(name))).get();
 
-      if (existing == null) {
+      if (existing.isEmpty) {
         await into(productColors).insert(
           ProductColorsCompanion.insert(name: name, hexCode: Value(hexCode)),
         );
@@ -6587,9 +6683,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     }) async {
       final existing = await (select(
         sizes,
-      )..where((s) => s.name.equals(name))).getSingleOrNull();
+      )..where((s) => s.name.equals(name))).get();
 
-      if (existing == null) {
+      if (existing.isEmpty) {
         await into(sizes).insert(
           SizesCompanion.insert(
             name: name,

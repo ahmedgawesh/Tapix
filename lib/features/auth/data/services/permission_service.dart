@@ -3,14 +3,6 @@ import '../../domain/entities/permission_constants.dart';
 import '../../domain/entities/user_entity.dart';
 
 class PermissionService {
-  static const List<UserRole> _roleHierarchy = [
-    UserRole.salesperson,
-    UserRole.cashier,
-    UserRole.accountant,
-    UserRole.manager,
-    UserRole.owner,
-  ];
-
   static const Map<UserRole, List<String>> _rolePermissions = {
     UserRole.owner: [
       // User Management (Owner only)
@@ -145,6 +137,20 @@ class PermissionService {
       'view_suppliers',
       'view_purchases',
     ],
+    UserRole.warehouseClerk: [
+      Permissions.viewProducts,
+      Permissions.viewProductCost,
+      Permissions.adjustStock,
+      Permissions.manageBarcodes,
+      Permissions.viewPurchases,
+      Permissions.managePurchases,
+      Permissions.viewSuppliers,
+      Permissions.viewDailyReports,
+      'view_products',
+      'view_purchases',
+      'manage_purchases',
+      'view_suppliers',
+    ],
     UserRole.cashier: [
       // Sales Operations
       Permissions.processSales,
@@ -204,9 +210,13 @@ class PermissionService {
     return _rolePermissions[role] ?? [];
   }
 
-  int getRoleLevel(UserRole role) {
-    return _roleHierarchy.indexOf(role);
-  }
+  int getRoleLevel(UserRole role) => switch (role) {
+    UserRole.salesperson => 0,
+    UserRole.cashier || UserRole.warehouseClerk => 1,
+    UserRole.accountant => 2,
+    UserRole.manager => 3,
+    UserRole.owner => 4,
+  };
 
   bool isRoleAtLeast(UserEntity? user, UserRole requiredRole) {
     if (user == null || !user.isActive) return false;

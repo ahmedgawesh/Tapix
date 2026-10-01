@@ -6,9 +6,14 @@ class Users extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get username => text().unique()();
   TextColumn get passwordHash => text()();
-  TextColumn get role => text()(); // owner/manager/cashier/salesperson
+  TextColumn get role =>
+      text()(); // owner/manager/accountant/cashier/warehouseClerk/salesperson
   IntColumn get employeeId => integer()
       .nullable()(); // FK to employees (circular reference, handled in app layer)
+  TextColumn get branchId => text().nullable()();
+  TextColumn get warehouseId => text().nullable()();
+  BoolColumn get globalLocationAccess =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get isActive =>
       integer().withDefault(const Constant(1))(); // 1=active, 0=inactive
   TextColumn get securityQuestion => text().nullable()();

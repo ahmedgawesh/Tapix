@@ -12,6 +12,8 @@ import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../../../core/promotions/promotion_repository.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
+import 'sale_customer_account.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../../settings/domain/entities/app_settings.dart';
@@ -269,18 +271,19 @@ class SalePdfService {
     pw.Widget? customerBalanceWidget;
     try {
       if (originalSale.customerId != null) {
-        final customerRepo = sl<CustomerRepository>();
-        final customers = await customerRepo.searchCustomers('');
-        final customer = customers
-            .where((c) => c.id == originalSale.customerId)
-            .firstOrNull;
-        if (customer != null) {
+        final customer = await loadSaleCustomerAccount(
+          customerId: originalSale.customerId!,
+          lan: sl<LanNetworkService>(),
+          loadLocal: (id) => sl<CustomerRepository>().getCustomer(id),
+        );
+        if (customer != null &&
+            customer.currencyId == originalSale.currencyId) {
           customerBalanceWidget = _buildCustomerBalance(
-            customerName: customer.name,
-            balanceCents: customer.balanceCents.toBigInt().toInt(),
+            customerName: originalSale.customerName ?? '',
+            balanceCents: customer.balanceCents,
             cs: cs,
             fonts: fonts,
-            loyaltyPoints: customer.loyaltyPointsBalance,
+            loyaltyPoints: customer.pointsBalance,
           );
         }
       }
@@ -600,7 +603,9 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
-    final cashierShift = state.saleId == null
+    final cashierShift =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client ||
+            state.saleId == null
         ? null
         : await sl<CashierShiftService>().getSaleShift(state.saleId!);
 
@@ -608,18 +613,18 @@ class SalePdfService {
     pw.Widget? customerBalanceWidget;
     try {
       if (state.customerId != null) {
-        final customerRepo = sl<CustomerRepository>();
-        final customers = await customerRepo.searchCustomers('');
-        final customer = customers
-            .where((c) => c.id == state.customerId)
-            .firstOrNull;
-        if (customer != null) {
+        final customer = await loadSaleCustomerAccount(
+          customerId: state.customerId!,
+          lan: sl<LanNetworkService>(),
+          loadLocal: (id) => sl<CustomerRepository>().getCustomer(id),
+        );
+        if (customer != null && customer.currencyId == state.currencyId) {
           customerBalanceWidget = _buildCustomerBalance(
-            customerName: customer.name,
-            balanceCents: customer.balanceCents.toBigInt().toInt(),
+            customerName: state.customerName ?? '',
+            balanceCents: customer.balanceCents,
             cs: cs,
             fonts: fonts,
-            loyaltyPoints: customer.loyaltyPointsBalance,
+            loyaltyPoints: customer.pointsBalance,
           );
         }
       }
@@ -694,8 +699,10 @@ class SalePdfService {
                 subtotalCents: state.subtotalCents.toBigInt().toInt(),
                 discountCents: state.totalDiscountCents.toBigInt().toInt(),
                 taxCents: state.taxCents.toBigInt().toInt(),
-                totalCents: state.totalCents.toBigInt().toInt(),
-                paidCents: state.paidAmountCents.toBigInt().toInt(),
+                totalCents: state.totalBeforeLoyaltyCents.toBigInt().toInt(),
+                paidCents:
+                    state.paidAmountCents.toBigInt().toInt() +
+                    state.loyaltyDiscountCents,
                 totalItems: state.items.length,
                 quantitySummary: localizedQuantitySummary(
                   state.items,
@@ -760,23 +767,25 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
-    final cashierShift = await sl<CashierShiftService>().getSaleShift(sale.id);
+    final cashierShift = sl<LanNetworkService>().snapshot.mode == LanMode.client
+        ? null
+        : await sl<CashierShiftService>().getSaleShift(sale.id);
 
     pw.Widget? customerBalanceWidget;
     try {
       if (sale.customerId != null) {
-        final customerRepo = sl<CustomerRepository>();
-        final customers = await customerRepo.searchCustomers('');
-        final customer = customers
-            .where((c) => c.id == sale.customerId)
-            .firstOrNull;
-        if (customer != null) {
+        final customer = await loadSaleCustomerAccount(
+          customerId: sale.customerId!,
+          lan: sl<LanNetworkService>(),
+          loadLocal: (id) => sl<CustomerRepository>().getCustomer(id),
+        );
+        if (customer != null && customer.currencyId == sale.currencyId) {
           customerBalanceWidget = _buildCustomerBalance(
-            customerName: customer.name,
-            balanceCents: customer.balanceCents.toBigInt().toInt(),
+            customerName: sale.customerName ?? '',
+            balanceCents: customer.balanceCents,
             cs: cs,
             fonts: fonts,
-            loyaltyPoints: customer.loyaltyPointsBalance,
+            loyaltyPoints: customer.pointsBalance,
           );
         }
       }
@@ -1029,6 +1038,8 @@ class SalePdfService {
         return 'sales.payment_cheque'.tr();
       case 'mixed':
         return 'sales.payment_mixed'.tr();
+      case 'loyalty':
+        return 'sales.loyalty_payment'.tr();
       default:
         return method;
     }

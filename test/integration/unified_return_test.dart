@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:tapix/core/services/business/branch_tax_policy.dart';
 import 'package:tapix/core/services/business/branch_tax_policy_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +15,7 @@ import 'package:tapix/core/services/journal_entry_service.dart';
 import 'package:tapix/core/services/loyalty/loyalty_points_service.dart';
 import 'package:tapix/core/services/unified_return_service.dart';
 import 'package:tapix/core/services/return_calculation_service.dart';
+import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:tapix/features/customers/data/repositories/loyalty_repository_impl.dart';
 
@@ -586,6 +589,9 @@ void main() {
     );
 
     test('adjustment sale return creates adj record', () async {
+      await OfflineSyncEventStore(db).activateWriterRecording(
+        enrollmentId: '61616161-6161-4161-8161-616161616161',
+      );
       final cid = await getCurrencyId();
       final pid = await createProduct(currencyId: cid);
       final vid = await createVariant(pid);
@@ -614,6 +620,25 @@ void main() {
       );
 
       expect(batchId, isNotEmpty);
+      final event = await db
+          .customSelect(
+            'SELECT event_type,payload_json FROM sync_outbox_events '
+            "WHERE event_type='sale_adjustment_return.posted.v1'",
+          )
+          .getSingle();
+      expect(
+        event.read<String>('event_type'),
+        'sale_adjustment_return.posted.v1',
+      );
+      final payload =
+          jsonDecode(event.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      expect(payload['contract'], 'sale_adjustment_return.posted');
+      final line = (payload['items'] as List<dynamic>).single;
+      expect(line['sourceResolution'], 'unverified');
+      expect(line['sourceResolutionReason'], isNotEmpty);
+      expect(line['supplierIdentityGlobalId'], isNull);
+      expect(line['consignmentLayerId'], isNull);
     });
 
     test('empty items throws exception', () async {

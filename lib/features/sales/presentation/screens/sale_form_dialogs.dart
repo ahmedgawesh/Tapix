@@ -3504,6 +3504,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         ),
                       ),
                     if (state.customerId != null &&
+                        sl<LanNetworkService>().snapshot.mode != LanMode.client)
+                      const _IndependentBranchCustomerScopeNotice(),
+                    if (state.customerId != null &&
                         sl<LanNetworkService>().snapshot.mode == LanMode.client)
                       RemoteCustomerCheckoutCard(
                         key: ValueKey(state.customerId),
@@ -4145,7 +4148,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             const SizedBox(height: 8),
                             _cRow(
                               theme,
-                              'sales.loyalty_discount'.tr(),
+                              'sales.loyalty_payment'.tr(),
                               '- ${widget.currencyService.format(state.loyaltyDiscountCents)}',
                               valueColor: Colors.deepPurple,
                             ),
@@ -4716,6 +4719,57 @@ class _CustomerBalanceInfo extends StatelessWidget {
   }
 }
 
+class _IndependentBranchCustomerScopeNotice extends StatelessWidget {
+  const _IndependentBranchCustomerScopeNotice();
+
+  Future<bool> _isIndependentBranch() async =>
+      await sl<AppDatabase>()
+          .customSelect(
+            'SELECT 1 AS configured FROM app_settings '
+            "WHERE key='lan.branch_sync.coordinator_database_id.v1' "
+            'AND length(trim(value))>0 LIMIT 1',
+          )
+          .getSingleOrNull() !=
+      null;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: _isIndependentBranch(),
+    builder: (context, snapshot) {
+      if (snapshot.data != true) return const SizedBox.shrink();
+      final colors = Theme.of(context).colorScheme;
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: colors.tertiaryContainer.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              LucideIcons.building2,
+              size: 17,
+              color: colors.onTertiaryContainer,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'sales.branch_customer_value_scope'.tr(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onTertiaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 // LOYALTY POINTS REDEMPTION SECTION
 // ═══════════════════════════════════════════════════════
@@ -5003,7 +5057,7 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'sales.loyalty_discount'.tr(),
+                      'sales.loyalty_payment'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.deepPurple,
                       ),

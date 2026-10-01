@@ -28,7 +28,10 @@ class MasterKeepAliveService : Service() {
         startAsForeground(port)
         acquireLocks()
         isRunning = true
-        return START_NOT_STICKY
+        // Keep the branch writer process eligible for recreation after memory
+        // pressure. A user-selected standalone/client mode still calls stop(),
+        // which is an explicit stop and therefore is not restarted.
+        return START_STICKY
     }
 
     override fun onDestroy() {

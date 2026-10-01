@@ -12,6 +12,7 @@ class RoutePermissions {
       UserRole.manager,
       UserRole.accountant,
       UserRole.cashier,
+      UserRole.warehouseClerk,
       UserRole.salesperson,
     ],
     '/cashier-shifts': [
@@ -26,6 +27,7 @@ class RoutePermissions {
       UserRole.manager,
       UserRole.accountant,
       UserRole.cashier,
+      UserRole.warehouseClerk,
       UserRole.salesperson,
     ],
     '/products/variants': [
@@ -33,6 +35,7 @@ class RoutePermissions {
       UserRole.manager,
       UserRole.accountant,
       UserRole.cashier,
+      UserRole.warehouseClerk,
       UserRole.salesperson,
     ],
     '/products/export': [UserRole.owner, UserRole.manager, UserRole.accountant],
@@ -65,7 +68,17 @@ class RoutePermissions {
     ],
     '/suppliers': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/consignment': [UserRole.owner, UserRole.manager, UserRole.accountant],
-    '/purchases': [UserRole.owner, UserRole.manager, UserRole.accountant],
+    '/purchases': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.warehouseClerk,
+    ],
+    '/warehouse-transfers': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.warehouseClerk,
+    ],
     '/expenses': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/promotions': [UserRole.owner, UserRole.manager],
     '/reports': [UserRole.owner, UserRole.manager, UserRole.accountant],

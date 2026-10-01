@@ -142,11 +142,11 @@ class WarehouseTransferDispatchService {
       throw StateError('Only a sealed draft can be dispatched');
     }
 
-    final source = await WarehouseOperationScope.resolve(
+    final source = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.sourceWarehouseId,
     );
-    final destination = await WarehouseOperationScope.resolve(
+    final destination = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.destinationWarehouseId,
     );
@@ -154,7 +154,6 @@ class WarehouseTransferDispatchService {
         source.branchId != transfer.branchId ||
         source.databaseId != transfer.databaseId ||
         destination.organizationId != transfer.organizationId ||
-        destination.branchId != transfer.branchId ||
         destination.databaseId != transfer.databaseId) {
       throw StateError('Transfer warehouse binding changed');
     }
@@ -392,11 +391,27 @@ class WarehouseTransferDispatchService {
           ],
         )
         .getSingle();
-    var remaining = line.quantity;
+    final explicit = line.requestedOwnedQuantity != null;
+    if (explicit != (line.requestedConsignmentQuantity != null)) {
+      throw StateError('Transfer ownership intent is incomplete');
+    }
+    var remainingOwned = explicit
+        ? line.requestedOwnedQuantity!
+        : math.min(
+            line.quantity,
+            stock.read<int>('quantity') -
+                stock.read<int>('supplier_owned_quantity'),
+          );
+    var remainingConsignment = explicit
+        ? line.requestedConsignmentQuantity!
+        : line.quantity - remainingOwned;
     final enterpriseAvailable =
         stock.read<int>('quantity') -
         stock.read<int>('supplier_owned_quantity');
-    final enterpriseTake = math.min(remaining, enterpriseAvailable);
+    if (remainingOwned > enterpriseAvailable) {
+      throw StateError('Enterprise-owned transfer balance changed');
+    }
+    final enterpriseTake = remainingOwned;
     final result = <_DispatchAllocationPlan>[];
     if (enterpriseTake > 0) {
       final cost = stock.read<int>('unit_cost_cents');
@@ -420,9 +435,12 @@ class WarehouseTransferDispatchService {
           tracked: false,
         ),
       );
-      remaining -= enterpriseTake;
+      remainingOwned -= enterpriseTake;
     }
-    if (remaining == 0) return result;
+    if (remainingOwned != 0) {
+      throw StateError('Enterprise-owned transfer source is insufficient');
+    }
+    if (remainingConsignment == 0) return result;
 
     final layers =
         await (db.select(db.consignmentInventoryLayers)
@@ -440,8 +458,8 @@ class WarehouseTransferDispatchService {
               ]))
             .get();
     for (final layer in layers) {
-      if (remaining == 0) break;
-      final take = math.min(remaining, layer.remainingQuantity);
+      if (remainingConsignment == 0) break;
+      final take = math.min(remainingConsignment, layer.remainingQuantity);
       result.add(
         _DispatchAllocationPlan(
           id: const Uuid().v4(),
@@ -454,9 +472,9 @@ class WarehouseTransferDispatchService {
           sourceOriginReference: 'consignment_receipt:${layer.receiptItemId}',
         ),
       );
-      remaining -= take;
+      remainingConsignment -= take;
     }
-    if (remaining != 0) {
+    if (remainingConsignment != 0) {
       throw StateError('Transfer source ownership is insufficient');
     }
     return result;
@@ -486,13 +504,33 @@ class WarehouseTransferDispatchService {
           ],
         )
         .get();
-    var remaining = line.quantity;
+    final explicit = line.requestedOwnedQuantity != null;
+    if (explicit != (line.requestedConsignmentQuantity != null)) {
+      throw StateError('Transfer ownership intent is incomplete');
+    }
+    var remainingOwned = explicit
+        ? line.requestedOwnedQuantity!
+        : line.quantity;
+    var remainingConsignment = explicit
+        ? line.requestedConsignmentQuantity!
+        : line.quantity;
+    var remainingLegacy = line.quantity;
     final result = <_DispatchAllocationPlan>[];
     for (final row in rows) {
-      if (remaining == 0) break;
+      if (explicit) {
+        final wanted = row.readNullable<String>('layer_id') == null
+            ? remainingOwned
+            : remainingConsignment;
+        if (wanted == 0) continue;
+      } else if (remainingLegacy == 0) {
+        break;
+      }
       final available = row.read<int>('remaining_quantity');
-      final take = math.min(remaining, available);
       final layerId = row.readNullable<String>('layer_id');
+      final wanted = explicit
+          ? (layerId == null ? remainingOwned : remainingConsignment)
+          : remainingLegacy;
+      final take = math.min(wanted, available);
       final layer = layerId == null
           ? null
           : await (db.select(
@@ -530,9 +568,19 @@ class WarehouseTransferDispatchService {
           expiryDate: row.readNullable<DateTime>('expiry_date'),
         ),
       );
-      remaining -= take;
+      if (explicit) {
+        if (layer == null) {
+          remainingOwned -= take;
+        } else {
+          remainingConsignment -= take;
+        }
+      } else {
+        remainingLegacy -= take;
+      }
     }
-    if (remaining != 0) {
+    if (explicit
+        ? remainingOwned != 0 || remainingConsignment != 0
+        : remainingLegacy != 0) {
       throw StateError('Tracked transfer source is insufficient');
     }
     return result;

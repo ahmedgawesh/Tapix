@@ -17,6 +17,8 @@ import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/shared_catalogue_authority_gate.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
@@ -57,50 +59,55 @@ class ProductFormScreen extends StatelessWidget {
     final appSettingsState = context.read<AppSettingsBloc>().state;
     final settings = appSettingsState.settings;
 
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (context) => sl<ProductFormBloc>()
-            ..add(
-              ProductFormInitialized(
-                productId: productId,
-                initialBarcode: initialBarcode,
-                defaultTrackInventory: settings.defaultTrackInventory,
-                // New products inherit the global `lowStockThreshold` from
-                // settings as their initial per-product re-order point. The
-                // user can still override the value per-product in the form
-                // before saving. This restores the pre-Phase-B behaviour that
-                // was inadvertently changed when inventory tracking types
-                // were introduced — the global setting is the single source
-                // of truth for the *default*, while `products.min_quantity`
-                // remains the per-product authoritative value once saved.
-                defaultMinQuantity: settings.lowStockThreshold,
-                enablePharmacyFeatures: sl<FeatureGateService>().isEnabled(
-                  AppFeature.pharmacy,
-                  settingEnabled: settings.enablePharmacyFeatures,
+    return SharedCatalogueAuthorityGate(
+      title: (productId == null ? 'products.add' : 'products.edit').tr(),
+      authorityCheck:
+          sl<BranchCatalogueSyncService>().isSharedCatalogueAuthority,
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider(
+            create: (context) => sl<ProductFormBloc>()
+              ..add(
+                ProductFormInitialized(
+                  productId: productId,
+                  initialBarcode: initialBarcode,
+                  defaultTrackInventory: settings.defaultTrackInventory,
+                  // New products inherit the global `lowStockThreshold` from
+                  // settings as their initial per-product re-order point. The
+                  // user can still override the value per-product in the form
+                  // before saving. This restores the pre-Phase-B behaviour that
+                  // was inadvertently changed when inventory tracking types
+                  // were introduced — the global setting is the single source
+                  // of truth for the *default*, while `products.min_quantity`
+                  // remains the per-product authoritative value once saved.
+                  defaultMinQuantity: settings.lowStockThreshold,
+                  enablePharmacyFeatures: sl<FeatureGateService>().isEnabled(
+                    AppFeature.pharmacy,
+                    settingEnabled: settings.enablePharmacyFeatures,
+                  ),
                 ),
               ),
-            ),
-        ),
-        BlocProvider(
-          create: (context) =>
-              sl<CategoriesBloc>()..add(const LoadCategories()),
-        ),
-        BlocProvider(
-          create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
-        ),
-        BlocProvider(
-          create: (context) => sl<SizesBloc>()..add(const LoadSizes()),
-        ),
-        if (productId != null) ...[
+          ),
           BlocProvider(
             create: (context) =>
-                sl<ProductVariantsBloc>()
-                  ..add(ProductVariantsInitialized(productId!)),
+                sl<CategoriesBloc>()..add(const LoadCategories()),
           ),
+          BlocProvider(
+            create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
+          ),
+          BlocProvider(
+            create: (context) => sl<SizesBloc>()..add(const LoadSizes()),
+          ),
+          if (productId != null) ...[
+            BlocProvider(
+              create: (context) =>
+                  sl<ProductVariantsBloc>()
+                    ..add(ProductVariantsInitialized(productId!)),
+            ),
+          ],
         ],
-      ],
-      child: const _ProductFormView(),
+        child: const _ProductFormView(),
+      ),
     );
   }
 }
@@ -779,7 +786,7 @@ class _ProductFormViewState extends State<_ProductFormView>
     final bloc = context.read<ProductFormBloc>();
 
     return _buildSectionCard(
-      title: 'product_form_basicInfo'.tr(),
+      title: 'product_form.basicInfo'.tr(),
       icon: LucideIcons.package,
       children: [
         Center(
@@ -828,7 +835,7 @@ class _ProductFormViewState extends State<_ProductFormView>
         TextFormField(
           controller: _nameController,
           decoration: InputDecoration(
-            labelText: 'product_form_name'.tr(),
+            labelText: 'product_form.name'.tr(),
             errorText: state.fieldErrors['name']?.tr(),
             border: const OutlineInputBorder(),
           ),
@@ -882,7 +889,7 @@ class _ProductFormViewState extends State<_ProductFormView>
         TextFormField(
           controller: _descriptionController,
           decoration: InputDecoration(
-            labelText: 'product_form_description'.tr(),
+            labelText: 'product_form.description'.tr(),
             border: const OutlineInputBorder(),
           ),
           maxLines: 3,
@@ -899,7 +906,7 @@ class _ProductFormViewState extends State<_ProductFormView>
               child: TextFormField(
                 controller: _skuController,
                 decoration: InputDecoration(
-                  labelText: 'product_form_sku'.tr(),
+                  labelText: 'product_form.sku'.tr(),
                   errorText: state.fieldErrors['sku']?.tr(
                     args: [state.sku ?? ''],
                   ),
@@ -915,7 +922,7 @@ class _ProductFormViewState extends State<_ProductFormView>
               child: TextFormField(
                 controller: _barcodeController,
                 decoration: InputDecoration(
-                  labelText: 'product_form_barcode'.tr(),
+                  labelText: 'product_form.barcode'.tr(),
                   errorText: state.fieldErrors['barcode']?.tr(
                     args: [state.barcode ?? ''],
                   ),
@@ -1097,7 +1104,7 @@ class _ProductFormViewState extends State<_ProductFormView>
     final bloc = context.read<ProductFormBloc>();
 
     return _buildSectionCard(
-      title: 'product_form_pricing'.tr(),
+      title: 'product_form.pricing'.tr(),
       icon: LucideIcons.dollarSign,
       children: [
         Row(
@@ -1109,7 +1116,7 @@ class _ProductFormViewState extends State<_ProductFormView>
                 children: [
                   MoneyInputWidget(
                     value: state.costCents,
-                    label: 'product_form_cost'.tr(),
+                    label: 'product_form.cost'.tr(),
                     errorText: state.fieldErrors['costCents']?.tr(),
                     // Cost is WAC-managed once the product exists: updated
                     // only through purchases (moving average) and manual
@@ -1144,7 +1151,7 @@ class _ProductFormViewState extends State<_ProductFormView>
                 children: [
                   MoneyInputWidget(
                     value: state.priceCents,
-                    label: 'product_form_price'.tr(),
+                    label: 'product_form.price'.tr(),
                     errorText: state.fieldErrors['priceCents']?.tr(),
                     onChanged: (value) {
                       bloc.add(
@@ -1172,7 +1179,7 @@ class _ProductFormViewState extends State<_ProductFormView>
             Expanded(
               child: MoneyInputWidget(
                 value: state.wholesalePriceCents ?? Decimal.zero,
-                label: 'product_form_wholesalePrice'.tr(),
+                label: 'product_form.wholesalePrice'.tr(),
                 onChanged: (value) {
                   bloc.add(
                     ProductFormFieldChanged(
@@ -1193,7 +1200,7 @@ class _ProductFormViewState extends State<_ProductFormView>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'product_form_margin'.tr(),
+                        'product_form.margin'.tr(),
                         style: Theme.of(context).textTheme.labelMedium,
                       ),
                       const SizedBox(height: 8),
@@ -1405,11 +1412,15 @@ class _ProductFormViewState extends State<_ProductFormView>
         ),
       );
       context.go('/products');
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('product_form.error_saving'.tr()),
+          content: Text(
+            error is SharedCatalogueAuthorityRequired
+                ? 'business_locations.catalogue_authority.write_denied'.tr()
+                : 'product_form.error_saving'.tr(),
+          ),
           backgroundColor: colorScheme.error,
         ),
       );
@@ -1520,7 +1531,7 @@ class _ProductFormViewState extends State<_ProductFormView>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('product_form_variants_price_updated'.tr()),
+              Text('product_form.variants_price_updated'.tr()),
               const SizedBox(height: 4),
               Text(
                 'product_form.apply_to_variants_cost_note'.tr(),
@@ -1794,7 +1805,7 @@ class _ProductFormViewState extends State<_ProductFormView>
     final productId = state.productId;
 
     return _buildSectionCard(
-      title: 'product_form_inventory'.tr(),
+      title: 'product_form.inventory'.tr(),
       icon: LucideIcons.warehouse,
       children: [
         _buildMeasurementTypeSelector(context, state),
@@ -1878,8 +1889,8 @@ class _ProductFormViewState extends State<_ProductFormView>
                       focusNode: _stockFocusNode,
                       decoration: InputDecoration(
                         labelText: state.isEditing
-                            ? 'product_form_quantity'.tr()
-                            : 'product_form_quantity'.tr(),
+                            ? 'product_form.quantity'.tr()
+                            : 'product_form.quantity'.tr(),
                         helperText: state.isEditing && state.trackInventory
                             ? 'products.stock_readonly_hint'.tr()
                             : null,
@@ -1923,7 +1934,7 @@ class _ProductFormViewState extends State<_ProductFormView>
                 controller: _minStockController,
                 focusNode: _minStockFocusNode,
                 decoration: InputDecoration(
-                  labelText: 'product_form_minQuantity'.tr(),
+                  labelText: 'product_form.minQuantity'.tr(),
                   errorText: state.fieldErrors['minQuantity']?.tr(),
                   border: const OutlineInputBorder(),
                 ),
@@ -1976,7 +1987,7 @@ class _ProductFormViewState extends State<_ProductFormView>
         ],
         const SizedBox(height: 16),
         SwitchListTile(
-          title: Text('product_form_trackInventory'.tr()),
+          title: Text('product_form.trackInventory'.tr()),
           value: state.trackInventory,
           subtitle: state.isEditing && state.costingMethodLockReason != null
               ? Text('measurement.locked_after_activity'.tr())
@@ -2215,11 +2226,11 @@ class _ProductFormViewState extends State<_ProductFormView>
     final bloc = context.read<ProductFormBloc>();
 
     return _buildSectionCard(
-      title: 'product_form_tax'.tr(),
+      title: 'product_form.tax'.tr(),
       icon: LucideIcons.percent,
       children: [
         SwitchListTile(
-          title: Text('product_form_isTaxable'.tr()),
+          title: Text('product_form.isTaxable'.tr()),
           value: state.isTaxable,
           onChanged: (value) {
             bloc.add(ProductFormFieldChanged(field: 'isTaxable', value: value));
@@ -2277,12 +2288,12 @@ class _ProductFormViewState extends State<_ProductFormView>
     final bloc = context.read<ProductFormBloc>();
 
     return _buildSectionCard(
-      title: 'product_form_options'.tr(),
+      title: 'product_form.options'.tr(),
       icon: LucideIcons.settings,
       children: [
         SwitchListTile(
-          title: Text('product_form_hasVariants'.tr()),
-          subtitle: Text('product_form_hasVariants_hint'.tr()),
+          title: Text('product_form.hasVariants'.tr()),
+          subtitle: Text('product_form.hasVariants_hint'.tr()),
           value: state.hasVariants,
           onChanged: (value) async {
             // Turning variants OFF on an editing product is destructive:
@@ -2315,7 +2326,7 @@ class _ProductFormViewState extends State<_ProductFormView>
           },
         ),
         SwitchListTile(
-          title: Text('product_form_isActive'.tr()),
+          title: Text('product_form.isActive'.tr()),
           value: state.isActive,
           onChanged: (value) {
             bloc.add(ProductFormFieldChanged(field: 'isActive', value: value));
@@ -2449,7 +2460,7 @@ class _ColorPickerField extends StatelessWidget {
           onTap: () => _showColorPickerBottomSheet(context, colors),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'product_form_variantColor'.tr(),
+              labelText: 'product_form.variantColor'.tr(),
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(LucideIcons.palette),
             ),
@@ -2618,7 +2629,7 @@ class _SizePickerField extends StatelessWidget {
           onTap: () => _showSizePickerBottomSheet(context, sizes),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'product_form_variantSize'.tr(),
+              labelText: 'product_form.variantSize'.tr(),
               border: const OutlineInputBorder(),
               prefixIcon: const Icon(LucideIcons.ruler),
             ),
@@ -2897,7 +2908,7 @@ class _VariantPriceRangeCard extends StatelessWidget {
                   Expanded(
                     child: _rangeCell(
                       theme,
-                      label: 'product_form_cost'.tr(),
+                      label: 'product_form.cost'.tr(),
                       value: _range(costMin, costMax),
                     ),
                   ),
@@ -2905,7 +2916,7 @@ class _VariantPriceRangeCard extends StatelessWidget {
                   Expanded(
                     child: _rangeCell(
                       theme,
-                      label: 'product_form_price'.tr(),
+                      label: 'product_form.price'.tr(),
                       value: _range(priceMin, priceMax),
                     ),
                   ),
@@ -3142,21 +3153,21 @@ class _PriceHistoryWidget extends StatelessWidget {
                         ),
                         if (costChanged)
                           _PriceHistoryRow(
-                            label: 'product_form_cost'.tr(),
+                            label: 'product_form.cost'.tr(),
                             from: _fmtCents(h.oldCostCents),
                             to: _fmtCents(h.newCostCents),
                             isIncrease: h.newCostCents > h.oldCostCents,
                           ),
                         if (priceChanged)
                           _PriceHistoryRow(
-                            label: 'product_form_price'.tr(),
+                            label: 'product_form.price'.tr(),
                             from: _fmtCents(h.oldPriceCents),
                             to: _fmtCents(h.newPriceCents),
                             isIncrease: h.newPriceCents > h.oldPriceCents,
                           ),
                         if (wholesaleChanged)
                           _PriceHistoryRow(
-                            label: 'product_form_wholesalePrice'.tr(),
+                            label: 'product_form.wholesalePrice'.tr(),
                             from: _fmtCents(h.oldWholesalePriceCents ?? 0),
                             to: _fmtCents(h.newWholesalePriceCents ?? 0),
                             isIncrease:

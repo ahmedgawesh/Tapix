@@ -127,7 +127,7 @@ void main() {
       final db = _memoryDb();
       addTearDown(db.close);
       final seed = await _seed(db);
-      expect(db.schemaVersion, 10115);
+      expect(db.schemaVersion, 10119);
 
       final policy = await BranchConsignmentPolicyStore(
         db,

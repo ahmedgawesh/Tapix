@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/settings_dao.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
+import 'package:tapix/core/services/business/local_branch_scope.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
 import 'package:tapix/core/services/lan/lan_network_service.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
@@ -40,8 +41,16 @@ void main() {
     await db.close();
   });
 
+  Future<void> issueEnrollment() async {
+    final scope = await LocalBranchScope.read(db);
+    await master.createDeviceEnrollment(
+      warehouseId: scope.warehouseId,
+      deviceKind: LanDeviceKind.pointOfSale,
+    );
+  }
+
   Future<(int, Map<String, dynamic>)> pair(String code, String device) async {
-    final pin = master.snapshot.pairingCode!.split(':').last;
+    final pin = master.masterTlsFingerprint!;
     final client = HttpClient(context: SecurityContext(withTrustedRoots: false))
       ..badCertificateCallback = (cert, host, port) =>
           sha256.convert(cert.der).toString() == pin;
@@ -70,6 +79,7 @@ void main() {
     'pairing rejects repeated guesses even with the correct code afterwards',
     () async {
       await master.startMaster(port: 0);
+      await issueEnrollment();
       final code = master.snapshot.pairingCode!;
       for (var i = 0; i < 5; i++) {
         // 000000 is outside the generated 100000..999999 code range.
@@ -86,6 +96,7 @@ void main() {
     'chunked oversized body closes its connection and server remains usable',
     () async {
       await master.startMaster(port: 0);
+      await issueEnrollment();
       final code = master.snapshot.pairingCode!;
       final pin = code.split(':').last;
       final client =
@@ -131,6 +142,7 @@ void main() {
 
   test('wrong master fingerprint is rejected before pairing', () async {
     await master.startMaster(port: 0);
+    await issueEnrollment();
     final clientDb = AppDatabase.connect(
       DatabaseConnection(NativeDatabase.memory()),
     );
@@ -159,6 +171,7 @@ void main() {
 
   test('pairing code is single-use under simultaneous requests', () async {
     await master.startMaster(port: 0);
+    await issueEnrollment();
     final code = master.snapshot.pairingCode!;
     final results = await Future.wait([
       pair(code, 'device-a'),

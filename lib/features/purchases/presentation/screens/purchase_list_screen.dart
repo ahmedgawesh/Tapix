@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../bloc/purchases_bloc.dart';
 import '../../../shared/widgets/date_range_filter_sheet.dart';
@@ -42,8 +45,17 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
     super.dispose();
   }
 
+  Future<void> _openNewPurchase(BuildContext context) async {
+    await context.push('/purchases/new');
+    if (context.mounted) {
+      context.read<PurchasesBloc>().refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -82,11 +94,12 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(LucideIcons.settings),
-            onPressed: () => context.push('/settings'),
-            tooltip: 'settings.title'.tr(),
-          ),
+          if (!isRemoteClient)
+            IconButton(
+              icon: const Icon(LucideIcons.settings),
+              onPressed: () => context.push('/settings'),
+              tooltip: 'settings.title'.tr(),
+            ),
         ],
       ),
       body: SafeArea(
@@ -120,7 +133,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/purchases/new'),
+        onPressed: () => _openNewPurchase(context),
         icon: const Icon(LucideIcons.plus),
         label: Text('purchases.new'.tr()),
         elevation: 2,
@@ -160,12 +173,56 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
   Widget _buildContent(BuildContext context, PurchasesHubData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final currencyService = sl<CurrencyService>();
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
+    String formatCurrency(int cents) => _formatCurrency(data, cents);
 
     return RefreshIndicator(
       onRefresh: () async => context.read<PurchasesBloc>().refresh(),
       child: CustomScrollView(
         slivers: [
+          if (isRemoteClient)
+            SliverToBoxAdapter(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      LucideIcons.warehouse,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'purchases.remote_warehouse_scope_title'.tr(),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'purchases.remote_warehouse_scope_body'.tr(),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           // ─── Dashboard Stats ───
           SliverToBoxAdapter(
             child: Padding(
@@ -206,9 +263,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                         colorScheme.secondary.withValues(alpha: 0.7),
                       ],
                       label: 'purchases.total_payables'.tr(),
-                      value: currencyService.format(
-                        data.stats.totalPayableCents,
-                      ),
+                      value: formatCurrency(data.stats.totalPayableCents),
                     ),
                   ];
 
@@ -406,7 +461,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                 }
                 return _PurchaseTile(
                   purchase: purchase,
-                  currencyService: currencyService,
+                  currencyFormatter: formatCurrency,
                   hasReturn: data.purchaseIdsWithReturns.contains(purchase.id),
                   onTap: () => context.push('/purchases/${purchase.id}'),
                 );
@@ -417,6 +472,22 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         ],
       ),
     );
+  }
+
+  String _formatCurrency(PurchasesHubData data, int cents) {
+    final symbol = data.currencySymbol;
+    final digits = data.currencyDecimalDigits;
+    if (symbol == null || digits == null) {
+      return sl<CurrencyService>().format(cents);
+    }
+    final divisor = math.pow(10, digits);
+    final formatted = NumberFormat.decimalPatternDigits(
+      locale: Intl.getCurrentLocale(),
+      decimalDigits: digits,
+    ).format(cents / divisor);
+    return data.currencySymbolAfter
+        ? '$formatted $symbol'
+        : '$symbol$formatted';
   }
 
   Widget _buildDateFilterButton(BuildContext context) {
@@ -491,7 +562,7 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
             ),
             const SizedBox(height: 28),
             FilledButton.icon(
-              onPressed: () => context.push('/purchases/new'),
+              onPressed: () => _openNewPurchase(context),
               icon: const Icon(LucideIcons.plus, size: 18),
               label: Text('purchases.add_first'.tr()),
               style: FilledButton.styleFrom(
@@ -635,13 +706,13 @@ class _FilterChip extends StatelessWidget {
 // ─── Purchase Tile (Premium with status accent) ───
 class _PurchaseTile extends StatelessWidget {
   final PurchaseEntity purchase;
-  final CurrencyService currencyService;
+  final String Function(int cents) currencyFormatter;
   final bool hasReturn;
   final VoidCallback onTap;
 
   const _PurchaseTile({
     required this.purchase,
-    required this.currencyService,
+    required this.currencyFormatter,
     this.hasReturn = false,
     required this.onTap,
   });
@@ -923,7 +994,7 @@ class _PurchaseTile extends StatelessWidget {
                               ],
                               const Spacer(),
                               Text(
-                                currencyService.format(
+                                currencyFormatter(
                                   purchase.totalCents.toBigInt().toInt(),
                                 ),
                                 style: theme.textTheme.titleMedium?.copyWith(

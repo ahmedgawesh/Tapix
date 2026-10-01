@@ -58,7 +58,7 @@ void main() {
         expect(row.remove('supplier_identity_id'), isNull);
       }
       expect(after, before);
-      expect(db.schemaVersion, 10115);
+      expect(db.schemaVersion, 10119);
       final supplier = (await db.select(db.suppliers).get()).single;
       expect(supplier.isActive, isFalse);
       expect(await db.supplierDao.isProductCodeLocked(supplier.id), isTrue);
@@ -106,7 +106,7 @@ void main() {
       (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
         'user_version',
       ),
-      10115,
+      10119,
     );
   });
 

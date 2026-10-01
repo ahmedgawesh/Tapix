@@ -69,10 +69,16 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        10115,
+        10119,
       );
       expect(await db.select(db.warehouseTransfers).get(), isEmpty);
       expect(await db.select(db.warehouseTransferLines).get(), isEmpty);
+      final lineColumns = await db
+          .customSelect('PRAGMA table_info(warehouse_transfer_lines)')
+          .map((row) => row.read<String>('name'))
+          .get();
+      expect(lineColumns, contains('requested_owned_quantity'));
+      expect(lineColumns, contains('requested_consignment_quantity'));
       expect(await db.select(db.warehouseTransferEvents).get(), isEmpty);
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
       expect(
@@ -141,7 +147,7 @@ void main() {
       expect(
         (await recovered.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10115,
+        10119,
       );
     },
   );

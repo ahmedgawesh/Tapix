@@ -121,7 +121,11 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
         if (state.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(state.error!),
+              content: Text(
+                state.error!.startsWith('purchases.')
+                    ? state.error!.tr()
+                    : state.error!,
+              ),
               backgroundColor: colorScheme.error,
               behavior: SnackBarBehavior.floating,
             ),
@@ -863,6 +867,7 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
 
     const dispositions = [
       ('restock', LucideIcons.package),
+      ('replace', LucideIcons.repeat),
       ('write_off', LucideIcons.trash2),
     ];
 
@@ -902,80 +907,87 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
               ],
             ),
             const SizedBox(height: 10),
-            ...refundMethods.map((m) {
-              final isSelected = state.refundMethod == m.$1;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Material(
-                  color: isSelected
-                      ? cs.primaryContainer.withValues(alpha: 0.5)
-                      : cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () async {
-                      if (m.$1 != 'cheque') {
-                        setState(() => _settlementAllocations = const []);
-                        context.read<PurchaseReturnFormBloc>().add(
-                          ReturnRefundMethodChanged(m.$1),
-                        );
-                        return;
-                      }
-                      context.read<PurchaseReturnFormBloc>().add(
-                        const ReturnRefundMethodChanged('cheque'),
-                      );
-                      await _configureChequeSettlement(context, state);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            m.$2,
-                            size: 18,
-                            color: isSelected
-                                ? cs.primary
-                                : cs.onSurfaceVariant,
+            ...refundMethods
+                .where(
+                  (m) => state.dispositionType != 'replace' || m.$1 == 'credit',
+                )
+                .map((m) {
+                  final isSelected = state.refundMethod == m.$1;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Material(
+                      color: isSelected
+                          ? cs.primaryContainer.withValues(alpha: 0.5)
+                          : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () async {
+                          if (m.$1 != 'cheque') {
+                            setState(() => _settlementAllocations = const []);
+                            context.read<PurchaseReturnFormBloc>().add(
+                              ReturnRefundMethodChanged(m.$1),
+                            );
+                            return;
+                          }
+                          context.read<PurchaseReturnFormBloc>().add(
+                            const ReturnRefundMethodChanged('cheque'),
+                          );
+                          await _configureChequeSettlement(context, state);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'purchases.refund_method_${m.$1}'.tr(),
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: isSelected
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                m.$2,
+                                size: 18,
+                                color: isSelected
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'purchases.refund_method_${m.$1}'.tr(),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: isSelected
+                                                ? FontWeight.w600
+                                                : FontWeight.normal,
+                                          ),
+                                    ),
+                                    Text(
+                                      'purchases.refund_method_${m.$1}_desc'
+                                          .tr(),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                            fontSize: 10,
+                                          ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  'purchases.refund_method_${m.$1}_desc'.tr(),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                    fontSize: 10,
-                                  ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  LucideIcons.checkCircle2,
+                                  size: 18,
+                                  color: cs.primary,
                                 ),
-                              ],
-                            ),
+                            ],
                           ),
-                          if (isSelected)
-                            Icon(
-                              LucideIcons.checkCircle2,
-                              size: 18,
-                              color: cs.primary,
-                            ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            }),
+                  );
+                }),
             // ── Phase 14.0 — cheque due date (only shown for cheque) ──
             if (state.refundMethod == 'cheque') ...[
               const SizedBox(height: 6),
@@ -1053,15 +1065,20 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
                         ? FontWeight.w600
                         : FontWeight.normal,
                   ),
-                  onSelected: (_) => context.read<PurchaseReturnFormBloc>().add(
-                    ReturnDispositionChanged(d.$1),
-                  ),
+                  onSelected: (_) {
+                    if (d.$1 == 'replace') {
+                      setState(() => _settlementAllocations = const []);
+                    }
+                    context.read<PurchaseReturnFormBloc>().add(
+                      ReturnDispositionChanged(d.$1),
+                    );
+                  },
                 );
               }).toList(),
             ),
             const SizedBox(height: 4),
             Text(
-              'purchases.disposition_hint'.tr(),
+              'purchases.disposition_${state.dispositionType}_info'.tr(),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: cs.onSurfaceVariant.withValues(alpha: 0.6),
                 fontSize: 10,
@@ -1118,25 +1135,35 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
             ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _dispositionInfoTile(
-              context,
-              icon: LucideIcons.package,
-              title: 'purchases.disposition_restock'.tr(),
-              description: 'purchases.disposition_restock_info'.tr(),
-              color: Colors.green,
-            ),
-            const SizedBox(height: 10),
-            _dispositionInfoTile(
-              context,
-              icon: LucideIcons.trash2,
-              title: 'purchases.disposition_write_off'.tr(),
-              description: 'purchases.disposition_write_off_info'.tr(),
-              color: Colors.red,
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _dispositionInfoTile(
+                context,
+                icon: LucideIcons.package,
+                title: 'purchases.disposition_restock'.tr(),
+                description: 'purchases.disposition_restock_info'.tr(),
+                color: Colors.green,
+              ),
+              const SizedBox(height: 10),
+              _dispositionInfoTile(
+                context,
+                icon: LucideIcons.repeat,
+                title: 'purchases.disposition_replace'.tr(),
+                description: 'purchases.disposition_replace_info'.tr(),
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 10),
+              _dispositionInfoTile(
+                context,
+                icon: LucideIcons.trash2,
+                title: 'purchases.disposition_write_off'.tr(),
+                description: 'purchases.disposition_write_off_info'.tr(),
+                color: Colors.red,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(

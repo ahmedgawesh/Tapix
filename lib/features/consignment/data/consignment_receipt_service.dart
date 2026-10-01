@@ -9,6 +9,7 @@ import '../../../core/services/batch_service.dart';
 import '../../../core/services/business/warehouse_inventory_reader.dart';
 import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/stock_service.dart';
+import '../../../core/services/sync/consignment_sync_recorder.dart';
 import 'consignment_module_service.dart';
 
 class ConsignmentReceiptLineInput {
@@ -407,6 +408,39 @@ class ConsignmentReceiptService {
         postedAt: Value(now),
       ),
     );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_receipt.posted.v1',
+      contract: 'consignment_receipt.posted',
+      documentType: 'consignment_receipt',
+      localDocumentId: receipt.id,
+      action: 'posted',
+      occurredAt: now,
+      supplierId: receipt.supplierId,
+      currencyId: receipt.currencyId,
+      warehouseId: receipt.warehouseId,
+      agreementId: receipt.agreementId,
+      values: {
+        'receiptNumber': receipt.receiptNumber,
+        'receivedAt': receipt.receivedAt.toUtc().toIso8601String(),
+        'notes': receipt.notes,
+      },
+      lines: [
+        for (final item in items)
+          {
+            'lineId': item.id,
+            'productId': item.productId,
+            'variantId': item.variantId,
+            'quantity': item.quantity,
+            'quantityScale': item.quantityScale,
+            'measurementType': item.measurementType,
+            'settlementBasis': item.settlementBasis,
+            'unitCostMinor': item.unitCostCents,
+            'supplierShareBps': item.supplierShareBps,
+            'manufacturerLotNumber': item.manufacturerLotNumber,
+            'expiryDate': item.expiryDate?.toUtc().toIso8601String(),
+          },
+      ],
+    );
     return (_db.select(
       _db.consignmentReceipts,
     )..where((r) => r.id.equals(receipt.id))).getSingle();
@@ -609,6 +643,31 @@ class ConsignmentReceiptService {
         voidedAt: Value(now),
         voidReason: Value(cleanReason),
       ),
+    );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_receipt.voided.v1',
+      contract: 'consignment_receipt.voided',
+      documentType: 'consignment_receipt',
+      localDocumentId: receipt.id,
+      action: 'voided',
+      occurredAt: now,
+      supplierId: receipt.supplierId,
+      currencyId: receipt.currencyId,
+      warehouseId: receipt.warehouseId,
+      agreementId: receipt.agreementId,
+      values: {'receiptNumber': receipt.receiptNumber, 'reason': cleanReason},
+      lines: [
+        for (final row in layers)
+          {
+            'lineId': row.readTable(_db.consignmentReceiptItems).id,
+            'productId': row.readTable(_db.consignmentReceiptItems).productId,
+            'variantId': row.readTable(_db.consignmentReceiptItems).variantId,
+            'quantity': row.readTable(_db.consignmentReceiptItems).quantity,
+            'quantityScale': row
+                .readTable(_db.consignmentReceiptItems)
+                .quantityScale,
+          },
+      ],
     );
     return (_db.select(
       _db.consignmentReceipts,

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/settings_dao.dart';
 import '../../../../core/services/business/branch_tax_policy.dart';
 import '../../../../core/services/business/branch_tax_policy_store.dart';
 import '../../domain/entities/app_settings.dart';
@@ -11,6 +13,9 @@ const _kAppSettingsKey = 'app_settings_v1';
 class AppSettingsService {
   final SharedPreferences _prefs;
   final BranchTaxPolicyStore? _taxStore;
+  final AppDatabase? _database;
+  final SettingsDao? _settingsDao;
+  final List<StreamSubscription<String?>> _sharedPolicySubscriptions = [];
   final StreamController<AppSettings> _controller =
       StreamController<AppSettings>.broadcast();
   Future<void> _pending = Future<void>.value();
@@ -18,8 +23,14 @@ class AppSettingsService {
   bool _disposed = false;
   late AppSettings _current;
 
-  AppSettingsService(this._prefs, {BranchTaxPolicyStore? taxStore})
-    : _taxStore = taxStore {
+  AppSettingsService(
+    this._prefs, {
+    BranchTaxPolicyStore? taxStore,
+    AppDatabase? database,
+    SettingsDao? settingsDao,
+  }) : _taxStore = taxStore,
+       _database = database,
+       _settingsDao = settingsDao {
     _current = _load();
   }
 
@@ -39,6 +50,70 @@ class AppSettingsService {
     final snapshot = await _taxStore.initializeFromLegacy(_current);
     _taxSnapshot = snapshot;
     _current = snapshot.policy.applyTo(_current);
+    _publish();
+  });
+
+  /// On an independently linked LAN branch, company feature switches are
+  /// authored by the coordinator and mirrored into this device's UI cache.
+  /// A coordinator or a standalone installation keeps its local preferences.
+  Future<void> initializeSharedFeaturePolicy() async {
+    final database = _database;
+    final settings = _settingsDao;
+    if (database == null || settings == null || _disposed) return;
+    final localDatabaseId = await database
+        .customSelect('SELECT database_id FROM sync_local_state WHERE id=1')
+        .map((row) => row.read<String>('database_id'))
+        .getSingle();
+    final coordinatorId = await settings.getSetting(
+      'lan.branch_sync.coordinator_database_id.v1',
+    );
+    final isIndependentBranch =
+        coordinatorId != null &&
+        coordinatorId.trim().isNotEmpty &&
+        coordinatorId.trim().toLowerCase() != localDatabaseId.toLowerCase();
+    if (!isIndependentBranch) return;
+
+    for (final subscription in _sharedPolicySubscriptions) {
+      await subscription.cancel();
+    }
+    _sharedPolicySubscriptions.clear();
+    await _refreshSharedFeaturePolicy();
+    for (final key in const [
+      'pharmacy_features_enabled',
+      'promotions_enabled',
+    ]) {
+      _sharedPolicySubscriptions.add(
+        settings.watchSetting(key).listen((_) {
+          if (!_disposed) unawaited(_refreshSharedFeaturePolicy());
+        }),
+      );
+    }
+  }
+
+  Future<void> _refreshSharedFeaturePolicy() => _enqueue(() async {
+    final settings = _settingsDao;
+    if (settings == null) return;
+    bool enabled(String? value) {
+      final normalized = value?.trim().toLowerCase();
+      return normalized == '1' || normalized == 'true';
+    }
+
+    final pharmacy = enabled(
+      await settings.getSetting('pharmacy_features_enabled'),
+    );
+    final promotions = enabled(await settings.getSetting('promotions_enabled'));
+    final next = _current.copyWith(
+      enablePharmacyFeatures: pharmacy,
+      enablePromotions: promotions,
+    );
+    if (next.enablePharmacyFeatures == _current.enablePharmacyFeatures &&
+        next.enablePromotions == _current.enablePromotions) {
+      return;
+    }
+    if (!await _prefs.setString(_kAppSettingsKey, next.toJson())) {
+      throw StateError('Shared branch feature policy could not be saved.');
+    }
+    _current = next;
     _publish();
   });
 
@@ -137,6 +212,10 @@ class AppSettingsService {
 
   void dispose() {
     _disposed = true;
+    for (final subscription in _sharedPolicySubscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _sharedPolicySubscriptions.clear();
     _controller.close();
   }
 }

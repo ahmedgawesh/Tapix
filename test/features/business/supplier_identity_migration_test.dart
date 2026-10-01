@@ -61,7 +61,7 @@ void main() {
         expect(row.remove('supplier_identity_id'), isNull);
       }
       expect(after, before);
-      expect(db.schemaVersion, 10115);
+      expect(db.schemaVersion, 10119);
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
     },
   );
@@ -98,7 +98,7 @@ void main() {
       (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
         'user_version',
       ),
-      10115,
+      10119,
     );
   });
 

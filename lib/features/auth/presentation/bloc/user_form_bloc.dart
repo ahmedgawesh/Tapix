@@ -76,6 +76,9 @@ class UserFormSubmitRequested extends UserFormEvent {
   final UserRole role;
   final int? employeeId;
   final bool clearEmployeeLink;
+  final String? branchId;
+  final String? warehouseId;
+  final bool hasGlobalLocationAccess;
   final String? securityQuestion;
   final String? securityAnswer;
 
@@ -87,6 +90,9 @@ class UserFormSubmitRequested extends UserFormEvent {
     required this.role,
     this.employeeId,
     this.clearEmployeeLink = false,
+    this.branchId,
+    this.warehouseId,
+    this.hasGlobalLocationAccess = false,
     this.securityQuestion,
     this.securityAnswer,
   });
@@ -100,6 +106,9 @@ class UserFormSubmitRequested extends UserFormEvent {
     role,
     employeeId,
     clearEmployeeLink,
+    branchId,
+    warehouseId,
+    hasGlobalLocationAccess,
     securityQuestion,
     securityAnswer,
   ];
@@ -158,8 +167,32 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
         return;
       }
 
-      if (event.role == UserRole.cashier && event.employeeId == null) {
-        emit(const UserFormError('employee_required_cashier'));
+      if ((event.role == UserRole.cashier ||
+              event.role == UserRole.warehouseClerk) &&
+          event.employeeId == null) {
+        emit(const UserFormError('employee_required_operator'));
+        return;
+      }
+      final mayUseGlobal =
+          event.role == UserRole.owner ||
+          event.role == UserRole.manager ||
+          event.role == UserRole.accountant;
+      if (event.hasGlobalLocationAccess && !mayUseGlobal) {
+        emit(const UserFormError('global_location_not_allowed'));
+        return;
+      }
+      if (!event.hasGlobalLocationAccess && event.branchId == null) {
+        emit(const UserFormError('branch_required'));
+        return;
+      }
+      final exactWarehouseRequired =
+          event.role == UserRole.cashier ||
+          event.role == UserRole.warehouseClerk ||
+          event.role == UserRole.salesperson;
+      if (!event.hasGlobalLocationAccess &&
+          exactWarehouseRequired &&
+          event.warehouseId == null) {
+        emit(const UserFormError('warehouse_required'));
         return;
       }
 
@@ -208,6 +241,9 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
           password: event.password,
           role: event.role,
           employeeId: event.employeeId,
+          branchId: event.hasGlobalLocationAccess ? null : event.branchId,
+          warehouseId: event.hasGlobalLocationAccess ? null : event.warehouseId,
+          hasGlobalLocationAccess: event.hasGlobalLocationAccess,
           securityQuestion: event.securityQuestion,
           securityAnswer: event.securityAnswer,
         );
@@ -221,6 +257,10 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
           role: event.role,
           employeeId: event.employeeId,
           clearEmployeeLink: event.clearEmployeeLink,
+          branchId: event.hasGlobalLocationAccess ? null : event.branchId,
+          warehouseId: event.hasGlobalLocationAccess ? null : event.warehouseId,
+          hasGlobalLocationAccess: event.hasGlobalLocationAccess,
+          clearLocationAssignment: event.hasGlobalLocationAccess,
           securityQuestion: event.securityQuestion,
           securityAnswer: event.securityAnswer,
         );

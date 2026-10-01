@@ -34,6 +34,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
   StreamSubscription<LanNetworkSnapshot>? _subscription;
   Timer? _refreshTimer;
   List<LanMasterDeviceInfo> _devices = const [];
+  List<LanDeviceWarehouseOption> _warehouses = const [];
   String? _busyDeviceId;
 
   @override
@@ -41,6 +42,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
     super.initState();
     _service = sl<LanNetworkService>();
     _refresh();
+    unawaited(_loadWarehouses());
     _subscription = _service.changes.listen((_) {
       if (mounted) _refresh();
     });
@@ -59,6 +61,11 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
   void _refresh() {
     final devices = _service.getMasterDevices();
     if (mounted) setState(() => _devices = devices);
+  }
+
+  Future<void> _loadWarehouses() async {
+    final values = await _service.getMasterAssignableWarehouses();
+    if (mounted) setState(() => _warehouses = values);
   }
 
   Future<String?> _askText({
@@ -93,6 +100,62 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
       () => _service.renameMasterDevice(
         deviceId: device.id,
         name: name,
+        actorUserId: widget.actor.id,
+        actorUsername: widget.actor.username,
+      ),
+    );
+  }
+
+  Future<void> _assignWarehouse(LanMasterDeviceInfo device) async {
+    if (device.hasUserSession) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'settings.network.management.assign_requires_logout'.tr(),
+          ),
+        ),
+      );
+      return;
+    }
+    await _loadWarehouses();
+    if (!mounted || _warehouses.isEmpty) return;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('settings.network.management.assign_warehouse'.tr()),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Text(
+              'settings.network.management.assign_warehouse_help'.tr(),
+              style: Theme.of(dialogContext).textTheme.bodyMedium,
+            ),
+          ),
+          for (final warehouse in _warehouses)
+            ListTile(
+              selected: warehouse.id == device.warehouseId,
+              leading: Icon(
+                warehouse.id == device.warehouseId
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+              ),
+              title: Text('${warehouse.branchName} / ${warehouse.name}'),
+              subtitle: Text(
+                warehouse.isPrimary
+                    ? '${warehouse.branchCode} • ${warehouse.code} • ${'settings.network.management.primary_warehouse'.tr()}'
+                    : '${warehouse.branchCode} • ${warehouse.code}',
+              ),
+              onTap: () => Navigator.pop(dialogContext, warehouse.id),
+            ),
+        ],
+      ),
+    );
+    if (selected == null || selected == device.warehouseId) return;
+    await _run(
+      device.id,
+      () => _service.assignMasterDeviceWarehouse(
+        deviceId: device.id,
+        warehouseId: selected,
         actorUserId: widget.actor.id,
         actorUsername: widget.actor.username,
       ),
@@ -308,6 +371,15 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
                                     value: _role(device.userRole),
                                   ),
                                   _Detail(
+                                    icon: Icons.devices_other_outlined,
+                                    label:
+                                        'settings.network.enrollment.device_kind'
+                                            .tr(),
+                                    value:
+                                        'settings.network.enrollment.kind_${device.deviceKind.name}'
+                                            .tr(),
+                                  ),
+                                  _Detail(
                                     icon: Icons.account_tree_outlined,
                                     label:
                                         'settings.network.management.location_scope'
@@ -357,6 +429,16 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
                                     icon: const Icon(Icons.edit_outlined),
                                     label: Text(
                                       'settings.network.management.rename'.tr(),
+                                    ),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: busy
+                                        ? null
+                                        : () => _assignWarehouse(device),
+                                    icon: const Icon(Icons.warehouse_outlined),
+                                    label: Text(
+                                      'settings.network.management.assign_warehouse'
+                                          .tr(),
                                     ),
                                   ),
                                   OutlinedButton.icon(

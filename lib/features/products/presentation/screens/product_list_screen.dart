@@ -9,6 +9,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../../auth/data/services/permission_service.dart';
 import '../../../auth/domain/entities/permission_constants.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -399,11 +400,15 @@ class _ProductListViewState extends State<_ProductListView> {
           deactivated++;
         }
       }
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('products.delete_blocked_linked_records'.tr()),
+          content: Text(
+            error is SharedCatalogueAuthorityRequired
+                ? 'business_locations.catalogue_authority.write_denied'.tr()
+                : 'products.delete_blocked_linked_records'.tr(),
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );

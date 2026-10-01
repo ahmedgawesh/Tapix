@@ -1,3 +1,4 @@
+import '../../../../core/services/returns/purchase_return_disposition.dart';
 import '../../../../core/services/business/warehouse_document_reader.dart';
 import '../../../../core/services/business/document_posting_scope.dart';
 import '../../../../core/services/business/warehouse_operation_scope.dart';
@@ -16,6 +17,9 @@ import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/cheque_source_void_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/services/sync/offline_sync_event_store.dart';
+import '../../../../core/services/sync/purchase_sync_contract.dart';
+import '../../../../core/services/sync/sync_entity_identity_store.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/purchase_entity.dart';
@@ -28,6 +32,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   final SessionService _sessionService;
   final JournalEntryService _journalService;
   final db.AppDatabase _db;
+  final OfflineSyncEventStore? _syncEvents;
+  final SyncEntityIdentityStore? _syncIdentities;
   final WarehouseOperationScope? warehouseScope;
   late final _reader = WarehouseDocumentReader(_db, scope: warehouseScope);
 
@@ -38,10 +44,141 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     this._journalService,
     this._db, {
     this.warehouseScope,
-  });
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
+  }) : _syncEvents = syncEvents,
+       _syncIdentities = syncIdentities;
+
+  /// Operation-local view for an authorized warehouse. No global branch
+  /// context is changed, so concurrent LAN requests cannot leak scopes.
+  PurchaseRepositoryImpl forWarehouse(WarehouseOperationScope scope) =>
+      PurchaseRepositoryImpl(
+        _datasource,
+        _auditService,
+        _sessionService,
+        _journalService,
+        _db,
+        warehouseScope: scope,
+        syncEvents: _syncEvents,
+        syncIdentities: _syncIdentities,
+      );
+
+  OfflineSyncEventStore get _effectiveSyncEvents =>
+      _syncEvents ?? OfflineSyncEventStore(_db);
+
+  SyncEntityIdentityStore get _effectiveSyncIdentities =>
+      _syncIdentities ?? SyncEntityIdentityStore(_db);
 
   /// Get the current user ID from the session for audit logging.
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
+
+  Future<void> _appendPostedPurchase(
+    OfflineSyncTransaction transaction, {
+    required int purchaseId,
+    required int? actorUserId,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final purchase = await (_db.select(
+      _db.purchases,
+    )..where((row) => row.id.equals(purchaseId))).getSingle();
+    final payload = await PurchaseSyncContractBuilder(
+      _db,
+      _effectiveSyncIdentities,
+    ).buildPostedPurchase(purchase: purchase, actorUserId: actorUserId);
+    await transaction.appendOnce(
+      producerKey: 'purchase:posted:$purchaseId',
+      eventType: 'purchase.posted.v1',
+      aggregateType: 'purchase',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: purchase.updatedAt,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendPostedPurchaseReturn(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required int? actorUserId,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final purchaseReturn = await (_db.select(
+      _db.purchaseReturns,
+    )..where((row) => row.id.equals(returnId))).getSingle();
+    final payload =
+        await PurchaseSyncContractBuilder(
+          _db,
+          _effectiveSyncIdentities,
+        ).buildPostedLinkedReturn(
+          purchaseReturn: purchaseReturn,
+          actorUserId: actorUserId,
+        );
+    await transaction.appendOnce(
+      producerKey: 'purchase_return:posted:$returnId',
+      eventType: 'purchase_return.posted.v1',
+      aggregateType: 'purchase_return',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: purchaseReturn.returnDate,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendVoidedPurchase(
+    OfflineSyncTransaction transaction, {
+    required int purchaseId,
+    required int? actorUserId,
+    required DateTime voidedAt,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final purchase = await (_db.select(
+      _db.purchases,
+    )..where((row) => row.id.equals(purchaseId))).getSingle();
+    final payload =
+        await PurchaseSyncContractBuilder(
+          _db,
+          _effectiveSyncIdentities,
+        ).buildVoidedPurchase(
+          purchase: purchase,
+          actorUserId: actorUserId,
+          voidedAt: voidedAt,
+        );
+    await transaction.appendOnce(
+      producerKey: 'purchase:voided:$purchaseId',
+      eventType: 'purchase.voided.v1',
+      aggregateType: 'purchase',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: voidedAt,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendVoidedPurchaseReturn(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required int? actorUserId,
+    required DateTime voidedAt,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final purchaseReturn = await (_db.select(
+      _db.purchaseReturns,
+    )..where((row) => row.id.equals(returnId))).getSingle();
+    final payload =
+        await PurchaseSyncContractBuilder(
+          _db,
+          _effectiveSyncIdentities,
+        ).buildVoidedLinkedReturn(
+          purchaseReturn: purchaseReturn,
+          actorUserId: actorUserId,
+          voidedAt: voidedAt,
+        );
+    await transaction.appendOnce(
+      producerKey: 'purchase_return:voided:$returnId',
+      eventType: 'purchase_return.voided.v1',
+      aggregateType: 'purchase_return',
+      aggregateId: payload['documentId']! as String,
+      occurredAt: voidedAt,
+      payload: payload,
+    );
+  }
 
   // ==================== PURCHASES ====================
 
@@ -141,6 +278,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? dueDate,
     bool taxInclusiveAtPost = false,
     List<CheckoutPaymentAllocation> initialPayments = const [],
+    int? actorUserId,
   }) async {
     final settlement = CheckoutSettlement(initialPayments);
     final isPureCheque =
@@ -204,7 +342,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
     // Create purchase as draft — journal entries are deferred until postPurchase()
     // to keep GL and supplier sub-ledger in sync.
-    final userId = await _currentUserId();
+    final userId = actorUserId ?? await _currentUserId();
 
     const maxRetries = 3;
     late int purchaseId;
@@ -410,9 +548,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   });
 
   @override
-  Future<void> postPurchase(int purchaseId) async {
-    await _db.transaction(() async {
-      final userId = await _currentUserId();
+  Future<void> postPurchase(int purchaseId, {int? actorUserId}) async {
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
+      final userId = actorUserId ?? await _currentUserId();
 
       // Read purchase data BEFORE posting (need totalCents, paidAmountCents, etc.)
       final purchase = await _datasource.getPurchaseById(purchaseId);
@@ -519,12 +657,18 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         newValue: {'status': 'posted'},
         userId: userId,
       );
+      await _appendPostedPurchase(
+        syncTransaction,
+        purchaseId: purchaseId,
+        actorUserId: userId,
+      );
     });
   }
 
   @override
-  Future<void> voidPurchase(int purchaseId) async {
-    await _db.transaction(() async {
+  Future<void> voidPurchase(int purchaseId, {int? actorUserId}) async {
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
+      final voidedAt = DateTime.now().toUtc();
       // 2026-05-13 — pre-flight integrity guard. The analyzer is the single
       // source of truth for "what breaks if we void this purchase?". On a
       // hard blocker (entangled adjustment returns or projected negative
@@ -545,7 +689,10 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         throw VoidBlockedByImpactException(report);
       }
 
-      final userId = await _currentUserId();
+      final userId = actorUserId ?? await _currentUserId();
+      final purchaseBeforeVoid = await (_db.select(
+        _db.purchases,
+      )..where((row) => row.id.equals(purchaseId))).getSingle();
       final linkedReturns =
           await (_db.select(_db.purchaseReturns)..where(
                 (row) =>
@@ -578,7 +725,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         sourceTable: 'purchases',
         sourceId: purchaseId,
         reason: 'Purchase voided',
-        userId: await _currentUserId(),
+        userId: userId,
       );
 
       // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
@@ -595,7 +742,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           sourceTable: 'purchase_payments',
           sourceId: p.id,
           reason: 'Purchase voided — payment JE reversed',
-          userId: await _currentUserId(),
+          userId: userId,
         );
       }
 
@@ -605,15 +752,43 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         purchaseId,
         scope: warehouseScope,
         journalEntryService: _journalService,
-        userId: await _currentUserId(),
+        userId: userId,
       );
+
+      for (final purchaseReturn in linkedReturns) {
+        await (_db.update(
+          _db.purchaseReturns,
+        )..where((row) => row.id.equals(purchaseReturn.id))).write(
+          db.PurchaseReturnsCompanion(
+            voidedBy: userId == null ? const Value.absent() : Value(userId),
+            voidedAt: Value(voidedAt),
+            voidReason: const Value('Purchase voided — cascade'),
+          ),
+        );
+        if (purchaseReturn.status == 'posted') {
+          await _appendVoidedPurchaseReturn(
+            syncTransaction,
+            returnId: purchaseReturn.id,
+            actorUserId: userId,
+            voidedAt: voidedAt,
+          );
+        }
+      }
+      if (purchaseBeforeVoid.status == 'posted') {
+        await _appendVoidedPurchase(
+          syncTransaction,
+          purchaseId: purchaseId,
+          actorUserId: userId,
+          voidedAt: voidedAt,
+        );
+      }
 
       // Audit: log purchase voiding (stock was reversed)
       await _auditService.logVoid(
         entityType: 'purchase',
         entityId: purchaseId,
         reason: 'User voided purchase',
-        userId: await _currentUserId(),
+        userId: userId,
       );
     });
   }
@@ -731,7 +906,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   });
 
   @override
-  Future<int> deletePurchase(int purchaseId) => _db.transaction(() async {
+  Future<int> deletePurchase(
+    int purchaseId, {
+    int? actorUserId,
+  }) => _db.transaction(() async {
+    final userId = actorUserId ?? await _currentUserId();
     await DocumentPostingScope.validate(
       _db,
       InventoryPostingDocument.purchase,
@@ -744,7 +923,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       sourceTable: 'purchases',
       sourceId: purchaseId,
       reason: 'Purchase deleted',
-      userId: await _currentUserId(),
+      userId: userId,
     );
 
     // Audit: log before deletion (data will be gone after)
@@ -753,7 +932,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       entityId: purchaseId,
       action: 'delete',
       oldValue: {'purchaseId': purchaseId},
-      userId: await _currentUserId(),
+      userId: userId,
     );
 
     return _datasource.deletePurchase(purchaseId);
@@ -895,7 +1074,15 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     String? idempotencyKey,
     bool taxInclusiveAtPost = false,
     List<CheckoutPaymentAllocation> settlementAllocations = const [],
+    int? actorUserId,
   }) async {
+    final dispositionError = PurchaseReturnDispositionPolicy.validate(
+      disposition: dispositionType,
+      refundMethod: refundMethod,
+      reason: reason,
+      hasSettlementAllocations: settlementAllocations.isNotEmpty,
+    );
+    if (dispositionError != null) throw ArgumentError(dispositionError);
     final structuredSettlement = settlementAllocations.isNotEmpty;
     final effectiveRefundMethod = structuredSettlement ? 'mixed' : refundMethod;
     final isChequeRefund =
@@ -910,14 +1097,16 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
     // ATOMIC: Wrap return creation, stock deduction, and journal entries
     // in a single transaction.
-    final userId = await _currentUserId();
+    final userId = actorUserId ?? await _currentUserId();
     late int postedSubtotalCents;
     late int postedDiscountCents;
     late int postedTaxCents;
     late int postedTotalCents;
 
     late String returnNumber;
-    final returnId = await _db.transaction(() async {
+    final returnId = await _effectiveSyncEvents.transaction((
+      syncTransaction,
+    ) async {
       returnNumber = await generateReturnNumber();
       final originalPurchase = await _datasource.getPurchaseById(purchaseId);
       if (originalPurchase == null) throw Exception('Purchase not found');
@@ -1081,6 +1270,12 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         );
       }
 
+      await _appendPostedPurchaseReturn(
+        syncTransaction,
+        returnId: id,
+        actorUserId: userId,
+      );
+
       return id;
     });
 
@@ -1112,26 +1307,39 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   Future<void> postPurchaseReturn(
     int returnId, {
     bool allowNegativeStock = false,
+    int? actorUserId,
   }) async {
-    await _datasource.postPurchaseReturn(
-      returnId,
-      scope: warehouseScope,
-      allowNegativeStock: allowNegativeStock,
-    );
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
+      final userId = actorUserId ?? await _currentUserId();
+      await _datasource.postPurchaseReturn(
+        returnId,
+        scope: warehouseScope,
+        allowNegativeStock: allowNegativeStock,
+      );
 
-    await _auditService.log(
-      entityType: 'purchase_return',
-      entityId: returnId,
-      action: 'post',
-      newValue: {'status': 'posted'},
-      userId: await _currentUserId(),
-    );
+      await _auditService.log(
+        entityType: 'purchase_return',
+        entityId: returnId,
+        action: 'post',
+        newValue: {'status': 'posted'},
+        userId: userId,
+      );
+      await _appendPostedPurchaseReturn(
+        syncTransaction,
+        returnId: returnId,
+        actorUserId: userId,
+      );
+    });
   }
 
   @override
-  Future<void> voidPurchaseReturn(int returnId) async {
-    final userId = await _currentUserId();
-    await _db.transaction(() async {
+  Future<void> voidPurchaseReturn(int returnId, {int? actorUserId}) async {
+    final userId = actorUserId ?? await _currentUserId();
+    await _effectiveSyncEvents.transaction((syncTransaction) async {
+      final voidedAt = DateTime.now().toUtc();
+      final beforeVoid = await (_db.select(
+        _db.purchaseReturns,
+      )..where((row) => row.id.equals(returnId))).getSingle();
       await ChequeSourceVoidService.voidForSource(
         db: _db,
         journalService: _journalService,
@@ -1156,14 +1364,30 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         userId: userId,
       );
       await _datasource.voidPurchaseReturn(returnId, scope: warehouseScope);
+      await (_db.update(
+        _db.purchaseReturns,
+      )..where((row) => row.id.equals(returnId))).write(
+        db.PurchaseReturnsCompanion(
+          voidedBy: userId == null ? const Value.absent() : Value(userId),
+          voidedAt: Value(voidedAt),
+          voidReason: const Value('User voided purchase return'),
+        ),
+      );
+      if (beforeVoid.status == 'posted') {
+        await _appendVoidedPurchaseReturn(
+          syncTransaction,
+          returnId: returnId,
+          actorUserId: userId,
+          voidedAt: voidedAt,
+        );
+      }
+      await _auditService.logVoid(
+        entityType: 'purchase_return',
+        entityId: returnId,
+        reason: 'User voided purchase return',
+        userId: userId,
+      );
     });
-
-    await _auditService.logVoid(
-      entityType: 'purchase_return',
-      entityId: returnId,
-      reason: 'User voided purchase return',
-      userId: await _currentUserId(),
-    );
   }
 
   // ==================== PAYMENTS ====================

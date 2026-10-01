@@ -81,8 +81,24 @@ class AuthRepository implements AuthRepositoryInterface {
         rememberMe: rememberMe,
       );
       final remote = result.user;
-      if (!result.success || remote == null) return null;
-      await _syncRemoteCurrency();
+      if (!result.success || remote == null) {
+        if (result.message == 'user_location_denied') {
+          throw const RemoteAuthenticationRejectedException(
+            'user_location_denied',
+          );
+        }
+        return null;
+      }
+      // Authentication is authoritative once the master has issued a user
+      // session. Loading display configuration is a follow-up operation and
+      // must not turn a successful login into a misleading "invalid password"
+      // error when a branch catalogue is temporarily unavailable.
+      try {
+        await _syncRemoteCurrency();
+      } on Object {
+        // The authenticated session remains valid. Screens that need the
+        // catalogue will retry through the normal LAN error/recovery flow.
+      }
       final entity = _mapRemoteToEntity(remote);
       _userController.add(entity);
       return entity;
@@ -220,6 +236,7 @@ class AuthRepository implements AuthRepositoryInterface {
             username: username,
             passwordHash: hashedPassword,
             role: 'owner',
+            globalLocationAccess: const Value(true),
             securityQuestion: Value(securityQuestion),
             securityAnswerHash: Value(hashedAnswer),
             createdAt: now,
@@ -352,6 +369,9 @@ class AuthRepository implements AuthRepositoryInterface {
       username: user.username,
       role: UserRole.fromString(user.role),
       employeeId: user.employeeId,
+      branchId: user.branchId,
+      warehouseId: user.warehouseId,
+      hasGlobalLocationAccess: user.hasGlobalLocationAccess,
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -365,6 +385,9 @@ class AuthRepository implements AuthRepositoryInterface {
       username: user.username,
       role: UserRole.fromString(user.role),
       employeeId: user.employeeId,
+      branchId: user.branchId,
+      warehouseId: user.warehouseId,
+      hasGlobalLocationAccess: user.globalLocationAccess,
       isActive: user.isActive == 1,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

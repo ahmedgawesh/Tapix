@@ -26,8 +26,7 @@ class PurchaseReturnsBloc
   final LanNetworkService? _lan;
 
   bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+      _lan?.snapshot.mode == LanMode.client;
 
   String _searchQuery = '';
   List<PurchaseReturnEntity> _allReturns = [];

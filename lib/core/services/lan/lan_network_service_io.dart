@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:bcrypt/bcrypt.dart';
 import 'package:crypto/crypto.dart';
+import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'lan_tls_identity.dart';
@@ -15,6 +18,9 @@ import 'package:uuid/uuid.dart';
 import '../../database/daos/settings_dao.dart';
 import '../localization_service.dart';
 import '../business/local_branch_scope.dart';
+import '../sync/branch_operational_projection_service.dart';
+import '../sync/offline_sync_event_store.dart';
+import '../sync/sync_inbound_projection_service.dart';
 import 'lan_business_models.dart';
 import 'lan_models.dart';
 
@@ -26,9 +32,15 @@ class LanNetworkService {
     this._settingsDao, {
     LanMasterAuthGateway? authGateway,
     LanMasterBusinessGateway? businessGateway,
+    LanBranchEnrollmentGateway? branchEnrollmentGateway,
+    LanBranchSyncGateway? branchSyncGateway,
+    SyncInboundProjectionService? branchProjection,
     LocalizationService? localizationService,
   }) : _authGateway = authGateway,
        _businessGateway = businessGateway,
+       _branchEnrollmentGateway = branchEnrollmentGateway,
+       _branchSyncGateway = branchSyncGateway,
+       _branchProjection = branchProjection,
        _localizationService = localizationService;
 
   static const int protocolVersion = 2;
@@ -41,12 +53,24 @@ class LanNetworkService {
   static const String inventoryStockSourcesCapability =
       'inventory-stock-sources-v1';
   static const String warehouseTransfersCapability = 'warehouse-transfers-v1';
+  static const String purchaseInvoicesCapability = 'purchase-invoices-v1';
+  static const String loyaltyTenderCapability = 'loyalty-tender-v1';
+  static const String salePricingPreviewCapability = 'sale-pricing-preview-v1';
+  static const String independentBranchEnrollmentCapability =
+      'independent-branch-enrollment-v1';
+  static const String independentBranchSyncCapability =
+      'independent-branch-sync-v1';
   static const Set<String> serverCapabilities = {
     consignmentSourceCapability,
     consignmentAdjustmentReturnCapability,
     consignmentManagementCapability,
     inventoryStockSourcesCapability,
     warehouseTransfersCapability,
+    purchaseInvoicesCapability,
+    salePricingPreviewCapability,
+    loyaltyTenderCapability,
+    independentBranchEnrollmentCapability,
+    independentBranchSyncCapability,
   };
   static const int defaultPort = 45820;
   static const int discoveryPort = 45821;
@@ -62,13 +86,24 @@ class LanNetworkService {
   // V1 credentials crossed plaintext connections and must not survive upgrade.
   static const _authorizedDevicesKey = 'lan.authorized_devices.v2';
   static const _scopeBindingMigrationKey = 'lan.scope_binding.v1';
+  static const _branchSyncHostKey = 'lan.branch_sync.host.v1';
+  static const _branchSyncPortKey = 'lan.branch_sync.port.v1';
+  static const _branchSyncFingerprintKey =
+      'lan.branch_sync.coordinator_fingerprint.v1';
+  static const _branchSyncEnrollmentKey = 'lan.branch_sync.enrollment_id.v1';
+  static const _branchSyncCoordinatorDatabaseKey =
+      'lan.branch_sync.coordinator_database_id.v1';
+  static const _branchSyncLastSuccessKey = 'lan.branch_sync.last_success_at.v1';
+  static const _branchSyncLastErrorKey = 'lan.branch_sync.last_error.v1';
   LocalBranchScope? _masterScope;
-  String? _masterBranchName;
-  String? _masterWarehouseName;
+  Map<String, LanDeviceWarehouseOption> _masterLocations = const {};
+  Set<String> _delegatedBranchIds = const {};
+  bool _isIndependentBranchServer = false;
+  String? _pendingPairingWarehouseId;
+  LanDeviceKind? _pendingPairingDeviceKind;
 
   static const _userSessionHeader = 'X-Tapix-User-Session';
   static const _platformHeader = 'X-Tapix-Platform';
-  static const _deviceNameHeader = 'X-Tapix-Device-Name';
   static const _masterKeepAliveChannel = MethodChannel(
     'com.tapix.pos/master_keep_alive',
   );
@@ -76,6 +111,9 @@ class LanNetworkService {
   final SettingsDao _settingsDao;
   final LanMasterAuthGateway? _authGateway;
   final LanMasterBusinessGateway? _businessGateway;
+  final LanBranchEnrollmentGateway? _branchEnrollmentGateway;
+  final LanBranchSyncGateway? _branchSyncGateway;
+  final SyncInboundProjectionService? _branchProjection;
   final LocalizationService? _localizationService;
   final _random = Random.secure();
   final _controller = StreamController<LanNetworkSnapshot>.broadcast();
@@ -95,6 +133,8 @@ class LanNetworkService {
 
   Timer? _monitorTimer;
   Timer? _masterMonitorTimer;
+  Timer? _branchSyncTimer;
+  bool _branchSyncInFlight = false;
   RawDatagramSocket? _discoverySocket;
   bool _masterRefreshInFlight = false;
   bool _clientMonitorInFlight = false;
@@ -110,6 +150,7 @@ class LanNetworkService {
   String? _remoteSessionToken;
 
   LanNetworkSnapshot get snapshot => _snapshot;
+  String? get masterTlsFingerprint => _tlsIdentity?.fingerprint;
   LanRemoteUser? get remoteUser => _remoteUser;
   bool get hasRemoteUserSession =>
       _remoteUser != null && _remoteSessionToken != null;
@@ -127,6 +168,7 @@ class LanNetworkService {
     );
     _clientDeviceName = await _settingsDao.getSetting(_clientDeviceNameKey);
     await _loadAuthorizedDevices();
+    await _startIndependentBranchSyncIfConfigured();
 
     final storedMode = await _settingsDao.getSetting(_modeKey);
     final mode = LanMode.values.firstWhere(
@@ -137,7 +179,19 @@ class LanNetworkService {
         int.tryParse(await _settingsDao.getSetting(_portKey) ?? '') ??
         defaultPort;
 
-    if (mode == LanMode.master) {
+    final branchEnrollment = await _settingsDao.getSetting(
+      _branchSyncEnrollmentKey,
+    );
+    final isIndependentBranchServer =
+        branchEnrollment != null && branchEnrollment.isNotEmpty;
+    _isIndependentBranchServer = isIndependentBranchServer;
+
+    // An independent branch database is the only writer for its local stock.
+    // It must also serve its cashier and warehouse workstations automatically;
+    // requiring the operator to turn on a second "master" switch leaves those
+    // devices connected to the company coordinator and causes split routing.
+    if (mode == LanMode.master ||
+        (isIndependentBranchServer && mode != LanMode.client)) {
       try {
         await startMaster(port: port);
       } catch (_) {
@@ -221,7 +275,9 @@ class LanNetworkService {
 
       final addresses = await _localIpv4Addresses();
       final boundPort = _server!.port;
-      final pairingCode = _newPairingCode();
+      _pendingPairingWarehouseId = null;
+      _pendingPairingDeviceKind = null;
+      _pairingExpiresAt = null;
       await _settingsDao.saveSetting(_modeKey, LanMode.master.name);
       await _settingsDao.saveSetting(_portKey, boundPort.toString());
       await _startAndroidMasterKeepAlive(boundPort);
@@ -231,7 +287,6 @@ class LanNetworkService {
           status: LanConnectionStatus.online,
           addresses: addresses,
           port: boundPort,
-          pairingCode: pairingCode,
           masterId: _deviceId,
           pairedDevices: _authorizedDevices.length,
           connectedDevices: _connectedDeviceCount(),
@@ -257,6 +312,7 @@ class LanNetworkService {
           error: error.toString(),
         ),
       );
+      _scheduleMasterRecovery();
       rethrow;
     }
   }
@@ -267,20 +323,46 @@ class LanNetworkService {
     required String pairingCode,
     required String deviceName,
   }) async {
-    final cleanHost = _normalizeHost(host);
+    var cleanHost = _normalizeHost(host);
     final cleanCode = pairingCode.trim().toLowerCase();
-    final cleanDeviceName = deviceName.trim().isEmpty
-        ? 'Tapix device'
-        : deviceName.trim();
-    if (cleanHost.isEmpty ||
-        !RegExp(r'^[0-9]{6}:[a-f0-9]{64}$').hasMatch(cleanCode)) {
-      return const LanPairResult.failure('Invalid address or pairing code.');
+    final cleanDeviceName = deviceName.trim();
+    if (!RegExp(r'^[0-9]{6}:[a-f0-9]{64}$').hasMatch(cleanCode)) {
+      return const LanPairResult.failure('Invalid pairing code.');
     }
-    if (!_isSafeDeviceLabel(cleanDeviceName, maxLength: 80)) {
+    if (port < 1 || port > 65535) {
+      return const LanPairResult.failure('Invalid network port.');
+    }
+    final pairingFingerprint = cleanCode.split(':').last;
+    // A pairing invitation identifies its issuing server by TLS fingerprint.
+    // When this installation was previously paired with another server, the
+    // address field can still contain that server's last IP. Prefer discovery
+    // for a new fingerprint so a warehouse device cannot accidentally keep
+    // calling the company coordinator after being invited by its branch
+    // server. The entered address remains a fallback for networks that block
+    // UDP discovery.
+    final invitationComesFromAnotherServer =
+        _trustedFingerprint != null &&
+        _trustedFingerprint!.isNotEmpty &&
+        !_constantTimeEquals(_trustedFingerprint!, pairingFingerprint);
+    if (cleanHost.isEmpty || invitationComesFromAnotherServer) {
+      final discovered = await _discoverEnrollmentMaster(
+        pairingFingerprint,
+        preferredPort: port,
+      );
+      if (discovered != null) {
+        cleanHost = discovered.host;
+        port = discovered.port;
+      } else if (cleanHost.isEmpty) {
+        return const LanPairResult.failure(
+          'Master was not found on this network.',
+        );
+      }
+    }
+    if (cleanDeviceName.isNotEmpty &&
+        !_isSafeDeviceLabel(cleanDeviceName, maxLength: 80)) {
       return const LanPairResult.failure('invalid_device_name');
     }
 
-    final pairingFingerprint = cleanCode.split(':').last;
     if (_snapshot.mode == LanMode.client && hasRemoteUserSession) {
       await logoutFromMaster();
     }
@@ -331,6 +413,7 @@ class LanNetworkService {
 
       final token = pair.body['token']?.toString();
       final masterId = pair.body['masterId']?.toString();
+      final assignedScope = pair.body['businessScope'];
       if (token == null || token.isEmpty || masterId == null) {
         throw const FormatException('Invalid pairing response.');
       }
@@ -345,7 +428,11 @@ class LanNetworkService {
       await _settingsDao.saveSetting(_portKey, port.toString());
       await _settingsDao.saveSetting(_masterIdKey, masterId);
       await _settingsDao.saveSetting(_clientTokenKey, token);
-      _clientDeviceName = cleanDeviceName;
+      final assignedDeviceName = pair.body['deviceName']?.toString().trim();
+      _clientDeviceName =
+          assignedDeviceName != null && assignedDeviceName.isNotEmpty
+          ? assignedDeviceName
+          : cleanDeviceName;
       await _settingsDao.saveSetting(_clientDeviceNameKey, _clientDeviceName!);
 
       _emit(
@@ -357,6 +444,20 @@ class LanNetworkService {
           masterLocaleCode:
               _validLocaleCode(pair.body['localeCode']?.toString()) ??
               masterLocaleCode,
+          assignedBranchId: assignedScope is Map
+              ? assignedScope['branchId']?.toString()
+              : null,
+          assignedWarehouseId: assignedScope is Map
+              ? assignedScope['warehouseId']?.toString()
+              : null,
+          assignedBranchName: pair.body['branchName']?.toString(),
+          assignedWarehouseName: pair.body['warehouseName']?.toString(),
+          assignedDeviceKind: LanDeviceKind.values
+              .cast<LanDeviceKind?>()
+              .firstWhere(
+                (value) => value?.name == pair.body['deviceKind']?.toString(),
+                orElse: () => LanDeviceKind.warehouseWorkstation,
+              ),
           port: port,
         ),
       );
@@ -373,6 +474,640 @@ class LanNetworkService {
         ),
       );
       return LanPairResult.failure(error.toString());
+    }
+  }
+
+  /// Activates an independent branch writer without changing this process to
+  /// cashier-client mode. The coordinator certificate must be pinned from the
+  /// out-of-band invitation.
+  Future<LanBranchWriterActivationResult> activateIndependentBranchWriter({
+    required String host,
+    required int port,
+    required String coordinatorFingerprint,
+    required String enrollmentId,
+    required String secret,
+    required String remoteDatabaseId,
+  }) async {
+    final cleanHost = _normalizeHost(host);
+    final fingerprint = coordinatorFingerprint.trim().toLowerCase();
+    if (cleanHost.isEmpty ||
+        port < 1 ||
+        port > 65535 ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint) ||
+        enrollmentId.trim().length != 36 ||
+        remoteDatabaseId.trim().length != 36 ||
+        secret.isEmpty ||
+        secret.length > 128) {
+      return const LanBranchWriterActivationResult.failure(
+        'invalid_branch_invitation',
+      );
+    }
+    try {
+      final health = await _jsonRequest(
+        method: 'GET',
+        host: cleanHost,
+        port: port,
+        path: '/v1/health',
+        fingerprint: fingerprint,
+      );
+      if (health.statusCode != HttpStatus.ok ||
+          !_parseCapabilities(
+            health.body,
+          ).contains(independentBranchEnrollmentCapability)) {
+        return const LanBranchWriterActivationResult.failure(
+          'branch_enrollment_not_supported',
+        );
+      }
+      final response = await _jsonRequest(
+        method: 'POST',
+        host: cleanHost,
+        port: port,
+        path: '/v1/branch-writers/activate',
+        fingerprint: fingerprint,
+        body: {
+          'enrollmentId': enrollmentId.trim().toLowerCase(),
+          'secret': secret,
+          'remoteDatabaseId': remoteDatabaseId.trim().toLowerCase(),
+        },
+      );
+      if (response.statusCode != HttpStatus.ok) {
+        return LanBranchWriterActivationResult.failure(
+          response.body['message']?.toString() ?? 'branch_enrollment_rejected',
+        );
+      }
+      final binding = response.body['binding'];
+      if (binding is! Map) {
+        return const LanBranchWriterActivationResult.failure(
+          'invalid_branch_binding',
+        );
+      }
+      String field(String key) => binding[key]?.toString() ?? '';
+      final authoritative = LanBranchWriterBinding(
+        organizationId: field('organizationId'),
+        coordinatorBranchId: field('coordinatorBranchId'),
+        branchId: field('branchId'),
+        warehouseId: field('warehouseId'),
+        coordinatorDatabaseId: field('coordinatorDatabaseId'),
+        accountingCurrencyCode: field('accountingCurrencyCode'),
+        taxPolicy: binding['taxPolicy'] is Map
+            ? Map<String, Object?>.from(binding['taxPolicy'] as Map)
+            : const {},
+        syncAccessToken: field('syncAccessToken'),
+      );
+      if ([
+            authoritative.organizationId,
+            authoritative.coordinatorBranchId,
+            authoritative.branchId,
+            authoritative.warehouseId,
+            authoritative.coordinatorDatabaseId,
+          ].any((value) => !Uuid.isValidUUID(fromString: value)) ||
+          !RegExp(
+            r'^[A-Z]{3}$',
+          ).hasMatch(authoritative.accountingCurrencyCode) ||
+          authoritative.taxPolicy.isEmpty ||
+          authoritative.syncAccessToken.length < 40 ||
+          authoritative.syncAccessToken.length > 128) {
+        return const LanBranchWriterActivationResult.failure(
+          'invalid_branch_binding',
+        );
+      }
+      return LanBranchWriterActivationResult.success(authoritative);
+    } catch (_) {
+      return const LanBranchWriterActivationResult.failure(
+        'branch_coordinator_unreachable',
+      );
+    }
+  }
+
+  /// Persists the coordinator endpoint separately from cashier pairing.
+  /// The access token is kept in platform secure storage; ordinary settings
+  /// contain only routing metadata and never the invitation secret.
+  Future<void> configureIndependentBranchSync({
+    required String host,
+    required int port,
+    required String coordinatorFingerprint,
+    required String enrollmentId,
+    required String coordinatorDatabaseId,
+    required String syncAccessToken,
+  }) async {
+    final cleanHost = _normalizeHost(host);
+    final fingerprint = coordinatorFingerprint.trim().toLowerCase();
+    final enrollment = enrollmentId.trim().toLowerCase();
+    final coordinator = coordinatorDatabaseId.trim().toLowerCase();
+    if (cleanHost.isEmpty ||
+        port < 1 ||
+        port > 65535 ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(fingerprint) ||
+        !Uuid.isValidUUID(fromString: enrollment) ||
+        !Uuid.isValidUUID(fromString: coordinator) ||
+        syncAccessToken.length < 40 ||
+        syncAccessToken.length > 128) {
+      throw const LanBusinessException(
+        'invalid_branch_sync_configuration',
+        'The independent branch synchronization configuration is invalid.',
+      );
+    }
+    await const FlutterSecureStorage().write(
+      key: 'lan.branch_sync.token.v1.$enrollment',
+      value: syncAccessToken,
+    );
+    await _settingsDao.saveSetting(_branchSyncHostKey, cleanHost);
+    await _settingsDao.saveSetting(_branchSyncPortKey, port.toString());
+    await _settingsDao.saveSetting(_branchSyncFingerprintKey, fingerprint);
+    await _settingsDao.saveSetting(_branchSyncEnrollmentKey, enrollment);
+    await _settingsDao.saveSetting(
+      _branchSyncCoordinatorDatabaseKey,
+      coordinator,
+    );
+    _isIndependentBranchServer = true;
+    await _startIndependentBranchSyncIfConfigured();
+  }
+
+  /// Runs one synchronization cycle against the coordinator selected during
+  /// branch enrollment. Posting stays local and this method only transfers
+  /// immutable, already committed event envelopes.
+  Future<LanBranchSyncRunResult> synchronizeIndependentBranchOnce() async {
+    try {
+      final result = await _synchronizeIndependentBranchOnce();
+      await _settingsDao.saveSetting(
+        _branchSyncLastSuccessKey,
+        DateTime.now().toUtc().toIso8601String(),
+      );
+      // Projection failures can remain leased briefly and must stay visible.
+      // Connectivity failures, however, are resolved by any successful cycle,
+      // including an empty one after a Wi-Fi or DHCP address change.
+      final previousError = await _settingsDao.getSetting(
+        _branchSyncLastErrorKey,
+      );
+      if (result.uploaded > 0 ||
+          result.downloaded > 0 ||
+          _isTransientBranchSyncError(previousError)) {
+        await _settingsDao.saveSetting(_branchSyncLastErrorKey, '');
+      }
+      return result;
+    } catch (error) {
+      await _settingsDao.saveSetting(
+        _branchSyncLastErrorKey,
+        error is LanBusinessException
+            ? error.code
+            : error is OfflineSyncException
+            ? error.code
+            : error.runtimeType.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<LanBranchSyncRunResult> _synchronizeIndependentBranchOnce() async {
+    final host = await _settingsDao.getSetting(_branchSyncHostKey);
+    final port = int.tryParse(
+      await _settingsDao.getSetting(_branchSyncPortKey) ?? '',
+    );
+    final fingerprint = await _settingsDao.getSetting(
+      _branchSyncFingerprintKey,
+    );
+    final enrollment = await _settingsDao.getSetting(_branchSyncEnrollmentKey);
+    final coordinatorDatabaseId = await _settingsDao.getSetting(
+      _branchSyncCoordinatorDatabaseKey,
+    );
+    if (host == null ||
+        port == null ||
+        fingerprint == null ||
+        enrollment == null ||
+        coordinatorDatabaseId == null) {
+      throw const LanBusinessException(
+        'branch_sync_not_configured',
+        'Independent branch synchronization is not configured.',
+      );
+    }
+    final token = await const FlutterSecureStorage().read(
+      key: 'lan.branch_sync.token.v1.$enrollment',
+    );
+    if (token == null || token.isEmpty) {
+      throw const LanBusinessException(
+        'branch_sync_credential_missing',
+        'The independent branch synchronization credential is missing.',
+      );
+    }
+    final endpoint = await _resolveIndependentBranchCoordinator(
+      configuredHost: host,
+      preferredPort: port,
+      expectedDatabaseId: coordinatorDatabaseId,
+      fingerprint: fingerprint,
+    );
+    final targetHost = endpoint.host;
+    final targetPort = endpoint.port;
+    final db = _settingsDao.attachedDatabase;
+    final localDatabaseId = await db
+        .customSelect('SELECT database_id FROM sync_local_state WHERE id=1')
+        .map((row) => row.read<String>('database_id'))
+        .getSingle();
+    final store = OfflineSyncEventStore(db);
+    final projection =
+        _branchProjection ??
+        SyncInboundProjectionService(
+          db,
+          store,
+          operationalProjector: BranchOperationalProjectionService(db).apply,
+        );
+    final localLease = const Uuid().v4().toLowerCase();
+    final outbound = await store.claimDispatchBatchForPeer(
+      targetDatabaseId: coordinatorDatabaseId,
+      leaseToken: localLease,
+      limit: 50,
+      leaseDuration: const Duration(seconds: 30),
+    );
+    var uploaded = 0;
+    if (outbound.isNotEmpty) {
+      try {
+        final response = await _jsonRequest(
+          method: 'POST',
+          host: targetHost,
+          port: targetPort,
+          path: '/v1/branch-sync/push',
+          fingerprint: fingerprint,
+          token: token,
+          body: {
+            'enrollmentId': enrollment,
+            'remoteDatabaseId': localDatabaseId,
+            'events': outbound.map((event) => event.toJson()).toList(),
+          },
+        );
+        if (response.statusCode != HttpStatus.ok) {
+          throw LanBusinessException(
+            'branch_sync_push_failed',
+            response.body['message']?.toString() ?? 'Branch sync push failed.',
+            statusCode: response.statusCode,
+          );
+        }
+        final accepted =
+            (response.body['acceptedEventIds'] as List? ?? const [])
+                .map((value) => value.toString())
+                .toSet();
+        if (accepted.length != outbound.length ||
+            outbound.any((event) => !accepted.contains(event.eventId))) {
+          throw const LanBusinessException(
+            'branch_sync_ack_mismatch',
+            'The coordinator did not acknowledge the complete event batch.',
+          );
+        }
+        for (final event in outbound) {
+          await store.acknowledgeForPeer(
+            targetDatabaseId: coordinatorDatabaseId,
+            eventId: event.eventId,
+            leaseToken: localLease,
+          );
+        }
+        uploaded = outbound.length;
+      } catch (error) {
+        final retryAt = DateTime.now().toUtc().add(const Duration(seconds: 5));
+        for (final event in outbound) {
+          try {
+            await store.recordPeerFailure(
+              targetDatabaseId: coordinatorDatabaseId,
+              eventId: event.eventId,
+              leaseToken: localLease,
+              error: error.toString(),
+              retryAt: retryAt,
+            );
+          } catch (_) {
+            // The lease timeout remains a safe recovery path.
+          }
+        }
+        rethrow;
+      }
+    }
+
+    final pull = await _jsonRequest(
+      method: 'POST',
+      host: targetHost,
+      port: targetPort,
+      path: '/v1/branch-sync/pull',
+      fingerprint: fingerprint,
+      token: token,
+      body: {
+        'enrollmentId': enrollment,
+        'remoteDatabaseId': localDatabaseId,
+        'limit': 50,
+      },
+    );
+    if (pull.statusCode != HttpStatus.ok) {
+      throw LanBusinessException(
+        'branch_sync_pull_failed',
+        pull.body['message']?.toString() ?? 'Branch sync pull failed.',
+        statusCode: pull.statusCode,
+      );
+    }
+    final leaseToken = pull.body['leaseToken']?.toString() ?? '';
+    final rawEvents = pull.body['events'] as List? ?? const [];
+    final appliedIds = <String>[];
+    for (final raw in rawEvents) {
+      if (raw is! Map) {
+        throw const LanBusinessException(
+          'invalid_branch_sync_response',
+          'The coordinator returned an invalid synchronization event.',
+        );
+      }
+      final event = SyncEventEnvelope.fromJson(Map<String, Object?>.from(raw));
+      // The pinned, authenticated coordinator is the authority that introduces
+      // another branch stream. Direct inbox application still rejects unknown
+      // sources; only this trusted pull path can enroll a relayed source.
+      await store.enrollSource(
+        sourceDatabaseId: event.sourceDatabaseId,
+        organizationId: event.organizationId,
+        branchId: event.branchId,
+      );
+      await projection.apply(event);
+      appliedIds.add(event.eventId);
+    }
+    if (appliedIds.isNotEmpty) {
+      final ack = await _jsonRequest(
+        method: 'POST',
+        host: targetHost,
+        port: targetPort,
+        path: '/v1/branch-sync/ack',
+        fingerprint: fingerprint,
+        token: token,
+        body: {
+          'enrollmentId': enrollment,
+          'remoteDatabaseId': localDatabaseId,
+          'leaseToken': leaseToken,
+          'eventIds': appliedIds,
+        },
+      );
+      if (ack.statusCode != HttpStatus.ok) {
+        throw LanBusinessException(
+          'branch_sync_remote_ack_failed',
+          ack.body['message']?.toString() ??
+              'Unable to acknowledge coordinator events.',
+          statusCode: ack.statusCode,
+        );
+      }
+    }
+    return LanBranchSyncRunResult(
+      uploaded: uploaded,
+      downloaded: appliedIds.length,
+    );
+  }
+
+  bool _isTransientBranchSyncError(String? code) {
+    return const {
+      'SocketException',
+      'HandshakeException',
+      'TimeoutException',
+      'branch_coordinator_unreachable',
+      'branch_sync_push_failed',
+      'branch_sync_pull_failed',
+      'branch_sync_remote_ack_failed',
+    }.contains(code);
+  }
+
+  Future<_DiscoveredMaster> _resolveIndependentBranchCoordinator({
+    required String configuredHost,
+    required int preferredPort,
+    required String expectedDatabaseId,
+    required String fingerprint,
+  }) async {
+    final direct = await _probeBranchCoordinator(
+      configuredHost,
+      preferredPort,
+      expectedDatabaseId,
+      fingerprint,
+      allowMissingDatabaseIdentity: true,
+      timeout: const Duration(seconds: 2),
+    );
+    if (direct != null) return direct;
+
+    final discovered = await _discoverBranchCoordinator(
+      expectedDatabaseId,
+      fingerprint,
+      preferredPort: preferredPort,
+    );
+    if (discovered == null) {
+      throw const LanBusinessException(
+        'branch_coordinator_unreachable',
+        'The trusted branch coordinator is not reachable on this network.',
+      );
+    }
+    if (discovered.host != configuredHost || discovered.port != preferredPort) {
+      await _settingsDao.saveSetting(_branchSyncHostKey, discovered.host);
+      await _settingsDao.saveSetting(
+        _branchSyncPortKey,
+        discovered.port.toString(),
+      );
+    }
+    return discovered;
+  }
+
+  Future<_DiscoveredMaster?> _discoverBranchCoordinator(
+    String expectedDatabaseId,
+    String fingerprint, {
+    required int preferredPort,
+  }) async {
+    RawDatagramSocket? socket;
+    StreamSubscription<RawSocketEvent>? subscription;
+    try {
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+      final completer = Completer<_DiscoveredMaster?>();
+      subscription = socket.listen(
+        (event) {
+          if (event != RawSocketEvent.read || completer.isCompleted) return;
+          final datagram = socket?.receive();
+          if (datagram == null) return;
+          try {
+            final decoded = jsonDecode(utf8.decode(datagram.data));
+            if (decoded is! Map<String, dynamic> ||
+                decoded['app']?.toString() != 'Tapix' ||
+                decoded['coordinatorDatabaseId']?.toString().toLowerCase() !=
+                    expectedDatabaseId.toLowerCase() ||
+                decoded['tlsFingerprint']?.toString().toLowerCase() !=
+                    fingerprint.toLowerCase()) {
+              return;
+            }
+            final port = (decoded['port'] as num?)?.toInt();
+            if (port == null || port < 1 || port > 65535) return;
+            completer.complete(
+              _DiscoveredMaster(datagram.address.address, port),
+            );
+          } catch (_) {
+            // Ignore unrelated UDP traffic on the discovery socket.
+          }
+        },
+        onError: (Object _) {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        cancelOnError: true,
+      );
+      socket.send(
+        utf8.encode(_discoveryProbe),
+        InternetAddress('255.255.255.255'),
+        discoveryPort,
+      );
+      final candidate = await completer.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      if (candidate != null) {
+        final verified = await _probeBranchCoordinator(
+          candidate.host,
+          candidate.port,
+          expectedDatabaseId,
+          fingerprint,
+        );
+        if (verified != null) return verified;
+      }
+    } catch (_) {
+      // Routers may block broadcast; the bounded subnet scan is the fallback.
+    } finally {
+      await subscription?.cancel();
+      socket?.close();
+    }
+    try {
+      return await _scanLocalSubnetsForBranchCoordinator(
+        expectedDatabaseId,
+        fingerprint,
+        preferredPort,
+      );
+    } on SocketException {
+      return null;
+    }
+  }
+
+  Future<_DiscoveredMaster?> _scanLocalSubnetsForBranchCoordinator(
+    String expectedDatabaseId,
+    String fingerprint,
+    int port,
+  ) async {
+    final localAddresses = await _localIpv4Addresses();
+    final candidates = <String>[];
+    for (final local in localAddresses) {
+      final parts = local.split('.');
+      if (parts.length != 4) continue;
+      final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+      for (var host = 1; host < 255; host++) {
+        final candidate = '$prefix.$host';
+        if (candidate != local && !candidates.contains(candidate)) {
+          candidates.add(candidate);
+        }
+      }
+    }
+    const batchSize = 48;
+    for (var offset = 0; offset < candidates.length; offset += batchSize) {
+      final end = min(offset + batchSize, candidates.length);
+      final results = await Future.wait(
+        candidates
+            .sublist(offset, end)
+            .map(
+              (host) => _probeBranchCoordinator(
+                host,
+                port,
+                expectedDatabaseId,
+                fingerprint,
+              ),
+            ),
+      );
+      for (final result in results) {
+        if (result != null) return result;
+      }
+    }
+    return null;
+  }
+
+  Future<_DiscoveredMaster?> _probeBranchCoordinator(
+    String host,
+    int port,
+    String expectedDatabaseId,
+    String fingerprint, {
+    bool allowMissingDatabaseIdentity = false,
+    Duration timeout = const Duration(milliseconds: 450),
+  }) async {
+    final client = _tlsClient(fingerprint: fingerprint)
+      ..connectionTimeout = timeout;
+    try {
+      final request = await client
+          .getUrl(
+            Uri(scheme: 'https', host: host, port: port, path: '/v1/health'),
+          )
+          .timeout(timeout);
+      request.followRedirects = false;
+      final response = await request.close().timeout(timeout);
+      if (response.statusCode != HttpStatus.ok) return null;
+      final raw = await utf8.decoder.bind(response).join().timeout(timeout);
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['app']?.toString() != 'Tapix' ||
+          decoded['protocolVersion'] != protocolVersion ||
+          !_parseCapabilities(
+            decoded,
+          ).contains(independentBranchSyncCapability)) {
+        return null;
+      }
+      final databaseId = decoded['coordinatorDatabaseId']
+          ?.toString()
+          .toLowerCase();
+      if (databaseId == null || databaseId.isEmpty) {
+        if (!allowMissingDatabaseIdentity) return null;
+      } else if (databaseId != expectedDatabaseId.toLowerCase()) {
+        return null;
+      }
+      return _DiscoveredMaster(host, port);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<LanBranchSyncHealthSnapshot> inspectIndependentBranchSync() async {
+    final db = _settingsDao.attachedDatabase;
+    final host = await _settingsDao.getSetting(_branchSyncHostKey);
+    final enrollment = await _settingsDao.getSetting(_branchSyncEnrollmentKey);
+    final counts = await db.customSelect(
+      '''SELECT
+      (SELECT COUNT(*) FROM sync_outbox_deliveries WHERE state<>'delivered')+
+      (SELECT COUNT(*) FROM sync_relay_deliveries WHERE state<>'delivered') AS pending,
+      (SELECT COUNT(*) FROM sync_outbox_deliveries WHERE state='dead_letter')+
+      (SELECT COUNT(*) FROM sync_relay_deliveries WHERE state='dead_letter') AS dead,
+      (SELECT COUNT(*) FROM lan_branch_enrollments WHERE status='active') AS writers''',
+    ).getSingle();
+    final successRaw = await _settingsDao.getSetting(_branchSyncLastSuccessKey);
+    final errorRaw = await _settingsDao.getSetting(_branchSyncLastErrorKey);
+    return LanBranchSyncHealthSnapshot(
+      configured: enrollment != null && enrollment.isNotEmpty,
+      coordinator: counts.read<int>('writers') > 0,
+      host: host,
+      pendingDeliveries: counts.read<int>('pending'),
+      deadLetters: counts.read<int>('dead'),
+      activeBranchWriters: counts.read<int>('writers'),
+      lastSuccessAt: DateTime.tryParse(successRaw ?? '')?.toLocal(),
+      lastError: errorRaw == null || errorRaw.isEmpty ? null : errorRaw,
+    );
+  }
+
+  Future<void> _startIndependentBranchSyncIfConfigured() async {
+    final enrollment = await _settingsDao.getSetting(_branchSyncEnrollmentKey);
+    if (enrollment == null || enrollment.isEmpty) return;
+    _branchSyncTimer ??= Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(_runIndependentBranchSyncSafe()),
+    );
+    unawaited(_runIndependentBranchSyncSafe());
+  }
+
+  Future<void> _runIndependentBranchSyncSafe() async {
+    if (_branchSyncInFlight) return;
+    _branchSyncInFlight = true;
+    try {
+      await synchronizeIndependentBranchOnce();
+    } catch (_) {
+      // Offline operation is expected. Durable deliveries remain pending and
+      // the next cycle retries without blocking local posting or app startup.
+    } finally {
+      _branchSyncInFlight = false;
     }
   }
 
@@ -639,6 +1374,16 @@ class LanNetworkService {
     }
   }
 
+  void _requirePurchaseInvoicesCapability() {
+    if (!supportsCapability(purchaseInvoicesCapability)) {
+      throw const LanBusinessException(
+        'lan_capability_required',
+        'The branch server must be updated before using purchase invoices.',
+        statusCode: 426,
+      );
+    }
+  }
+
   Future<List<LanWarehouseTransferWarehouse>>
   fetchRemoteTransferWarehouses() async {
     _requireWarehouseTransfersCapability();
@@ -787,6 +1532,75 @@ class LanNetworkService {
       queryParameters: {'limit': limit.toString()},
     );
     return LanSalesPage.fromJson(response.body);
+  }
+
+  Future<LanPurchasesPage> fetchRemotePurchases({int limit = 500}) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchases',
+      queryParameters: {'limit': limit.toString()},
+    );
+    return LanPurchasesPage.fromJson(response.body);
+  }
+
+  Future<LanPurchaseDetails> fetchRemotePurchaseDetails(int purchaseId) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchases/$purchaseId',
+    );
+    return LanPurchaseDetails.fromJson(response.body);
+  }
+
+  Future<LanPurchaseResult> submitRemotePurchase(
+    LanPurchaseRequest purchase,
+  ) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/purchases',
+      body: purchase.toJson(),
+    );
+    return LanPurchaseResult.fromJson(response.body);
+  }
+
+  Future<LanPurchaseResult> postRemotePurchase(int purchaseId) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/purchases/$purchaseId/post',
+    );
+    return LanPurchaseResult.fromJson(response.body);
+  }
+
+  Future<LanPurchaseVoidResult> voidRemotePurchase(int purchaseId) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/purchases/$purchaseId/void',
+    );
+    return LanPurchaseVoidResult.fromJson(response.body);
+  }
+
+  Future<bool> deleteRemotePurchase(int purchaseId) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'DELETE',
+      path: '/v1/purchases/$purchaseId',
+    );
+    return response.body['deleted'] == true;
+  }
+
+  Future<Map<String, dynamic>> fetchRemotePurchaseVoidImpact(
+    int purchaseId,
+  ) async {
+    _requirePurchaseInvoicesCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchases/$purchaseId/void-impact',
+    );
+    return Map<String, dynamic>.from(response.body['impact'] as Map);
   }
 
   Future<LanSaleDetails> fetchRemoteSaleDetails(int saleId) async {
@@ -1131,6 +1945,23 @@ class LanNetworkService {
   }
 
   Future<LanSaleResult> submitRemoteSale(LanSaleRequest sale) async {
+    if ((sale.loyaltyPointsToRedeem != 0 || sale.loyaltyValueCents != 0) &&
+        !supportsCapability(loyaltyTenderCapability)) {
+      throw const LanBusinessException(
+        'server_capability_missing',
+        'Update the branch server before redeeming points.',
+        statusCode: 426,
+      );
+    }
+    if ((sale.expectedPricingFingerprint != null ||
+            sale.overallDiscountCents != 0) &&
+        !supportsCapability(salePricingPreviewCapability)) {
+      throw const LanBusinessException(
+        'lan_capability_required',
+        'Update the branch server before submitting this sale.',
+        statusCode: 426,
+      );
+    }
     if (_remoteUser?.role == 'cashier') {
       final shift = await fetchOwnRemoteShift();
       if (shift?.isOpen != true) {
@@ -1266,6 +2097,7 @@ class LanNetworkService {
 
     if (response != null) {
       _remoteCapabilities = _parseCapabilities(response.body);
+      final assignedScope = response.body['businessScope'];
       await _settingsDao.saveSetting(_masterHostKey, targetHost);
       await _settingsDao.saveSetting(_portKey, targetPort.toString());
       final responseMasterId = response.body['masterId']?.toString();
@@ -1281,6 +2113,18 @@ class LanNetworkService {
           masterId: responseMasterId,
           masterLocaleCode: _validLocaleCode(
             response.body['localeCode']?.toString(),
+          ),
+          assignedBranchId: assignedScope is Map
+              ? assignedScope['branchId']?.toString()
+              : null,
+          assignedWarehouseId: assignedScope is Map
+              ? assignedScope['warehouseId']?.toString()
+              : null,
+          assignedBranchName: response.body['branchName']?.toString(),
+          assignedWarehouseName: response.body['warehouseName']?.toString(),
+          assignedDeviceKind: LanDeviceKind.values.firstWhere(
+            (value) => value.name == response!.body['deviceKind']?.toString(),
+            orElse: () => LanDeviceKind.warehouseWorkstation,
           ),
           clearError: true,
         ),
@@ -1304,13 +2148,19 @@ class LanNetworkService {
   }
 
   Future<void> refreshMasterNetwork() async {
-    if (_snapshot.mode != LanMode.master ||
-        _server == null ||
-        _masterRefreshInFlight) {
+    if (_snapshot.mode != LanMode.master || _masterRefreshInFlight) {
       return;
     }
     _masterRefreshInFlight = true;
     try {
+      if (_server == null) {
+        // A stored master can fail during application startup while Wi-Fi is
+        // unavailable (for example after a phone reboot). Once the interface
+        // returns, refresh must recreate the listener instead of leaving the
+        // UI in an unrecoverable master/error state.
+        await startMaster(port: _snapshot.port);
+        return;
+      }
       final addresses = await _localIpv4Addresses();
       final connectedDevices = _connectedDeviceCount();
       final addressChanged =
@@ -1338,6 +2188,14 @@ class LanNetworkService {
   void _startMasterMonitor() {
     _masterMonitorTimer?.cancel();
     unawaited(refreshMasterNetwork());
+    _masterMonitorTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => unawaited(refreshMasterNetwork()),
+    );
+  }
+
+  void _scheduleMasterRecovery() {
+    _masterMonitorTimer?.cancel();
     _masterMonitorTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => unawaited(refreshMasterNetwork()),
@@ -1383,6 +2241,8 @@ class LanNetworkService {
                 'protocolVersion': protocolVersion,
                 'capabilities': serverCapabilities.toList(growable: false),
                 'masterId': _deviceId,
+                'coordinatorDatabaseId': _masterScope?.databaseId,
+                'tlsFingerprint': _tlsIdentity?.fingerprint,
                 'port': _server?.port ?? _snapshot.port,
                 'localeCode': _masterLocaleCode,
               }),
@@ -1406,6 +2266,67 @@ class LanNetworkService {
       // Discovery is a convenience. Direct IP pairing remains available.
       _discoverySocket?.close();
       _discoverySocket = null;
+    }
+  }
+
+  Future<_DiscoveredMaster?> _discoverEnrollmentMaster(
+    String expectedFingerprint, {
+    required int preferredPort,
+  }) async {
+    RawDatagramSocket? socket;
+    StreamSubscription<RawSocketEvent>? subscription;
+    try {
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+      final completer = Completer<_DiscoveredMaster?>();
+      subscription = socket.listen(
+        (event) {
+          if (event != RawSocketEvent.read || completer.isCompleted) return;
+          final datagram = socket?.receive();
+          if (datagram == null) return;
+          try {
+            final decoded = jsonDecode(utf8.decode(datagram.data));
+            if (decoded is! Map<String, dynamic> ||
+                decoded['app']?.toString() != 'Tapix' ||
+                decoded['tlsFingerprint']?.toString().toLowerCase() !=
+                    expectedFingerprint.toLowerCase()) {
+              return;
+            }
+            final discoveredPort = (decoded['port'] as num?)?.toInt();
+            if (discoveredPort == null ||
+                discoveredPort < 1 ||
+                discoveredPort > 65535) {
+              return;
+            }
+            completer.complete(
+              _DiscoveredMaster(datagram.address.address, discoveredPort),
+            );
+          } catch (_) {
+            // Ignore unrelated discovery traffic.
+          }
+        },
+        onError: (Object _) {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        cancelOnError: true,
+      );
+      socket.send(
+        utf8.encode(_discoveryProbe),
+        InternetAddress('255.255.255.255'),
+        discoveryPort,
+      );
+      return await completer.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+    } catch (_) {
+      return null;
+    } finally {
+      await subscription?.cancel();
+      socket?.close();
     }
   }
 
@@ -1550,9 +2471,36 @@ class LanNetworkService {
     return null;
   }
 
-  Future<void> regeneratePairingCode() async {
-    if (_snapshot.mode != LanMode.master || _server == null) return;
+  Future<void> createDeviceEnrollment({
+    required String warehouseId,
+    required LanDeviceKind deviceKind,
+  }) async {
+    if (_snapshot.mode != LanMode.master ||
+        _server == null ||
+        _masterScope == null) {
+      throw StateError('master_not_running');
+    }
+    await _loadMasterLocationNames(_masterScope!);
+    final location = _masterLocations[warehouseId];
+    if (location == null) throw StateError('device_location_invalid');
+    if (!_locationServedByThisMaster(location)) {
+      throw StateError('branch_server_required');
+    }
+    _pendingPairingWarehouseId = warehouseId;
+    _pendingPairingDeviceKind = deviceKind;
     _emit(_snapshot.copyWith(pairingCode: _newPairingCode(), clearError: true));
+  }
+
+  Future<void> regeneratePairingCode() async {
+    final warehouseId = _pendingPairingWarehouseId;
+    final deviceKind = _pendingPairingDeviceKind;
+    if (warehouseId == null || deviceKind == null) {
+      throw StateError('pairing_location_required');
+    }
+    await createDeviceEnrollment(
+      warehouseId: warehouseId,
+      deviceKind: deviceKind,
+    );
   }
 
   List<LanMasterDeviceInfo> getMasterDevices() {
@@ -1574,8 +2522,10 @@ class LanNetworkService {
           final lastSeenAt = DateTime.tryParse(
             data['lastSeenAt']?.toString() ?? '',
           );
-          final scopeVerified =
-              _masterScope?.matchesBinding(data['businessScope']) == true;
+          final binding = _deviceBusinessScope(data);
+          final scopeVerified = _deviceScopeMatchesMaster(binding);
+          final warehouseId = binding?['warehouseId']?.toString();
+          final allowedWarehouseIds = _allowedWarehouseIds(binding);
           return LanMasterDeviceInfo(
             id: entry.key,
             name: data['name']?.toString() ?? 'Tapix device',
@@ -1592,8 +2542,23 @@ class LanNetworkService {
             username: activeSession?.user.username,
             userRole: activeSession?.user.role,
             employeeName: activeSession?.user.employeeName,
-            branchName: scopeVerified ? _masterBranchName : null,
-            warehouseName: scopeVerified ? _masterWarehouseName : null,
+            branchName: scopeVerified
+                ? _masterLocations[warehouseId]?.branchName
+                : null,
+            warehouseName: scopeVerified
+                ? _masterLocations[warehouseId]?.name
+                : null,
+            branchId: scopeVerified && binding != null
+                ? binding['branchId']?.toString()
+                : null,
+            warehouseId: scopeVerified ? warehouseId : null,
+            deviceKind: LanDeviceKind.values.firstWhere(
+              (value) => value.name == data['deviceKind']?.toString(),
+              orElse: () => LanDeviceKind.warehouseWorkstation,
+            ),
+            allowedWarehouseIds: scopeVerified
+                ? allowedWarehouseIds.toList(growable: false)
+                : const [],
             scopeVerified: scopeVerified,
             sessionStartedAt: activeSession?.signedInAt,
             sessionExpiresAt: activeSession?.expiresAt,
@@ -1606,6 +2571,65 @@ class LanNetworkService {
       final bSeen = b.lastSeenAt ?? DateTime.fromMillisecondsSinceEpoch(0);
       return bSeen.compareTo(aSeen);
     });
+  }
+
+  Future<List<LanDeviceWarehouseOption>> getMasterAssignableWarehouses() async {
+    if (_snapshot.mode != LanMode.master || _masterScope == null) {
+      return const [];
+    }
+    await _loadMasterLocationNames(_masterScope!);
+    final values =
+        _masterLocations.values
+            .where(_locationServedByThisMaster)
+            .toList(growable: false)
+          ..sort((a, b) {
+            final branch = a.branchName.compareTo(b.branchName);
+            return branch != 0 ? branch : a.name.compareTo(b.name);
+          });
+    return List.unmodifiable(values);
+  }
+
+  Future<bool> assignMasterDeviceWarehouse({
+    required String deviceId,
+    required String warehouseId,
+    required int actorUserId,
+    required String actorUsername,
+  }) async {
+    final device = _authorizedDevices[deviceId];
+    final scope = _masterScope;
+    if (_snapshot.mode != LanMode.master || device == null || scope == null) {
+      return false;
+    }
+    if (_sessionForDevice(deviceId) != null) {
+      throw StateError('device_location_requires_logout');
+    }
+    await _loadMasterLocationNames(scope);
+    final location = _masterLocations[warehouseId];
+    if (location == null || !_locationServedByThisMaster(location)) {
+      return false;
+    }
+    final previous = _deviceBusinessScope(device)?['warehouseId']?.toString();
+    device['businessScope'] = {
+      'organizationId': scope.organizationId,
+      'branchId': location.branchId,
+      'warehouseId': location.id,
+      'databaseId': scope.databaseId,
+      'allowedWarehouseIds': [location.id],
+    };
+    await _saveAuthorizedDevices();
+    await _recordSecurityEventSafe(
+      LanAuthAuditEvent(
+        action: 'device_warehouse_assigned',
+        deviceId: deviceId,
+        deviceName: device['name']?.toString() ?? 'Tapix device',
+        remoteAddress: device['lastAddress']?.toString(),
+        actorUserId: actorUserId,
+        actorUsername: actorUsername,
+        reason: '${previous ?? 'unassigned'} → ${location.id}',
+      ),
+    );
+    _emit(_snapshot.copyWith(clearError: true));
+    return true;
   }
 
   Future<bool> logoutMasterDevice({
@@ -1740,6 +2764,8 @@ class LanNetworkService {
   Future<void> stop() async {
     _pairingTimer?.cancel();
     _pairingExpiresAt = null;
+    _pendingPairingWarehouseId = null;
+    _pendingPairingDeviceKind = null;
     _monitorTimer?.cancel();
     _monitorTimer = null;
     _masterMonitorTimer?.cancel();
@@ -1868,9 +2894,172 @@ class LanNetworkService {
           'protocolVersion': protocolVersion,
           'capabilities': serverCapabilities.toList(growable: false),
           'masterId': _deviceId,
+          'coordinatorDatabaseId': scope.databaseId,
           'pairingAvailable': _snapshot.pairingCode != null,
           'localeCode': _masterLocaleCode,
         });
+        return;
+      }
+
+      if (request.method == 'POST' && path == '/v1/branch-writers/activate') {
+        if (!_allowPairAttempt(_remoteAddress(request) ?? 'unknown')) {
+          request.response.persistentConnection = false;
+          await _respond(request, HttpStatus.tooManyRequests, {
+            'message': 'branch_enrollment_rate_limited',
+          });
+          return;
+        }
+        final gateway = _branchEnrollmentGateway;
+        if (gateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'message': 'branch_enrollment_unavailable',
+          });
+          return;
+        }
+        final body = await _readJson(request);
+        final enrollmentId = body['enrollmentId']?.toString().trim() ?? '';
+        final secret = body['secret']?.toString() ?? '';
+        final remoteDatabaseId =
+            body['remoteDatabaseId']?.toString().trim() ?? '';
+        if (enrollmentId.length != 36 ||
+            remoteDatabaseId.length != 36 ||
+            secret.isEmpty ||
+            secret.length > 128) {
+          await _respond(request, HttpStatus.badRequest, {
+            'message': 'invalid_branch_invitation',
+          });
+          return;
+        }
+        late LanBranchWriterBinding binding;
+        try {
+          binding = await gateway.activateWriter(
+            LanBranchWriterActivationRequest(
+              enrollmentId: enrollmentId,
+              secret: secret,
+              remoteDatabaseId: remoteDatabaseId,
+            ),
+          );
+        } catch (_) {
+          // Do not disclose whether id, secret, expiry, or database identity
+          // failed. Invitation holders receive one stable rejection.
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_enrollment_rejected',
+          });
+          return;
+        }
+        await _respond(request, HttpStatus.ok, {
+          'activated': true,
+          'binding': binding.toJson(),
+        });
+        return;
+      }
+
+      if (request.method == 'POST' && path == '/v1/branch-sync/push') {
+        final gateway = _branchSyncGateway;
+        if (gateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'message': 'branch_sync_unavailable',
+          });
+          return;
+        }
+        final body = await _readJson(request);
+        final auth = _branchSyncAuth(request, body);
+        final rawEvents = body['events'];
+        if (auth == null || rawEvents is! List || rawEvents.length > 50) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+          return;
+        }
+        final events = <Map<String, Object?>>[];
+        for (final raw in rawEvents) {
+          if (raw is! Map) {
+            await _respond(request, HttpStatus.badRequest, {
+              'message': 'invalid_sync_event',
+            });
+            return;
+          }
+          events.add(Map<String, Object?>.from(raw));
+        }
+        try {
+          final result = await gateway.push(auth, events);
+          await _respond(request, HttpStatus.ok, {
+            'acceptedEventIds': result.acceptedEventIds,
+            'nextExpectedSequence': result.nextExpectedSequence,
+          });
+        } catch (_) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+        }
+        return;
+      }
+
+      if (request.method == 'POST' && path == '/v1/branch-sync/pull') {
+        final gateway = _branchSyncGateway;
+        if (gateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'message': 'branch_sync_unavailable',
+          });
+          return;
+        }
+        final body = await _readJson(request);
+        final auth = _branchSyncAuth(request, body);
+        final limit = body['limit'] is int ? body['limit'] as int : 50;
+        if (auth == null || limit <= 0 || limit > 50) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+          return;
+        }
+        try {
+          final result = await gateway.pull(auth, limit: limit);
+          await _respond(request, HttpStatus.ok, {
+            'leaseToken': result.leaseToken,
+            'events': result.events,
+          });
+        } catch (_) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+        }
+        return;
+      }
+
+      if (request.method == 'POST' && path == '/v1/branch-sync/ack') {
+        final gateway = _branchSyncGateway;
+        if (gateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'message': 'branch_sync_unavailable',
+          });
+          return;
+        }
+        final body = await _readJson(request);
+        final auth = _branchSyncAuth(request, body);
+        final leaseToken = body['leaseToken']?.toString() ?? '';
+        final rawIds = body['eventIds'];
+        if (auth == null ||
+            leaseToken.isEmpty ||
+            rawIds is! List ||
+            rawIds.isEmpty ||
+            rawIds.length > 50) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+          return;
+        }
+        try {
+          await gateway.acknowledge(
+            auth,
+            leaseToken: leaseToken,
+            eventIds: rawIds.map((value) => value.toString()).toList(),
+          );
+          await _respond(request, HttpStatus.ok, {'acknowledged': true});
+        } catch (_) {
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'branch_sync_rejected',
+          });
+        }
         return;
       }
 
@@ -1903,9 +3092,10 @@ class LanNetworkService {
           });
           return;
         }
-        final deviceName = body['deviceName']?.toString().trim() ?? '';
+        final requestedDeviceName = body['deviceName']?.toString().trim() ?? '';
         final platform = body['platform']?.toString().trim() ?? '';
-        if (!_isSafeDeviceLabel(deviceName, maxLength: 80) ||
+        if ((requestedDeviceName.isNotEmpty &&
+                !_isSafeDeviceLabel(requestedDeviceName, maxLength: 80)) ||
             (platform.isNotEmpty &&
                 !_isSafeDeviceLabel(platform, maxLength: 40))) {
           await _respond(request, HttpStatus.badRequest, {
@@ -1914,13 +3104,39 @@ class LanNetworkService {
           return;
         }
 
+        final targetWarehouseId = _pendingPairingWarehouseId;
+        final targetKind = _pendingPairingDeviceKind;
+        final target = targetWarehouseId == null
+            ? null
+            : _masterLocations[targetWarehouseId];
+        if (target == null ||
+            targetKind == null ||
+            !_locationServedByThisMaster(target)) {
+          await _respond(request, HttpStatus.conflict, {
+            'message': 'Pairing invitation has no valid location.',
+          });
+          return;
+        }
+        final deviceName = requestedDeviceName.isEmpty
+            ? _automaticDeviceName(target, targetKind)
+            : requestedDeviceName;
+
         // Consume synchronously before any database/audit await. Invalid
-        // metadata above does not burn the one-time pairing code.
+        // metadata above does not burn the one-time invitation.
         _pairingExpiresAt = null;
         _pairingTimer?.cancel();
+        _pendingPairingWarehouseId = null;
+        _pendingPairingDeviceKind = null;
         final token = _newToken();
         _authorizedDevices[deviceId] = {
-          'businessScope': scope.toJson(),
+          'businessScope': {
+            'organizationId': scope.organizationId,
+            'branchId': target.branchId,
+            'warehouseId': target.id,
+            'databaseId': scope.databaseId,
+            'allowedWarehouseIds': [target.id],
+          },
+          'deviceKind': targetKind.name,
           'name': deviceName,
           'platform': platform.isEmpty ? 'unknown' : platform,
           'tokenHash': sha256.convert(utf8.encode(token)).toString(),
@@ -1937,11 +3153,11 @@ class LanNetworkService {
             remoteAddress: _remoteAddress(request),
           ),
         );
-        // Pairing codes are single-use. Rotating immediately prevents a code
-        // seen by a previous cashier from enrolling another device later.
+        // Enrollment codes are single-use. A new device requires a new,
+        // explicitly located invitation from the master.
         _emit(
           _snapshot.copyWith(
-            pairingCode: _newPairingCode(),
+            clearPairingCode: true,
             pairedDevices: _authorizedDevices.length,
             connectedDevices: _connectedDeviceCount(),
           ),
@@ -1952,6 +3168,11 @@ class LanNetworkService {
           'protocolVersion': protocolVersion,
           'capabilities': serverCapabilities.toList(growable: false),
           'localeCode': _masterLocaleCode,
+          'businessScope': _authorizedDevices[deviceId]!['businessScope'],
+          'branchName': target.branchName,
+          'warehouseName': target.name,
+          'deviceKind': targetKind.name,
+          'deviceName': deviceName,
         });
         return;
       }
@@ -2094,6 +3315,25 @@ class LanNetworkService {
           return;
         }
 
+        if (!_userCanUseDevice(currentAccount.user, device)) {
+          await _recordSecurityEventSafe(
+            LanAuthAuditEvent(
+              action: 'login_location_denied',
+              targetUserId: currentAccount.user.id,
+              username: currentAccount.user.username,
+              role: currentAccount.user.role,
+              deviceId: device.id,
+              deviceName: device.name,
+              remoteAddress: _remoteAddress(request),
+              reason: 'User location does not include the enrolled device.',
+            ),
+          );
+          await _respond(request, HttpStatus.forbidden, {
+            'message': 'user_location_denied',
+          });
+          return;
+        }
+
         _clearFailedAttempts(device.id, currentAccount.user.username);
         await _replaceDeviceSessions(device);
         await _authGateway.markLoginSucceeded(currentAccount.user.id);
@@ -2201,14 +3441,16 @@ class LanNetworkService {
           });
           return;
         }
-        // Warehouse transfers change stock custody across business locations.
-        // Keep the LAN policy identical to the local application policy: only
-        // the active owner may authorize them.
-        if (session.user.role.trim().toLowerCase() != 'owner') {
+        // Device location and account location were both verified at login.
+        // Reuse the existing RBAC permission set; warehouse clerks receive
+        // adjust_stock while owners and managers keep their established access.
+        if (!_hasAnyPermission(session.user, const [
+          'adjust_stock',
+          'manage_purchases',
+        ])) {
           await _respond(request, HttpStatus.forbidden, {
             'code': 'permission_denied',
-            'message':
-                'Only the business owner can manage warehouse transfers.',
+            'message': 'This user cannot manage warehouse transfers.',
           });
           return;
         }
@@ -2437,8 +3679,9 @@ class LanNetworkService {
           });
           return;
         }
-        final imagePath = await _businessGateway.resolveProductImagePath(
-          productId: productId,
+        final imagePath = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.resolveProductImagePath(productId: productId),
         );
         if (imagePath == null) {
           await _respond(request, HttpStatus.notFound, {
@@ -2526,10 +3769,13 @@ class LanNetworkService {
           request.uri.queryParameters['offset'] ?? '',
         );
         final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
-        final result = await _businessGateway.fetchCatalog(
-          query: request.uri.queryParameters['q'] ?? '',
-          offset: offset ?? 0,
-          limit: limit ?? 100,
+        final result = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchCatalog(
+            query: request.uri.queryParameters['q'] ?? '',
+            offset: offset ?? 0,
+            limit: limit ?? 100,
+          ),
         );
         final includeCost =
             management &&
@@ -2595,8 +3841,10 @@ class LanNetworkService {
           });
           return;
         }
-        final result = await _businessGateway.fetchMedicineAlternatives(
-          productId: productId,
+        final result = await _runDeviceBusiness(
+          device,
+          () =>
+              _businessGateway.fetchMedicineAlternatives(productId: productId),
         );
         await _respond(request, HttpStatus.ok, result.toJson());
         return;
@@ -2649,8 +3897,9 @@ class LanNetworkService {
           });
           return;
         }
-        final summary = await _businessGateway.fetchCustomerCheckout(
-          customerId,
+        final summary = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchCustomerCheckout(customerId),
         );
         await _respond(request, HttpStatus.ok, summary.toJson());
         return;
@@ -2693,9 +3942,12 @@ class LanNetworkService {
           return;
         }
         final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
-        final customers = await _businessGateway.fetchCustomers(
-          query: request.uri.queryParameters['q'] ?? '',
-          limit: limit ?? 100,
+        final customers = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchCustomers(
+            query: request.uri.queryParameters['q'] ?? '',
+            limit: limit ?? 100,
+          ),
         );
         await _respond(request, HttpStatus.ok, {
           'customers': customers
@@ -2734,9 +3986,12 @@ class LanNetworkService {
           return;
         }
         final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
-        final employees = await _businessGateway!.fetchSalespeople(
-          query: request.uri.queryParameters['q'] ?? '',
-          limit: limit ?? 100,
+        final employees = await _runDeviceBusiness(
+          device,
+          () => _businessGateway!.fetchSalespeople(
+            query: request.uri.queryParameters['q'] ?? '',
+            limit: limit ?? 100,
+          ),
         );
         await _respond(request, HttpStatus.ok, {
           'employees': employees.map((value) => value.toJson()).toList(),
@@ -2768,7 +4023,10 @@ class LanNetworkService {
           });
           return;
         }
-        final shift = await _businessGateway.getOwnShift(actor: session.user);
+        final shift = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.getOwnShift(actor: session.user),
+        );
         await _respond(request, HttpStatus.ok, {'shift': shift?.toJson()});
         return;
       }
@@ -2818,18 +4076,21 @@ class LanNetworkService {
               'Shift values are invalid.',
             );
           }
-          final shift = isOpen
-              ? await _businessGateway.openOwnShift(
-                  actor: session.user,
-                  openingCashCents: opening ?? 0,
-                  notes: body['notes']?.toString(),
-                )
-              : await _businessGateway.closeOwnShift(
-                  actor: session.user,
-                  shiftId: shiftId,
-                  countedCashCents: counted!,
-                  notes: body['notes']?.toString(),
-                );
+          final shift = await _runDeviceBusiness(
+            device,
+            () => isOpen
+                ? _businessGateway.openOwnShift(
+                    actor: session.user,
+                    openingCashCents: opening ?? 0,
+                    notes: body['notes']?.toString(),
+                  )
+                : _businessGateway.closeOwnShift(
+                    actor: session.user,
+                    shiftId: shiftId,
+                    countedCashCents: counted!,
+                    notes: body['notes']?.toString(),
+                  ),
+          );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
               action: isOpen ? 'cashier_shift_opened' : 'cashier_shift_closed',
@@ -2890,7 +4151,10 @@ class LanNetworkService {
           return;
         }
         final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
-        final result = await _businessGateway.fetchSales(limit: limit ?? 500);
+        final result = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchSales(limit: limit ?? 500),
+        );
         await _respond(request, HttpStatus.ok, result.toJson());
         return;
       }
@@ -2941,9 +4205,10 @@ class LanNetworkService {
           return;
         }
         try {
-          final result = await _businessGateway.voidSale(
-            actor: session.user,
-            saleId: saleId,
+          final result = await _runDeviceBusiness(
+            device,
+            () =>
+                _businessGateway.voidSale(actor: session.user, saleId: saleId),
           );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
@@ -3015,7 +4280,10 @@ class LanNetworkService {
           });
           return;
         }
-        final details = await _businessGateway.fetchSaleDetails(saleId: saleId);
+        final details = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchSaleDetails(saleId: saleId),
+        );
         if (details == null) {
           await _respond(request, HttpStatus.notFound, {
             'code': 'sale_not_found',
@@ -3072,10 +4340,13 @@ class LanNetworkService {
           final limit = int.tryParse(
             request.uri.queryParameters['limit'] ?? '',
           );
-          final result = await _businessGateway.fetchReturnableSales(
-            query: request.uri.queryParameters['q'] ?? '',
-            offset: offset ?? 0,
-            limit: limit ?? 50,
+          final result = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.fetchReturnableSales(
+              query: request.uri.queryParameters['q'] ?? '',
+              offset: offset ?? 0,
+              limit: limit ?? 50,
+            ),
           );
           await _respond(request, HttpStatus.ok, result.toJson());
           return;
@@ -3093,8 +4364,9 @@ class LanNetworkService {
           });
           return;
         }
-        final details = await _businessGateway.fetchReturnableSale(
-          saleId: saleId,
+        final details = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchReturnableSale(saleId: saleId),
         );
         if (details == null) {
           await _respond(request, HttpStatus.notFound, {
@@ -3157,9 +4429,12 @@ class LanNetworkService {
           });
           return;
         }
-        final details = await _businessGateway.fetchSaleReturnDetails(
-          returnId: returnId,
-          adjustment: kind == 'adjustment',
+        final details = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchSaleReturnDetails(
+            returnId: returnId,
+            adjustment: kind == 'adjustment',
+          ),
         );
         if (details == null) {
           await _respond(request, HttpStatus.notFound, {
@@ -3210,10 +4485,13 @@ class LanNetworkService {
           request.uri.queryParameters['offset'] ?? '',
         );
         final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
-        final result = await _businessGateway.fetchSaleReturns(
-          query: request.uri.queryParameters['q'] ?? '',
-          offset: offset ?? 0,
-          limit: limit ?? 100,
+        final result = await _runDeviceBusiness(
+          device,
+          () => _businessGateway.fetchSaleReturns(
+            query: request.uri.queryParameters['q'] ?? '',
+            offset: offset ?? 0,
+            limit: limit ?? 100,
+          ),
         );
         await _respond(request, HttpStatus.ok, result.toJson());
         return;
@@ -3255,9 +4533,12 @@ class LanNetworkService {
         }
         try {
           final body = await _readJson(request);
-          final result = await _businessGateway.createSaleReturn(
-            actor: session.user,
-            request: LanSaleReturnRequest.fromJson(body),
+          final result = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.createSaleReturn(
+              actor: session.user,
+              request: LanSaleReturnRequest.fromJson(body),
+            ),
           );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
@@ -3347,9 +4628,12 @@ class LanNetworkService {
           return;
         }
         try {
-          final snapshot = await _businessGateway.fetchInventoryStockSources(
-            productId: productId,
-            variantId: variantId,
+          final snapshot = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.fetchInventoryStockSources(
+              productId: productId,
+              variantId: variantId,
+            ),
           );
           await _respond(request, HttpStatus.ok, snapshot.toJson());
         } on LanBusinessException catch (error) {
@@ -3409,11 +4693,13 @@ class LanNetworkService {
           return;
         }
         try {
-          final sources = await _businessGateway
-              .fetchConsignmentAdjustmentReturnSources(
-                productId: productId,
-                variantId: variantId,
-              );
+          final sources = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.fetchConsignmentAdjustmentReturnSources(
+              productId: productId,
+              variantId: variantId,
+            ),
+          );
           await _respond(request, HttpStatus.ok, {
             'sources': sources.map((source) => source.toJson()).toList(),
           });
@@ -3462,9 +4748,12 @@ class LanNetworkService {
         }
         try {
           final body = await _readJson(request);
-          final result = await _businessGateway.createSaleAdjustmentReturn(
-            actor: session.user,
-            request: LanSaleAdjustmentReturnRequest.fromJson(body),
+          final result = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.createSaleAdjustmentReturn(
+              actor: session.user,
+              request: LanSaleAdjustmentReturnRequest.fromJson(body),
+            ),
           );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
@@ -3506,6 +4795,8 @@ class LanNetworkService {
 
       final isPurchaseReturnApi =
           path == '/v1/suppliers' ||
+          path == '/v1/purchases' ||
+          path.startsWith('/v1/purchases/') ||
           path == '/v1/purchases/returnable' ||
           (path.startsWith('/v1/purchases/') && path.endsWith('/returnable')) ||
           path == '/v1/purchase-returns' ||
@@ -3562,28 +4853,233 @@ class LanNetworkService {
           return;
         }
         try {
+          final purchaseGateway = _businessGateway is LanPurchaseInvoiceGateway
+              ? _businessGateway as LanPurchaseInvoiceGateway
+              : null;
           if (request.method == 'GET' && path == '/v1/suppliers') {
             final limit = int.tryParse(
               request.uri.queryParameters['limit'] ?? '',
             );
-            final suppliers = await _businessGateway.fetchSuppliers(
-              query: request.uri.queryParameters['q'] ?? '',
-              limit: limit ?? 100,
+            final suppliers = await _runDeviceBusiness(
+              device,
+              () => _businessGateway.fetchSuppliers(
+                query: request.uri.queryParameters['q'] ?? '',
+                limit: limit ?? 100,
+              ),
             );
             await _respond(request, HttpStatus.ok, {
               'suppliers': suppliers.map((value) => value.toJson()).toList(),
             });
             return;
           }
+          if (request.method == 'GET' && path == '/v1/purchases') {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final limit = int.tryParse(
+              request.uri.queryParameters['limit'] ?? '',
+            );
+            final result = await _runDeviceBusiness(
+              device,
+              () => purchaseGateway.fetchPurchases(limit: limit ?? 500),
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'GET' &&
+              path.startsWith('/v1/purchases/') &&
+              path.endsWith('/void-impact')) {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final rawId = path.substring(
+              '/v1/purchases/'.length,
+              path.length - '/void-impact'.length,
+            );
+            final purchaseId = int.tryParse(rawId);
+            final impact = purchaseId == null
+                ? null
+                : await _runDeviceBusiness(
+                    device,
+                    () => purchaseGateway.inspectPurchaseVoidImpact(
+                      purchaseId: purchaseId,
+                    ),
+                  );
+            if (impact == null) {
+              await _respond(request, HttpStatus.notFound, {
+                'code': 'purchase_not_found',
+                'message': 'Purchase not found.',
+              });
+            } else {
+              await _respond(request, HttpStatus.ok, {'impact': impact});
+            }
+            return;
+          }
+          if (request.method == 'GET' &&
+              path.startsWith('/v1/purchases/') &&
+              !path.endsWith('/returnable')) {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final purchaseId = int.tryParse(
+              path.substring('/v1/purchases/'.length),
+            );
+            final details = purchaseId == null
+                ? null
+                : await _runDeviceBusiness(
+                    device,
+                    () => purchaseGateway.fetchPurchaseDetails(
+                      purchaseId: purchaseId,
+                    ),
+                  );
+            if (details == null) {
+              await _respond(request, HttpStatus.notFound, {
+                'code': 'purchase_not_found',
+                'message': 'Purchase not found.',
+              });
+            } else {
+              await _respond(request, HttpStatus.ok, details.toJson());
+            }
+            return;
+          }
+          if (request.method == 'POST' && path == '/v1/purchases') {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final body = await _readJson(request);
+            final result = await _runDeviceBusiness(
+              device,
+              () => purchaseGateway.createPurchase(
+                actor: session.user,
+                request: LanPurchaseRequest.fromJson(body),
+              ),
+            );
+            await _recordSecurityEventSafe(
+              LanAuthAuditEvent(
+                action: result.duplicate
+                    ? 'remote_purchase_replayed'
+                    : 'remote_purchase_created',
+                targetUserId: session.user.id,
+                username: session.user.username,
+                role: session.user.role,
+                deviceId: device.id,
+                deviceName: device.name,
+                remoteAddress: _remoteAddress(request),
+                authenticatedActor: true,
+                reason: result.purchaseNumber,
+              ),
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'POST' &&
+              path.startsWith('/v1/purchases/') &&
+              path.endsWith('/post')) {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final rawId = path.substring(
+              '/v1/purchases/'.length,
+              path.length - '/post'.length,
+            );
+            final purchaseId = int.tryParse(rawId);
+            if (purchaseId == null || purchaseId <= 0) {
+              throw const FormatException('Invalid purchase.');
+            }
+            final result = await _runDeviceBusiness(
+              device,
+              () => purchaseGateway.postPurchase(
+                actor: session.user,
+                purchaseId: purchaseId,
+              ),
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'POST' &&
+              path.startsWith('/v1/purchases/') &&
+              path.endsWith('/void')) {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final rawId = path.substring(
+              '/v1/purchases/'.length,
+              path.length - '/void'.length,
+            );
+            final purchaseId = int.tryParse(rawId);
+            if (purchaseId == null || purchaseId <= 0) {
+              throw const FormatException('Invalid purchase.');
+            }
+            final result = await _runDeviceBusiness(
+              device,
+              () => purchaseGateway.voidPurchase(
+                actor: session.user,
+                purchaseId: purchaseId,
+              ),
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'DELETE' && path.startsWith('/v1/purchases/')) {
+            if (purchaseGateway == null) {
+              await _respond(request, HttpStatus.serviceUnavailable, {
+                'code': 'purchase_api_unavailable',
+                'message': 'Purchase invoice services are unavailable.',
+              });
+              return;
+            }
+            final purchaseId = int.tryParse(
+              path.substring('/v1/purchases/'.length),
+            );
+            if (purchaseId == null || purchaseId <= 0) {
+              throw const FormatException('Invalid purchase.');
+            }
+            final deleted = await _runDeviceBusiness(
+              device,
+              () => purchaseGateway.deletePurchase(
+                actor: session.user,
+                purchaseId: purchaseId,
+              ),
+            );
+            await _respond(request, HttpStatus.ok, {'deleted': deleted});
+            return;
+          }
           if (request.method == 'GET' && path == '/v1/purchases/returnable') {
-            final result = await _businessGateway.fetchReturnablePurchases(
-              query: request.uri.queryParameters['q'] ?? '',
-              offset:
-                  int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
-                  0,
-              limit:
-                  int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
-                  50,
+            final result = await _runDeviceBusiness(
+              device,
+              () => _businessGateway.fetchReturnablePurchases(
+                query: request.uri.queryParameters['q'] ?? '',
+                offset:
+                    int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
+                    0,
+                limit:
+                    int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
+                    50,
+              ),
             );
             await _respond(request, HttpStatus.ok, result.toJson());
             return;
@@ -3598,8 +5094,11 @@ class LanNetworkService {
             final purchaseId = int.tryParse(rawId);
             final details = purchaseId == null
                 ? null
-                : await _businessGateway.fetchReturnablePurchase(
-                    purchaseId: purchaseId,
+                : await _runDeviceBusiness(
+                    device,
+                    () => _businessGateway.fetchReturnablePurchase(
+                      purchaseId: purchaseId,
+                    ),
                   );
             if (details == null) {
               await _respond(request, HttpStatus.notFound, {
@@ -3612,14 +5111,17 @@ class LanNetworkService {
             return;
           }
           if (request.method == 'GET' && path == '/v1/purchase-returns') {
-            final result = await _businessGateway.fetchPurchaseReturns(
-              query: request.uri.queryParameters['q'] ?? '',
-              offset:
-                  int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
-                  0,
-              limit:
-                  int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
-                  100,
+            final result = await _runDeviceBusiness(
+              device,
+              () => _businessGateway.fetchPurchaseReturns(
+                query: request.uri.queryParameters['q'] ?? '',
+                offset:
+                    int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
+                    0,
+                limit:
+                    int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
+                    100,
+              ),
             );
             await _respond(request, HttpStatus.ok, result.toJson());
             return;
@@ -3633,9 +5135,12 @@ class LanNetworkService {
                 : null;
             final details = returnId == null
                 ? null
-                : await _businessGateway.fetchPurchaseReturnDetails(
-                    returnId: returnId,
-                    adjustment: kind == 'adjustment',
+                : await _runDeviceBusiness(
+                    device,
+                    () => _businessGateway.fetchPurchaseReturnDetails(
+                      returnId: returnId,
+                      adjustment: kind == 'adjustment',
+                    ),
                   );
             if ((kind != 'linked' && kind != 'adjustment') || details == null) {
               await _respond(request, HttpStatus.notFound, {
@@ -3657,10 +5162,13 @@ class LanNetworkService {
                 (kind != 'linked' && kind != 'adjustment')) {
               throw const FormatException('Invalid purchase return.');
             }
-            await _businessGateway.voidPurchaseReturn(
-              actor: session.user,
-              returnId: returnId,
-              adjustment: kind == 'adjustment',
+            await _runDeviceBusiness(
+              device,
+              () => _businessGateway.voidPurchaseReturn(
+                actor: session.user,
+                returnId: returnId,
+                adjustment: kind == 'adjustment',
+              ),
             );
             await _respond(request, HttpStatus.ok, {'status': 'voided'});
             return;
@@ -3675,15 +5183,18 @@ class LanNetworkService {
             return;
           }
           final body = await _readJson(request);
-          final result = path == '/v1/purchase-adjustment-returns'
-              ? await _businessGateway.createPurchaseAdjustmentReturn(
-                  actor: session.user,
-                  request: LanPurchaseAdjustmentReturnRequest.fromJson(body),
-                )
-              : await _businessGateway.createPurchaseReturn(
-                  actor: session.user,
-                  request: LanPurchaseReturnRequest.fromJson(body),
-                );
+          final result = await _runDeviceBusiness(
+            device,
+            () => path == '/v1/purchase-adjustment-returns'
+                ? _businessGateway.createPurchaseAdjustmentReturn(
+                    actor: session.user,
+                    request: LanPurchaseAdjustmentReturnRequest.fromJson(body),
+                  )
+                : _businessGateway.createPurchaseReturn(
+                    actor: session.user,
+                    request: LanPurchaseReturnRequest.fromJson(body),
+                  ),
+          );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
               action: result.duplicate
@@ -3752,9 +5263,12 @@ class LanNetworkService {
         }
         try {
           final body = await _readJson(request);
-          final result = await _businessGateway.createSale(
-            actor: session.user,
-            request: LanSaleRequest.fromJson(body),
+          final result = await _runDeviceBusiness(
+            device,
+            () => _businessGateway.createSale(
+              actor: session.user,
+              request: LanSaleRequest.fromJson(body),
+            ),
           );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
@@ -3802,7 +5316,20 @@ class LanNetworkService {
           });
           return;
         }
-        await _respond(request, HttpStatus.ok, {'scope': scope.toJson()});
+        await _respond(request, HttpStatus.ok, {
+          'scope': _deviceBusinessScope(device!.data),
+          'branchName':
+              _masterLocations[_deviceBusinessScope(
+                    device.data,
+                  )?['warehouseId']?.toString()]
+                  ?.branchName,
+          'warehouseName':
+              _masterLocations[_deviceBusinessScope(
+                    device.data,
+                  )?['warehouseId']?.toString()]
+                  ?.name,
+          'deviceKind': device.data['deviceKind']?.toString(),
+        });
         return;
       }
 
@@ -3822,6 +5349,18 @@ class LanNetworkService {
           'capabilities': serverCapabilities.toList(growable: false),
           'serverTime': DateTime.now().toUtc().toIso8601String(),
           'localeCode': _masterLocaleCode,
+          'businessScope': _deviceBusinessScope(device.data),
+          'branchName':
+              _masterLocations[_deviceBusinessScope(
+                    device.data,
+                  )?['warehouseId']?.toString()]
+                  ?.branchName,
+          'warehouseName':
+              _masterLocations[_deviceBusinessScope(
+                    device.data,
+                  )?['warehouseId']?.toString()]
+                  ?.name,
+          'deviceKind': device.data['deviceKind']?.toString(),
         });
         return;
       }
@@ -3835,10 +5374,16 @@ class LanNetworkService {
       await _respond(request, HttpStatus.badRequest, {
         'message': 'Invalid JSON request.',
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
+      developer.log(
+        'LAN request failed: ${request.method} ${request.uri.path}',
+        name: 'LanNetworkService',
+        error: error,
+        stackTrace: stackTrace,
+      );
       try {
         await _respond(request, HttpStatus.internalServerError, {
-          'message': 'Request failed.',
+          'message': kDebugMode ? error.toString() : 'Request failed.',
         });
       } catch (_) {
         // The response may already have been closed by a completed handler.
@@ -3847,6 +5392,32 @@ class LanNetworkService {
     } finally {
       _activeRequests--;
     }
+  }
+
+  LanBranchSyncAuth? _branchSyncAuth(
+    HttpRequest request,
+    Map<String, dynamic> body,
+  ) {
+    final authorization = request.headers.value(
+      HttpHeaders.authorizationHeader,
+    );
+    if (authorization == null || !authorization.startsWith('Bearer ')) {
+      return null;
+    }
+    final enrollmentId = body['enrollmentId']?.toString().trim() ?? '';
+    final remoteDatabaseId = body['remoteDatabaseId']?.toString().trim() ?? '';
+    final token = authorization.substring(7).trim();
+    if (enrollmentId.length != 36 ||
+        remoteDatabaseId.length != 36 ||
+        token.length < 40 ||
+        token.length > 128) {
+      return null;
+    }
+    return LanBranchSyncAuth(
+      enrollmentId: enrollmentId,
+      remoteDatabaseId: remoteDatabaseId,
+      accessToken: token,
+    );
   }
 
   _AuthorizedDevice? _authorizeDevice(HttpRequest request) {
@@ -3860,8 +5431,7 @@ class LanNetworkService {
         entry.value['tokenHash']?.toString() ?? '',
         candidateHash,
       )) {
-        if (_masterScope?.matchesBinding(entry.value['businessScope']) !=
-            true) {
+        if (!_deviceScopeMatchesMaster(_deviceBusinessScope(entry.value))) {
           return null;
         }
         entry.value['lastSeenAt'] = DateTime.now().toUtc().toIso8601String();
@@ -3881,6 +5451,88 @@ class LanNetworkService {
       }
     }
     return null;
+  }
+
+  Map<String, dynamic>? _deviceBusinessScope(Map<String, dynamic> device) {
+    final raw = device['businessScope'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  Set<String> _allowedWarehouseIds(Map<String, dynamic>? binding) {
+    if (binding == null) return const {};
+    final raw = binding['allowedWarehouseIds'];
+    final allowed = raw is List
+        ? raw
+              .map((value) => value.toString())
+              .where((value) => value.isNotEmpty)
+              .toSet()
+        : <String>{};
+    final selected = binding['warehouseId']?.toString() ?? '';
+    // Legacy V2 bindings predate the explicit allow-list and were already
+    // cryptographically tied to exactly one warehouse.
+    if (allowed.isEmpty && selected.isNotEmpty) allowed.add(selected);
+    return allowed;
+  }
+
+  bool _deviceScopeMatchesMaster(Map<String, dynamic>? binding) {
+    final master = _masterScope;
+    if (master == null || binding == null) return false;
+    final warehouseId = binding['warehouseId']?.toString() ?? '';
+    final allowed = _allowedWarehouseIds(binding);
+    final location = _masterLocations[warehouseId];
+    return binding['organizationId'] == master.organizationId &&
+        binding['databaseId'] == master.databaseId &&
+        location != null &&
+        _locationServedByThisMaster(location) &&
+        binding['branchId'] == location.branchId &&
+        allowed.contains(warehouseId);
+  }
+
+  bool _locationServedByThisMaster(LanDeviceWarehouseOption location) {
+    final master = _masterScope;
+    if (_isIndependentBranchServer &&
+        (master == null || location.branchId != master.branchId)) {
+      return false;
+    }
+    return !_delegatedBranchIds.contains(location.branchId);
+  }
+
+  bool _userCanUseDevice(LanRemoteUser user, _AuthorizedDevice device) {
+    if (user.role == 'owner' || user.hasGlobalLocationAccess) return true;
+    final binding = _deviceBusinessScope(device.data);
+    if (!_deviceScopeMatchesMaster(binding) || user.branchId == null) {
+      return false;
+    }
+    if (binding!['branchId']?.toString() != user.branchId) return false;
+    final assignedWarehouse = user.warehouseId;
+    return assignedWarehouse == null ||
+        binding['warehouseId']?.toString() == assignedWarehouse;
+  }
+
+  Future<T> _runDeviceBusiness<T>(
+    _AuthorizedDevice device,
+    Future<T> Function() operation,
+  ) async {
+    if (!_deviceScopeMatchesMaster(_deviceBusinessScope(device.data))) {
+      throw const LanRequestBodyException(403, 'Device location is invalid.');
+    }
+    final warehouseId = _deviceBusinessScope(
+      device.data,
+    )!['warehouseId']!.toString();
+    final gateway = _businessGateway;
+    if (gateway != null && gateway is LanWarehouseScopedBusinessGateway) {
+      return (gateway as LanWarehouseScopedBusinessGateway).runForWarehouse(
+        warehouseId,
+        operation,
+      );
+    }
+    if (warehouseId == _masterScope?.warehouseId) return operation();
+    throw const LanRequestBodyException(
+      503,
+      'Warehouse-scoped business services are unavailable.',
+    );
   }
 
   Future<_MasterUserSession?> _authorizeUserSession(
@@ -4058,6 +5710,28 @@ class LanNetworkService {
         !RegExp(r'[\x00-\x1F\x7F]').hasMatch(value);
   }
 
+  String _automaticDeviceName(
+    LanDeviceWarehouseOption target,
+    LanDeviceKind kind,
+  ) {
+    final baseName = switch (kind) {
+      LanDeviceKind.branchWorkstation => target.branchName,
+      LanDeviceKind.warehouseWorkstation => target.name,
+      LanDeviceKind.pointOfSale => '${target.branchName} POS',
+    };
+    final existingNames = _authorizedDevices.values
+        .map((device) => device['name']?.toString().trim())
+        .whereType<String>()
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    if (!existingNames.contains(baseName)) return baseName;
+    var suffix = 2;
+    while (existingNames.contains('$baseName $suffix')) {
+      suffix++;
+    }
+    return '$baseName $suffix';
+  }
+
   bool _constantTimeEquals(String a, String b) {
     if (a.length != b.length) return false;
     var mismatch = 0;
@@ -4123,9 +5797,6 @@ class LanNetworkService {
           .timeout(const Duration(seconds: 6));
       request.headers.contentType = ContentType.json;
       request.headers.set(_platformHeader, Platform.operatingSystem);
-      if (_clientDeviceName != null && _clientDeviceName!.trim().isNotEmpty) {
-        request.headers.set(_deviceNameHeader, _clientDeviceName!.trim());
-      }
       if (token != null) {
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
       }
@@ -4158,23 +5829,56 @@ class LanNetworkService {
 
   Future<void> _loadMasterLocationNames(LocalBranchScope scope) async {
     final database = _settingsDao.attachedDatabase;
-    final branch =
-        await (database.select(database.businessBranches)
-              ..where((row) => row.id.equals(scope.branchId))
-              ..limit(1))
-            .getSingleOrNull();
-    final warehouse =
-        await (database.select(database.businessWarehouses)
-              ..where((row) => row.id.equals(scope.warehouseId))
-              ..limit(1))
-            .getSingleOrNull();
-    if (branch == null || warehouse == null) {
+    final branches =
+        await (database.select(database.businessBranches)..where(
+              (row) =>
+                  row.organizationId.equals(scope.organizationId) &
+                  row.isActive.equals(true),
+            ))
+            .get();
+    final branchById = {for (final row in branches) row.id: row};
+    final warehouses =
+        await (database.select(database.businessWarehouses)..where(
+              (row) =>
+                  row.organizationId.equals(scope.organizationId) &
+                  row.isActive.equals(true),
+            ))
+            .get();
+    final locations = <String, LanDeviceWarehouseOption>{};
+    for (final warehouse in warehouses) {
+      final branch = branchById[warehouse.branchId];
+      if (branch == null) continue;
+      locations[warehouse.id] = LanDeviceWarehouseOption(
+        id: warehouse.id,
+        branchId: branch.id,
+        branchCode: branch.code,
+        branchName: branch.name.trim().isEmpty ? branch.code : branch.name,
+        code: warehouse.code,
+        name: warehouse.name.trim().isEmpty ? warehouse.code : warehouse.name,
+        isPrimary: warehouse.id == scope.warehouseId,
+      );
+    }
+    final primary = locations[scope.warehouseId];
+    if (primary == null) {
       throw StateError('Business location labels are unavailable.');
     }
-    _masterBranchName = branch.name.trim().isEmpty ? branch.code : branch.name;
-    _masterWarehouseName = warehouse.name.trim().isEmpty
-        ? warehouse.code
-        : warehouse.name;
+    final delegated = await database
+        .customSelect(
+          '''SELECT DISTINCT branch_id
+         FROM lan_branch_enrollments
+         WHERE organization_id=? AND status='active'
+           AND remote_database_id IS NOT NULL
+           AND remote_database_id<>?''',
+          variables: [
+            Variable.withString(scope.organizationId),
+            Variable.withString(scope.databaseId),
+          ],
+        )
+        .get();
+    _delegatedBranchIds = Set.unmodifiable(
+      delegated.map((row) => row.read<String>('branch_id')),
+    );
+    _masterLocations = Map.unmodifiable(locations);
   }
 
   Future<void> _loadAuthorizedDevices() async {
@@ -4210,7 +5914,10 @@ class LanNetworkService {
             RegExp(
               r'^[a-f0-9]{64}$',
             ).hasMatch(device['tokenHash']?.toString() ?? '')) {
-          device['businessScope'] = scope.toJson();
+          device['businessScope'] = {
+            ...scope.toJson(),
+            'allowedWarehouseIds': [scope.warehouseId],
+          };
         }
       }
       await _saveAuthorizedDevices();

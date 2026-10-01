@@ -1,10 +1,11 @@
 import '../../../reports/presentation/screens/supplier_sales_report_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'warehouse_transfer_report_screen.dart';
+import 'synced_location_report_screen.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/database/app_database.dart' show BusinessWarehouse;
 import '../../../../core/services/business/warehouse_read_scope.dart';
 import '../../data/warehouse_setup_service.dart';
+import '../../data/synced_location_report_service.dart';
 import '../../../reports/presentation/widgets/warehouse_report_context.dart';
 import '../../../reports/presentation/screens/customer_analysis_report_screen.dart';
 import '../../../reports/presentation/screens/customer_invoices_report_screen.dart';
@@ -27,25 +28,32 @@ import '../../../reports/presentation/screens/supplier_returns_report_screen.dar
 import '../../../reports/presentation/screens/product_variant_movement_screen.dart';
 import '../../../reports/presentation/screens/top_customers_screen.dart';
 
+enum _ReportAggregation { location, branch, company }
+
 class WarehouseReportsScreen extends StatefulWidget {
   const WarehouseReportsScreen({
     super.key,
     required this.service,
     required this.warehouseId,
+    this.syncedReportService,
   });
   final WarehouseSetupService service;
   final String warehouseId;
+  final SyncedLocationReportService? syncedReportService;
   @override
   State<WarehouseReportsScreen> createState() => _WarehouseReportsScreenState();
 }
 
 class _WarehouseReportsScreenState extends State<WarehouseReportsScreen> {
-  final _navigator = GlobalKey<NavigatorState>();
-  List<BusinessWarehouse> _warehouses = [];
+  GlobalKey<NavigatorState> _navigator = GlobalKey<NavigatorState>();
+  List<WarehouseReportLocation> _locations = [];
   WarehouseReadScope? _scope;
   late String _selected = widget.warehouseId;
   bool _busy = true;
   bool _failed = false;
+  _ReportAggregation _aggregation = _ReportAggregation.location;
+  bool _showScopeControls = true;
+
   @override
   void initState() {
     super.initState();
@@ -59,14 +67,15 @@ class _WarehouseReportsScreenState extends State<WarehouseReportsScreen> {
       _scope = null;
     });
     try {
-      final warehouses = await widget.service.warehouses();
-      if (!warehouses.any((w) => w.id == _selected)) {
-        throw StateError('Warehouse access changed');
+      final locations = await widget.service.reportLocations();
+      if (locations.isEmpty) throw StateError('No report locations');
+      if (!locations.any((location) => location.warehouse.id == _selected)) {
+        _selected = locations.first.warehouse.id;
       }
       final scope = await widget.service.reportScope(_selected);
       if (mounted) {
         setState(() {
-          _warehouses = warehouses;
+          _locations = locations;
           _scope = scope;
         });
       }
@@ -77,18 +86,63 @@ class _WarehouseReportsScreenState extends State<WarehouseReportsScreen> {
     }
   }
 
+  List<WarehouseReportLocation> get _branchChoices {
+    final byBranch = <String, WarehouseReportLocation>{};
+    for (final location in _locations) {
+      final current = byBranch[location.warehouse.branchId];
+      if (current == null ||
+          (!current.isBranchLocation && location.isBranchLocation)) {
+        byBranch[location.warehouse.branchId] = location;
+      }
+    }
+    return byBranch.values.toList(growable: false);
+  }
+
+  String _branchRepresentative(String branchId) {
+    return _branchChoices
+        .firstWhere((location) => location.warehouse.branchId == branchId)
+        .warehouse
+        .id;
+  }
+
   @override
   Widget build(BuildContext context) {
     final scope = _scope;
-    final warehouse = scope == null
+    final location = scope == null
         ? null
-        : _warehouses.firstWhere((w) => w.id == _selected);
+        : _locations.firstWhere((item) => item.warehouse.id == _selected);
+    final syncedScope = location == null
+        ? null
+        : switch (_aggregation) {
+            _ReportAggregation.location => SyncedReportScope.location(
+              branchId: location.warehouse.branchId,
+              warehouseId: location.warehouse.id,
+            ),
+            _ReportAggregation.branch => SyncedReportScope.branch(
+              location.warehouse.branchId,
+            ),
+            _ReportAggregation.company => const SyncedReportScope.company(),
+          };
+    final reportLabel = location == null
+        ? ''
+        : switch (_aggregation) {
+            _ReportAggregation.location =>
+              location.isBranchLocation
+                  ? '${location.branchName} · ${'warehouse_reports.branch_location'.tr()}'
+                  : '${location.branchName} · ${location.warehouse.name}',
+            _ReportAggregation.branch =>
+              'warehouse_reports.aggregate_branch'.tr(
+                namedArgs: {'branch': location.branchName},
+              ),
+            _ReportAggregation.company =>
+              'warehouse_reports.aggregate_company'.tr(),
+          };
     return Scaffold(
       appBar: AppBar(title: Text('warehouse_reports.title'.tr())),
       body: SafeArea(
         child: _busy
             ? const Center(child: CircularProgressIndicator())
-            : _failed || warehouse == null || scope == null
+            : _failed || location == null || scope == null
             ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -106,48 +160,147 @@ class _WarehouseReportsScreenState extends State<WarehouseReportsScreen> {
               )
             : WarehouseReportContext(
                 scope: scope,
-                name: warehouse.name,
-                code: warehouse.code,
+                name: location.isBranchLocation
+                    ? location.branchName
+                    : location.warehouse.name,
+                code: location.warehouse.code,
+                branchName: location.branchName,
+                isBranchLocation: location.isBranchLocation,
                 child: Column(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _selected,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: 'warehouse_setup.warehouse'.tr(),
-                          border: const OutlineInputBorder(),
-                        ),
-                        items: _warehouses
-                            .map(
-                              (w) => DropdownMenuItem(
-                                value: w.id,
-                                child: Text(
-                                  '${w.name} · ${w.code}',
-                                  overflow: TextOverflow.ellipsis,
+                    if (_showScopeControls)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final aggregation in _ReportAggregation.values)
+                              ChoiceChip(
+                                key: ValueKey(
+                                  'report-scope-${aggregation.name}',
                                 ),
+                                selected: _aggregation == aggregation,
+                                avatar: Icon(switch (aggregation) {
+                                  _ReportAggregation.location =>
+                                    Icons.location_on_outlined,
+                                  _ReportAggregation.branch =>
+                                    Icons.storefront_outlined,
+                                  _ReportAggregation.company =>
+                                    Icons.domain_outlined,
+                                }, size: 18),
+                                label: Text(
+                                  'warehouse_reports.scope.${aggregation.name}'
+                                      .tr(),
+                                ),
+                                onSelected: (selected) {
+                                  if (!selected ||
+                                      _aggregation == aggregation) {
+                                    return;
+                                  }
+                                  final branchId = location.warehouse.branchId;
+                                  setState(() {
+                                    _aggregation = aggregation;
+                                    if (aggregation ==
+                                        _ReportAggregation.branch) {
+                                      _selected = _branchRepresentative(
+                                        branchId,
+                                      );
+                                    }
+                                    _navigator = GlobalKey<NavigatorState>();
+                                  });
+                                  if (aggregation ==
+                                      _ReportAggregation.branch) {
+                                    _load();
+                                  }
+                                },
                               ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null && value != _selected) {
-                            _selected = value;
-                            _load();
-                          }
-                        },
+                          ],
+                        ),
                       ),
-                    ),
+                    if (_showScopeControls &&
+                        _aggregation != _ReportAggregation.company)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _selected,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText:
+                                (_aggregation == _ReportAggregation.branch
+                                        ? 'warehouse_reports.branch'
+                                        : 'warehouse_reports.location')
+                                    .tr(),
+                            border: const OutlineInputBorder(),
+                          ),
+                          items:
+                              (_aggregation == _ReportAggregation.branch
+                                      ? _branchChoices
+                                      : _locations)
+                                  .map(
+                                    (location) => DropdownMenuItem(
+                                      value: location.warehouse.id,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            _aggregation ==
+                                                        _ReportAggregation
+                                                            .branch ||
+                                                    location.isBranchLocation
+                                                ? Icons.storefront_outlined
+                                                : Icons.warehouse_outlined,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              _aggregation ==
+                                                      _ReportAggregation.branch
+                                                  ? location.branchName
+                                                  : location.isBranchLocation
+                                                  ? '${location.branchName} · ${'warehouse_reports.branch_location'.tr()}'
+                                                  : '${location.branchName} · ${location.warehouse.name} · ${location.warehouse.code}',
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (value) {
+                            if (value != null && value != _selected) {
+                              _selected = value;
+                              _navigator = GlobalKey<NavigatorState>();
+                              _load();
+                            }
+                          },
+                        ),
+                      ),
                     Expanded(
                       child: NavigatorPopHandler<void>(
                         onPopWithResult: (_) => _navigator.currentState?.pop(),
                         child: Navigator(
                           key: _navigator,
                           onGenerateRoute: (_) => MaterialPageRoute<void>(
-                            builder: (_) => const _WarehouseReportList(),
+                            builder: (_) => _WarehouseReportList(
+                              location: location,
+                              allLocations: _locations,
+                              syncedScope: syncedScope!,
+                              reportLabel: reportLabel,
+                              useNativeReports:
+                                  _aggregation == _ReportAggregation.location &&
+                                  location.isLocalBranch,
+                              syncedReportService: widget.syncedReportService,
+                              onReportVisibilityChanged: (visible) {
+                                if (mounted) {
+                                  setState(() => _showScopeControls = visible);
+                                }
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -161,7 +314,24 @@ class _WarehouseReportsScreenState extends State<WarehouseReportsScreen> {
 }
 
 class _WarehouseReportList extends StatefulWidget {
-  const _WarehouseReportList();
+  const _WarehouseReportList({
+    required this.location,
+    required this.allLocations,
+    required this.syncedScope,
+    required this.reportLabel,
+    required this.useNativeReports,
+    required this.onReportVisibilityChanged,
+    this.syncedReportService,
+  });
+
+  final WarehouseReportLocation location;
+  final List<WarehouseReportLocation> allLocations;
+  final SyncedReportScope syncedScope;
+  final String reportLabel;
+  final bool useNativeReports;
+  final ValueChanged<bool> onReportVisibilityChanged;
+  final SyncedLocationReportService? syncedReportService;
+
   @override
   State<_WarehouseReportList> createState() => _WarehouseReportListState();
 }
@@ -359,11 +529,45 @@ class _WarehouseReportListState extends State<_WarehouseReportList> {
                     itemBuilder: (context, index) => Card(
                       clipBehavior: Clip.antiAlias,
                       child: InkWell(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => entries[index].$2,
-                          ),
-                        ),
+                        onTap: () async {
+                          final entry = entries[index];
+                          final transfer =
+                              entry.$1 == 'reports.warehouse_transfers';
+                          final aggregateTransfer =
+                              transfer &&
+                              widget.syncedScope.kind !=
+                                  SyncedReportScopeKind.location;
+                          final transferWarehouses = widget.allLocations
+                              .where(
+                                (item) =>
+                                    widget.syncedScope.kind ==
+                                        SyncedReportScopeKind.company ||
+                                    item.warehouse.branchId ==
+                                        widget.syncedScope.branchId,
+                              )
+                              .map((item) => item.warehouse.id)
+                              .toSet();
+                          final destination = aggregateTransfer
+                              ? WarehouseTransferReportScreen(
+                                  warehouseIds: transferWarehouses,
+                                  scopeLabel: widget.reportLabel,
+                                )
+                              : widget.useNativeReports || transfer
+                              ? entry.$2
+                              : SyncedLocationReportScreen(
+                                  reportKey: entry.$1,
+                                  scope: widget.syncedScope,
+                                  locationLabel: widget.reportLabel,
+                                  service: widget.syncedReportService,
+                                );
+                          widget.onReportVisibilityChanged(false);
+                          await Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => destination,
+                            ),
+                          );
+                          widget.onReportVisibilityChanged(true);
+                        },
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Row(

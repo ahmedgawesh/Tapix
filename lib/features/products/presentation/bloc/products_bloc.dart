@@ -145,6 +145,21 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
 
   bool get isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
+  /// Returns the authoritative remote catalogue row behind the lightweight
+  /// [Product] rendered by this bloc. Purchase receiving needs the variant
+  /// dimensions and the master-side cost snapshot; reading the client's local
+  /// variant tables would mix an unrelated database into a LAN transaction.
+  LanCatalogProduct? remoteCatalogProduct(int productId) =>
+      _remoteCatalog[productId];
+
+  /// Keeps a product returned by an exact remote barcode lookup available to
+  /// the picker, then maps it through the same transport-to-domain path used
+  /// by the remote catalogue list.
+  Product rememberRemoteCatalogProduct(LanCatalogProduct product) {
+    _remoteCatalog[product.id] = product;
+    return _mapRemoteProduct(product);
+  }
+
   int? remoteVariantCount(int productId) =>
       _remoteCatalog[productId]?.variants.length;
 

@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tapix/core/database/app_database.dart';
+import 'package:tapix/core/database/migrations/lan_request_receipts.dart';
 import 'package:tapix/core/services/lan/lan_business_models.dart';
 import 'package:tapix/core/services/lan/lan_request_receipt_store.dart';
 
@@ -128,6 +129,136 @@ void main() {
       );
     });
   });
+
+  test('purchase invoices have a durable idempotency operation', () async {
+    const payload = {
+      'idempotencyKey': 'purchase-invoice-001',
+      'warehouseId': 'warehouse-1',
+      'actorUserId': 8,
+      'quantity': 500,
+    };
+    await db.transaction(() async {
+      final reservation = await store.reserve(
+        operation: 'purchase',
+        idempotencyKey: 'purchase-invoice-001',
+        payload: payload,
+        findLegacyDocument: () async => null,
+      );
+      expect(reservation.shouldCreate, isTrue);
+      await store.complete(
+        operation: 'purchase',
+        idempotencyKey: 'purchase-invoice-001',
+        payload: payload,
+        documentId: 81,
+        documentNumber: 'PI-81',
+        totalCents: 400,
+      );
+    });
+
+    final replay = await db.transaction(
+      () => store.reserve(
+        operation: 'purchase',
+        idempotencyKey: 'purchase-invoice-001',
+        payload: payload,
+        findLegacyDocument: () async => null,
+      ),
+    );
+    expect(replay.shouldCreate, isFalse);
+    expect(replay.documentId, 81);
+  });
+
+  test(
+    'legacy ledger upgrade preserves receipts and adds protected purchases',
+    () async {
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_lan_request_receipts_no_delete',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_lan_request_receipts_complete_once',
+      );
+      await db.customStatement('DROP TABLE lan_request_receipts');
+      await db.customStatement('''
+        CREATE TABLE lan_request_receipts (
+          operation TEXT NOT NULL CHECK (operation IN (
+            'sale',
+            'sale_return',
+            'sale_adjustment_return',
+            'purchase_return',
+            'purchase_adjustment_return'
+          )),
+          idempotency_key TEXT NOT NULL,
+          request_hash TEXT,
+          state TEXT NOT NULL CHECK (state IN ('pending', 'completed', 'legacy')),
+          document_id INTEGER,
+          document_number TEXT,
+          total_cents INTEGER,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          completed_at TEXT,
+          PRIMARY KEY (operation, idempotency_key)
+        )
+      ''');
+      await db.customStatement('''
+        INSERT INTO lan_request_receipts (
+          operation, idempotency_key, request_hash, state, document_id,
+          document_number, total_cents, completed_at
+        ) VALUES (
+          'sale', 'legacy-sale-001',
+          'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'completed', 17, 'SI-17', 900, CURRENT_TIMESTAMP
+        )
+      ''');
+
+      await installLanRequestReceiptLedger(db);
+
+      final legacy = await db.customSelect('''
+            SELECT document_id, document_number, total_cents
+            FROM lan_request_receipts
+            WHERE operation='sale' AND idempotency_key='legacy-sale-001'
+          ''').getSingle();
+      expect(legacy.read<int>('document_id'), 17);
+      expect(legacy.read<String>('document_number'), 'SI-17');
+      expect(legacy.read<int>('total_cents'), 900);
+
+      const purchasePayload = {
+        'warehouseId': 'warehouse-2',
+        'actorUserId': 9,
+        'quantity': 250,
+      };
+      await db.transaction(() async {
+        final purchase = await store.reserve(
+          operation: 'purchase',
+          idempotencyKey: 'upgraded-purchase-001',
+          payload: purchasePayload,
+          findLegacyDocument: () async => null,
+        );
+        expect(purchase.shouldCreate, isTrue);
+        await store.complete(
+          operation: 'purchase',
+          idempotencyKey: 'upgraded-purchase-001',
+          payload: purchasePayload,
+          documentId: 91,
+          documentNumber: 'PI-91',
+          totalCents: 700,
+        );
+      });
+
+      await expectLater(
+        db.customStatement('''
+          UPDATE lan_request_receipts SET total_cents=1
+          WHERE operation='sale' AND idempotency_key='legacy-sale-001'
+        '''),
+        throwsA(anything),
+      );
+      await expectLater(
+        db.customStatement('''
+          DELETE FROM lan_request_receipts
+          WHERE operation='purchase'
+            AND idempotency_key='upgraded-purchase-001'
+        '''),
+        throwsA(anything),
+      );
+    },
+  );
 
   test('concurrent same-payload retries produce one durable owner', () async {
     var creators = 0;

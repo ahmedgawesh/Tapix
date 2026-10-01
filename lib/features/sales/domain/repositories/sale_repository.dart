@@ -150,6 +150,8 @@ abstract class SaleRepository {
     /// Real settlement legs captured at checkout. When supplied, the invoice
     /// is first posted to AR and each leg settles AR through its own account.
     List<CheckoutPaymentAllocation> initialPayments = const [],
+    int loyaltyPointsToRedeem = 0,
+    int loyaltyValueCents = 0,
   });
 
   /// Update an existing sale

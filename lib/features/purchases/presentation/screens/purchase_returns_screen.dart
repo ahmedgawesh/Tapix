@@ -61,7 +61,7 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
     final cs = sl<CurrencyService>();
     final lan = sl<LanNetworkService>();
     final isRemote =
-        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+        lan.snapshot.mode == LanMode.client;
     final canCreate =
         !isRemote ||
         (lan.remoteUser?.permissions.contains('manage_purchases') ?? false);

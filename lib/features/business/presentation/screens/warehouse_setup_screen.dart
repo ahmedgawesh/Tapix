@@ -500,7 +500,7 @@ class _WarehouseSetupScreenState extends State<WarehouseSetupScreen> {
                             ? null
                             : () => setState(() {
                                 _item = item;
-                                _cost.clear();
+                                _cost.text = item.suggestedCostText;
                                 _message = null;
                               }),
                       ),
@@ -566,6 +566,8 @@ class _WarehouseSetupScreenState extends State<WarehouseSetupScreen> {
                                   ),
                               decoration: InputDecoration(
                                 labelText: 'warehouse_setup.cost'.tr(),
+                                helperText: 'warehouse_setup.cost_help'.tr(),
+                                helperMaxLines: 5,
                                 suffixText: _item!.currencyCode,
                                 border: const OutlineInputBorder(),
                               ),

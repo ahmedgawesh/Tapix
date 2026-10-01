@@ -4,12 +4,13 @@ import '../app_database.dart';
 /// schema. The ledger is intentionally polymorphic: the operation identifies the
 /// document table while the document ID identifies the completed document.
 Future<void> installLanRequestReceiptLedger(AppDatabase db) async {
-  await db.customStatement('''
+  const createLedger = '''
     CREATE TABLE IF NOT EXISTS lan_request_receipts (
       operation TEXT NOT NULL CHECK (operation IN (
         'sale',
         'sale_return',
         'sale_adjustment_return',
+        'purchase',
         'purchase_return',
         'purchase_adjustment_return'
       )),
@@ -38,7 +39,41 @@ Future<void> installLanRequestReceiptLedger(AppDatabase db) async {
           AND total_cents IS NOT NULL AND completed_at IS NOT NULL)
       )
     )
-  ''');
+  ''';
+  await db.customStatement(createLedger);
+
+  // Older ledgers predate remote purchase invoices. SQLite cannot alter a
+  // CHECK constraint in place, so preserve every append-only receipt while
+  // replacing only the table definition.
+  final definition = await db.customSelect('''SELECT sql FROM sqlite_master
+           WHERE type='table' AND name='lan_request_receipts' ''').getSingle();
+  if (!definition.read<String>('sql').contains("'purchase',")) {
+    await db.transaction(() async {
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_lan_request_receipts_no_delete',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_lan_request_receipts_complete_once',
+      );
+      await db.customStatement(
+        'ALTER TABLE lan_request_receipts '
+        'RENAME TO lan_request_receipts_before_purchase',
+      );
+      await db.customStatement(createLedger);
+      await db.customStatement('''
+        INSERT INTO lan_request_receipts (
+          operation, idempotency_key, request_hash, state, document_id,
+          document_number, total_cents, created_at, completed_at
+        )
+        SELECT operation, idempotency_key, request_hash, state, document_id,
+               document_number, total_cents, created_at, completed_at
+        FROM lan_request_receipts_before_purchase
+      ''');
+      await db.customStatement(
+        'DROP TABLE lan_request_receipts_before_purchase',
+      );
+    });
+  }
   await db.customStatement('''
     CREATE TRIGGER IF NOT EXISTS trg_lan_request_receipts_no_delete
     BEFORE DELETE ON lan_request_receipts

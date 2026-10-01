@@ -31,8 +31,15 @@ class ReturnSettlementService {
     required int currencyId,
     required List<CheckoutPaymentAllocation> allocations,
     required DateTime documentDate,
+    bool allowLoyalty = false,
     int? userId,
   }) async {
+    if (allocations.any((p) => p.method == 'loyalty') &&
+        (!allowLoyalty ||
+            side != ReturnSettlementSide.sale ||
+            sourceTable != ChequeSourceTables.saleReturn)) {
+      throw ArgumentError('loyalty_payment_must_be_server_generated');
+    }
     final settlement = CheckoutSettlement(allocations);
     settlement.validate(invoiceTotalCents: totalCents);
     _validateSource(side, sourceTable);
@@ -160,7 +167,8 @@ class ReturnSettlementService {
           'SELECT id, $partyColumn AS party_id, amount_cents, currency_id '
           'FROM $partyTable '
           'WHERE reference_type = ? AND reference_id = ? '
-          "AND transaction_type LIKE 'return_settlement_%'",
+          "AND transaction_type IN ('return_settlement_cash', 'return_settlement_card', "
+          "'return_settlement_bank_transfer', 'return_settlement_mobile', 'return_settlement_loyalty')",
           variables: [
             Variable.withString(sourceTable),
             Variable.withInt(sourceId),
@@ -234,7 +242,8 @@ class ReturnSettlementService {
 
   static String _normalizeImmediateMethod(String raw) {
     final value = raw.trim().toLowerCase();
-    if (value == 'cash' ||
+    if (value == 'loyalty' ||
+        value == 'cash' ||
         value == 'card' ||
         value == 'bank_transfer' ||
         value == 'bank' ||

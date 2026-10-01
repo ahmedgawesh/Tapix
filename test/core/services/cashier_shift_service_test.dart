@@ -127,18 +127,29 @@ void main() {
               returnDate: Value(DateTime(2026, 8, 9, 12)),
             ),
           );
+      // Mirror posting: the initial payment is backed by a row; later
+      // collection updates the header's cumulative paid amount through the DAO.
       await db
           .into(db.salePayments)
           .insert(
             SalePaymentsCompanion.insert(
               saleId: cashSaleId,
-              cashierShiftId: Value(shiftId),
-              amountCents: Decimal.fromInt(3000),
+              amountCents: Decimal.fromInt(12000),
               currencyId: currencyId,
               paymentMethod: 'cash',
-              paymentDate: Value(DateTime(2026, 8, 9, 13)),
+              paymentDate: Value(DateTime(2026, 8, 9, 9)),
             ),
           );
+      await db.saleDao.recordPayment(
+        SalePaymentsCompanion.insert(
+          saleId: cashSaleId,
+          cashierShiftId: Value(shiftId),
+          amountCents: Decimal.fromInt(3000),
+          currencyId: currencyId,
+          paymentMethod: 'cash',
+          paymentDate: Value(DateTime(2026, 8, 9, 13)),
+        ),
+      );
 
       final summary = await service.getSummary(shiftId);
       expect(summary.salesCount, 2);

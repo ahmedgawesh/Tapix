@@ -285,11 +285,11 @@ class WarehouseTransferReceiptService {
                   row.transferId.equals(transfer.id) & row.sealed.equals(true),
             ))
             .getSingle();
-    final source = await WarehouseOperationScope.resolve(
+    final source = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.sourceWarehouseId,
     );
-    final destination = await WarehouseOperationScope.resolve(
+    final destination = await WarehouseOperationScope.resolveForOrganization(
       db,
       warehouseId: transfer.destinationWarehouseId,
     );
@@ -297,7 +297,6 @@ class WarehouseTransferReceiptService {
         source.branchId != transfer.branchId ||
         source.databaseId != transfer.databaseId ||
         destination.organizationId != transfer.organizationId ||
-        destination.branchId != transfer.branchId ||
         destination.databaseId != transfer.databaseId) {
       throw StateError('Transfer warehouse binding changed');
     }
@@ -415,6 +414,22 @@ class WarehouseTransferReceiptService {
       String? destinationLayerId;
       final accepted = plan.request.acceptedQuantity;
       if (accepted > 0) {
+        // A product can arrive at a physical warehouse for the first time.
+        // Keep warehouse catalogues sparse and create the zero balance lazily
+        // inside the same receipt transaction before WAC/stock mutation.
+        await db.customStatement(
+          'INSERT INTO business_warehouse_stocks('
+          'warehouse_id,variant_id,quantity,supplier_owned_quantity,'
+          'unit_cost_cents) SELECT ?,?,0,0,0 WHERE NOT EXISTS('
+          'SELECT 1 FROM business_warehouse_stocks WHERE warehouse_id=? '
+          'AND variant_id=?)',
+          [
+            destination.warehouseId,
+            plan.line.variantId,
+            destination.warehouseId,
+            plan.line.variantId,
+          ],
+        );
         final wac = plan.allocation.ownerType == 'owned' && !plan.tracked
             ? await WacMovementService.capture(
                 db.productDao,

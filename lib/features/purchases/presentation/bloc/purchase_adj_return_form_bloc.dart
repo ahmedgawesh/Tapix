@@ -737,8 +737,7 @@ class PurchaseAdjReturnFormBloc
   }
 
   bool get _isRemoteClient =>
-      _lan?.snapshot.mode == LanMode.client &&
-      _lan?.hasRemoteUserSession == true;
+      _lan?.snapshot.mode == LanMode.client;
 
   Future<void> _onInitialized(
     _PurchaseAdjReturnInitialized event,

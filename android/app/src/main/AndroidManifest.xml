@@ -19,7 +19,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:label="TapBix"
-        android:name="${applicationName}"
+        android:name=".TapixApplication"
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true">
         <meta-data
@@ -56,7 +56,7 @@
         <service
             android:name=".MasterKeepAliveService"
             android:exported="false"
-            android:stopWithTask="true"
+            android:stopWithTask="false"
             android:foregroundServiceType="connectedDevice" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

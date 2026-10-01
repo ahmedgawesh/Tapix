@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/settings_dao.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
+import 'package:tapix/core/services/business/local_branch_scope.dart';
 import 'package:tapix/core/services/lan/lan_network_service.dart';
 import 'package:tapix/features/auth/data/repositories/auth_repository.dart';
 import 'package:tapix/features/auth/data/services/lan_master_auth_gateway.dart';
@@ -29,6 +30,7 @@ void main() {
     masterDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     clientDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     final now = DateTime.now();
+    final masterScope = await LocalBranchScope.read(masterDb);
     await masterDb
         .into(masterDb.users)
         .insert(
@@ -36,6 +38,8 @@ void main() {
             username: 'master-cashier',
             passwordHash: PasswordService().hashPassword('master-password'),
             role: 'cashier',
+            branchId: Value(masterScope.branchId),
+            warehouseId: Value(masterScope.warehouseId),
             createdAt: now,
             updatedAt: now,
           ),
@@ -52,6 +56,11 @@ void main() {
     await master.initialize();
     await client.initialize();
     await master.startMaster(port: 0);
+    final scope = await LocalBranchScope.read(masterDb);
+    await master.createDeviceEnrollment(
+      warehouseId: scope.warehouseId,
+      deviceKind: LanDeviceKind.pointOfSale,
+    );
     final paired = await client.pairWithMaster(
       host: '127.0.0.1',
       port: master.snapshot.port,

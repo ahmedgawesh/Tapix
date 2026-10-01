@@ -551,7 +551,7 @@ class _FormView extends StatelessWidget {
     try {
       final lan = sl<LanNetworkService>();
       AdjReturnLineItem? item;
-      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      if (lan.snapshot.mode == LanMode.client) {
         final page = await lan.fetchRemoteCatalog(
           query: code.trim(),
           limit: 20,
@@ -770,8 +770,7 @@ class _FormView extends StatelessWidget {
 
   void _showProductPicker(BuildContext context) async {
     final lan = sl<LanNetworkService>();
-    final isRemote =
-        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+    final isRemote = lan.snapshot.mode == LanMode.client;
 
     final result = await showModalBottomSheet<AdjReturnLineItem>(
       context: context,
@@ -1052,7 +1051,7 @@ class _CheckoutSheetState extends State<SaleAdjustmentCheckoutSheet> {
 
   void _showCustomerPicker(BuildContext context) async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final customers = await lan.fetchRemoteCustomers(limit: 200);
       if (!context.mounted) return;
       final selected = await showModalBottomSheet<LanCustomerSummary>(
@@ -1107,7 +1106,7 @@ class _CheckoutSheetState extends State<SaleAdjustmentCheckoutSheet> {
 
   void _showEmployeePicker(BuildContext context) async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final employees = await lan.fetchRemoteSalespeople(limit: 200);
       if (!context.mounted) return;
       final selected = await showModalBottomSheet<LanEmployeeSummary>(
@@ -2206,7 +2205,7 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
 
   Future<List<AdjReturnConsignmentSource>> _loadConsignmentSources() async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final sources = await lan.fetchRemoteConsignmentAdjustmentReturnSources(
         productId: widget.item.productId,
         variantId: widget.item.variantId,
@@ -2255,7 +2254,7 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
   _loadSupplierIdentitySources() async {
     final selected = widget.item.supplierIdentitySource;
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       final snapshot = await lan.fetchRemoteInventoryStockSources(
         productId: widget.item.productId,
         variantId: widget.item.variantId,

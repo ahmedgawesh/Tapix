@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../../../core/services/lan/lan_business_models.dart';
+import '../../../consignment/data/consignment_module_service.dart';
 import '../../data/warehouse_transfer_application_service.dart';
 
 String _warehouseTransferErrorKey(Object error, String fallback) {
@@ -12,6 +16,35 @@ String _warehouseTransferErrorKey(Object error, String fallback) {
       'authentication_required' => 'warehouse_transfer.sign_in_required',
       'permission_denied' => 'warehouse_transfer.permission_denied',
       'warehouse_access_denied' => 'warehouse_transfer.warehouse_access_denied',
+      _ => fallback,
+    };
+  }
+  final supplierIdentity = SupplierIdentityException.fromError(error);
+  if (supplierIdentity != null) return supplierIdentity.messageKey;
+  if (error is ConsignmentModuleDisabled) {
+    return 'warehouse_transfer.consignment_disabled';
+  }
+  if (error is ConsignmentAccessDenied) {
+    return 'warehouse_transfer.permission_denied';
+  }
+  if (error is ConsignmentUserException) return error.messageKey;
+  if (error is StateError) {
+    return switch (error.message) {
+      'distributed_consignment_agreement_conflict' =>
+        'warehouse_transfer.consignment_agreement_conflict',
+      'distributed_consignment_variance_requires_custody_resolution' =>
+        'warehouse_transfer.consignment_variance_requires_resolution',
+      'distributed_consignment_variance_responsibility' =>
+        'warehouse_transfer.consignment_variance_responsibility_required',
+      'distributed_consignment_terms_required' ||
+      'distributed_consignment_terms_invalid' ||
+      'distributed_consignment_agreement_hash_conflict' =>
+        'warehouse_transfer.consignment_terms_invalid',
+      'distributed_recall_pending' =>
+        'warehouse_transfer.recall_already_pending',
+      'distributed_recall_rejected' => 'warehouse_transfer.recall_rejected',
+      'warehouse_transfer_nothing_to_receive' =>
+        'warehouse_transfer.nothing_to_receive',
       _ => fallback,
     };
   }
@@ -28,48 +61,102 @@ class WarehouseTransferScreen extends StatefulWidget {
       _WarehouseTransferScreenState();
 }
 
-class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
+class _WarehouseTransferScreenState extends State<WarehouseTransferScreen>
+    with WidgetsBindingObserver {
+  static const _autoRefreshInterval = Duration(seconds: 4);
+
   bool _busy = true;
+  bool _backgroundRefreshing = false;
+  int _loadRevision = 0;
   List<WarehouseTransferAppWarehouse> _warehouses = const [];
   List<WarehouseTransferAppDocument> _transfers = const [];
   String? _message;
   String _filter = 'active';
   final Map<String, String> _operationKeys = {};
+  final GlobalKey _messageKey = GlobalKey();
+  Timer? _autoRefreshTimer;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
 
   String _operationKey(String intent) =>
       _operationKeys.putIfAbsent(intent, () => const Uuid().v4());
 
-  static const _active = {'draft', 'in_transit', 'partially_received'};
+  static const _active = {
+    'draft',
+    'in_transit',
+    'recall_pending',
+    'partially_received',
+    'conflict',
+  };
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _lifecycleState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
     _load();
+    _autoRefreshTimer = Timer.periodic(
+      _autoRefreshInterval,
+      (_) => unawaited(_refreshFromServer()),
+    );
   }
 
-  Future<void> _load({String? successMessage}) async {
-    if (mounted) {
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshFromServer());
+    }
+  }
+
+  Future<void> _refreshFromServer() async {
+    if (!mounted ||
+        _busy ||
+        _backgroundRefreshing ||
+        _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    await _load(silent: true);
+  }
+
+  Future<void> _load({String? successMessage, bool silent = false}) async {
+    if (silent) {
+      if (_backgroundRefreshing || _busy) return;
+      _backgroundRefreshing = true;
+    } else if (mounted) {
       setState(() {
         _busy = true;
         _message = null;
       });
     }
+    final revision = ++_loadRevision;
+    final filter = _filter;
     try {
       final warehouses = await widget.service.warehouses();
-      final statuses = switch (_filter) {
+      if (!mounted || revision != _loadRevision) return;
+      final statuses = switch (filter) {
         'completed' => {'completed'},
-        'cancelled' => {'cancelled'},
+        'cancelled' => {'cancelled', 'recalled'},
         _ => _active,
       };
       final transfers = await widget.service.list(statuses: statuses);
-      if (!mounted) return;
+      if (!mounted || revision != _loadRevision) return;
       setState(() {
         _warehouses = warehouses;
         _transfers = transfers;
-        _message = successMessage;
+        if (!silent) _message = successMessage;
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && !silent && revision == _loadRevision) {
         setState(
           () => _message = _warehouseTransferErrorKey(
             error,
@@ -78,16 +165,29 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (silent) {
+        _backgroundRefreshing = false;
+      } else if (mounted && revision == _loadRevision) {
+        setState(() => _busy = false);
+      }
     }
   }
 
   String _warehouseName(String id) {
-    final warehouse = _warehouses.where((row) => row.id == id).firstOrNull;
-    if (warehouse == null) return 'warehouse_transfer.unknown_warehouse'.tr();
-    return warehouse.name.trim().isEmpty
-        ? warehouse.code
-        : '${warehouse.name} · ${warehouse.code}';
+    final location = _warehouses.where((row) => row.id == id).firstOrNull;
+    if (location == null) return 'warehouse_transfer.unknown_warehouse'.tr();
+    final branch = location.branchName?.trim() ?? '';
+    final name = location.name.trim().isEmpty ? location.code : location.name;
+    if (location.isBranchLocation) {
+      final label = 'warehouse_transfer.location_branch'.tr();
+      return branch.isEmpty
+          ? '$label — $name · ${location.code}'
+          : '$label — $branch · ${location.code}';
+    }
+    final label = 'warehouse_transfer.location_warehouse'.tr();
+    return branch.isEmpty
+        ? '$label — $name · ${location.code}'
+        : '$label — $branch — $name · ${location.code}';
   }
 
   Future<void> _create() async {
@@ -154,15 +254,27 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
   }
 
   Future<void> _recall(WarehouseTransferAppDocument draft) async {
-    final reason = await _reasonDialog('warehouse_transfer.recall_title');
+    final cancellingUnreceived =
+        draft.flow == WarehouseTransferDocumentFlow.outbound &&
+        draft.status == 'in_transit';
+    final reason = await _reasonDialog(
+      cancellingUnreceived
+          ? 'warehouse_transfer.cancel_in_transit_title'
+          : 'warehouse_transfer.recall_title',
+    );
     if (reason == null) return;
-    await _run(() async {
-      await widget.service.recall(
-        transferId: draft.id,
-        requestKey: _operationKey('recall:${draft.id}:$reason'),
-        reason: reason,
-      );
-    }, 'warehouse_transfer.recalled');
+    await _run(
+      () async {
+        await widget.service.recall(
+          transferId: draft.id,
+          requestKey: _operationKey('recall:${draft.id}:$reason'),
+          reason: reason,
+        );
+      },
+      draft.flow == WarehouseTransferDocumentFlow.outbound
+          ? 'warehouse_transfer.recall_requested'
+          : 'warehouse_transfer.recalled',
+    );
   }
 
   Future<String?> _reasonDialog(String titleKey) => showDialog<String>(
@@ -174,6 +286,9 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
     setState(() => _busy = true);
     try {
       final pending = await widget.service.pending(draft.id);
+      if (pending.isEmpty) {
+        throw StateError('warehouse_transfer_nothing_to_receive');
+      }
       if (!mounted) return;
       final request = await showDialog<_ReceiptFormResult>(
         context: context,
@@ -196,12 +311,12 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
       await _load(successMessage: 'warehouse_transfer.received');
     } catch (error) {
       if (mounted) {
-        setState(
-          () => _message = _warehouseTransferErrorKey(
-            error,
-            'warehouse_transfer.operation_failed',
-          ),
+        final message = _warehouseTransferErrorKey(
+          error,
+          'warehouse_transfer.operation_failed',
         );
+        setState(() => _message = message);
+        _revealMessage();
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -218,16 +333,28 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
       await _load(successMessage: success);
     } catch (error) {
       if (mounted) {
-        setState(
-          () => _message = _warehouseTransferErrorKey(
-            error,
-            'warehouse_transfer.operation_failed',
-          ),
+        final message = _warehouseTransferErrorKey(
+          error,
+          'warehouse_transfer.operation_failed',
         );
+        setState(() => _message = message);
+        _revealMessage();
       }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _revealMessage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final messageContext = _messageKey.currentContext;
+      if (!mounted || messageContext == null) return;
+      Scrollable.ensureVisible(
+        messageContext,
+        duration: const Duration(milliseconds: 250),
+        alignment: .2,
+      );
+    });
   }
 
   @override
@@ -297,6 +424,7 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
                     Semantics(
                       liveRegion: true,
                       child: Material(
+                        key: _messageKey,
                         color: theme.colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(16),
                         child: Padding(
@@ -427,10 +555,20 @@ class _TransferCard extends StatelessWidget {
     final theme = Theme.of(context);
     final status = draft.status;
     final statusKey = draft.recalled ? 'recalled' : status;
-    final canReceive = const {
-      'in_transit',
-      'partially_received',
-    }.contains(status);
+    final canReceive =
+        draft.receiverActions &&
+        const {'in_transit', 'partially_received'}.contains(status) &&
+        draft.flow != WarehouseTransferDocumentFlow.outbound;
+    final canRecall =
+        draft.senderActions &&
+        switch (draft.flow) {
+          WarehouseTransferDocumentFlow.inbound => false,
+          WarehouseTransferDocumentFlow.outbound => status == 'in_transit',
+          WarehouseTransferDocumentFlow.local => const {
+            'in_transit',
+            'partially_received',
+          }.contains(status),
+        };
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -450,6 +588,22 @@ class _TransferCard extends StatelessWidget {
                 ),
                 Chip(label: Text('warehouse_transfer.status.$statusKey'.tr())),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              (const {'in_transit', 'partially_received'}.contains(status)
+                      ? switch (draft.viewpoint) {
+                          WarehouseTransferViewpoint.sender =>
+                            'warehouse_transfer.perspective.outgoing_waiting',
+                          WarehouseTransferViewpoint.receiver =>
+                            'warehouse_transfer.perspective.incoming_waiting',
+                          _ => 'warehouse_transfer.perspective.management',
+                        }
+                      : 'warehouse_transfer.perspective.${draft.viewpoint.name}')
+                  .tr(),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(height: 12),
             _RouteLine(icon: Icons.upload_outlined, label: source),
@@ -478,19 +632,21 @@ class _TransferCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (status == 'draft' || canReceive) ...[
+            if ((status == 'draft' && draft.senderActions) ||
+                canReceive ||
+                canRecall) ...[
               const Divider(height: 24),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (status == 'draft')
+                  if (status == 'draft' && draft.senderActions)
                     FilledButton.icon(
                       onPressed: busy ? null : onDispatch,
                       icon: const Icon(Icons.local_shipping_outlined),
                       label: Text('warehouse_transfer.dispatch'.tr()),
                     ),
-                  if (status == 'draft')
+                  if (status == 'draft' && draft.senderActions)
                     OutlinedButton.icon(
                       onPressed: busy ? null : onCancel,
                       icon: const Icon(Icons.close),
@@ -502,11 +658,16 @@ class _TransferCard extends StatelessWidget {
                       icon: const Icon(Icons.inventory_outlined),
                       label: Text('warehouse_transfer.receive'.tr()),
                     ),
-                  if (canReceive)
+                  if (canRecall)
                     OutlinedButton.icon(
                       onPressed: busy ? null : onRecall,
                       icon: const Icon(Icons.undo_rounded),
-                      label: Text('warehouse_transfer.recall'.tr()),
+                      label: Text(
+                        draft.flow == WarehouseTransferDocumentFlow.outbound &&
+                                status == 'in_transit'
+                            ? 'warehouse_transfer.cancel_in_transit'.tr()
+                            : 'warehouse_transfer.recall'.tr(),
+                      ),
                     ),
                 ],
               ),
@@ -528,7 +689,9 @@ class _RouteLine extends StatelessWidget {
     children: [
       Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
       const SizedBox(width: 8),
-      Expanded(child: Text(label, overflow: TextOverflow.ellipsis)),
+      Expanded(
+        child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
+      ),
     ],
   );
 }
@@ -607,7 +770,14 @@ class _WarehouseTransferComposerState
 
   String _name(String id) {
     final row = widget.warehouses.firstWhere((warehouse) => warehouse.id == id);
-    return row.name.isEmpty ? row.code : '${row.name} · ${row.code}';
+    final name = row.name.isEmpty ? row.code : row.name;
+    final branch = row.branchName?.trim() ?? '';
+    if (row.isBranchLocation && branch.isNotEmpty) {
+      return '$branch · ${row.code}';
+    }
+    return branch.isEmpty
+        ? '$name · ${row.code}'
+        : '$branch — $name · ${row.code}';
   }
 
   Future<void> _choose({required bool source}) async {
@@ -618,7 +788,10 @@ class _WarehouseTransferComposerState
       isScrollControlled: true,
       builder: (context) => _WarehousePicker(
         warehouses: widget.warehouses
-            .where((warehouse) => warehouse.id != excluded)
+            .where(
+              (warehouse) =>
+                  warehouse.id != excluded && (!source || warehouse.isLocal),
+            )
             .toList(),
       ),
     );
@@ -661,12 +834,12 @@ class _WarehouseTransferComposerState
   }
 
   Future<void> _add(WarehouseTransferAppCatalogItem item) async {
-    final quantity = await showDialog<int>(
+    final selection = await showDialog<_TransferQuantityResult>(
       context: context,
       builder: (context) => _TransferQuantityDialog(item: item),
     );
-    if (quantity == null || !mounted) return;
-    setState(() => _cart[item.variantId] = _CartLine(item, quantity));
+    if (selection == null || !mounted) return;
+    setState(() => _cart[item.variantId] = _CartLine(item, selection));
   }
 
   Future<void> _review() async {
@@ -686,6 +859,8 @@ class _WarehouseTransferComposerState
             productId: line.item.productId,
             variantId: line.item.variantId,
             quantity: line.quantity,
+            ownedQuantity: line.ownedQuantity,
+            consignmentQuantity: line.consignmentQuantity,
           ),
       ];
       if (!mounted) return;
@@ -706,7 +881,12 @@ class _WarehouseTransferComposerState
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(line.item.name),
-                      subtitle: Text(line.item.code),
+                      subtitle: Text(
+                        [
+                          line.item.code,
+                          _ownershipSummary(line),
+                        ].where((value) => value.isNotEmpty).join(' · '),
+                      ),
                       trailing: Text(
                         _displayQuantity(
                           line.item.quantityScale,
@@ -747,7 +927,7 @@ class _WarehouseTransferComposerState
         for (final line in [
           ...lines,
         ]..sort((left, right) => left.variantId.compareTo(right.variantId)))
-          '${line.productId}:${line.variantId}:${line.quantity}',
+          '${line.productId}:${line.variantId}:${line.quantity}:${line.ownedQuantity}:${line.consignmentQuantity}',
       ].join('|');
       await widget.service.create(
         requestKey: _requestKeyFor(intent),
@@ -916,7 +1096,12 @@ class _WarehouseTransferComposerState
                   (line) => Card(
                     child: ListTile(
                       title: Text(line.item.name),
-                      subtitle: Text(line.item.code),
+                      subtitle: Text(
+                        [
+                          line.item.code,
+                          _ownershipSummary(line),
+                        ].where((value) => value.isNotEmpty).join(' · '),
+                      ),
                       trailing: Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
@@ -1046,24 +1231,54 @@ class _TransferQuantityDialog extends StatefulWidget {
 }
 
 class _TransferQuantityDialogState extends State<_TransferQuantityDialog> {
-  late final TextEditingController _controller = TextEditingController(
-    text: _displayQuantity(
-      widget.item.quantityScale,
-      widget.item.quantityScale,
-    ),
+  late final bool _mixed =
+      widget.item.ownedQuantity > 0 && widget.item.supplierOwnedQuantity > 0;
+  late final TextEditingController _ownedController = TextEditingController(
+    text: _mixed || widget.item.ownedQuantity == 0
+        ? '0'
+        : _displayQuantity(
+            widget.item.quantityScale,
+            widget.item.quantityScale,
+          ),
   );
+  late final TextEditingController _consignmentController =
+      TextEditingController(
+        text: _mixed || widget.item.supplierOwnedQuantity == 0
+            ? '0'
+            : _displayQuantity(
+                widget.item.quantityScale,
+                widget.item.quantityScale,
+              ),
+      );
   String? _errorKey;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ownedController.dispose();
+    _consignmentController.dispose();
     super.dispose();
   }
 
   void _submit() {
     try {
-      final quantity = widget.item.parseQuantity(_controller.text);
-      Navigator.pop(context, quantity);
+      final owned = widget.item.parseQuantityWithin(
+        _ownedController.text,
+        widget.item.ownedQuantity,
+        allowZero: true,
+      );
+      final consignment = widget.item.parseQuantityWithin(
+        _consignmentController.text,
+        widget.item.supplierOwnedQuantity,
+        allowZero: true,
+      );
+      if (owned + consignment <= 0) throw const FormatException();
+      Navigator.pop(
+        context,
+        _TransferQuantityResult(
+          ownedQuantity: owned,
+          consignmentQuantity: consignment,
+        ),
+      );
     } on FormatException {
       setState(() => _errorKey = 'warehouse_transfer.invalid_quantity');
     }
@@ -1128,19 +1343,48 @@ class _TransferQuantityDialogState extends State<_TransferQuantityDialog> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              onSubmitted: (_) => _submit(),
-              decoration: InputDecoration(
-                labelText: 'warehouse_transfer.quantity'.tr(),
-                errorText: _errorKey?.tr(),
-                border: const OutlineInputBorder(),
-              ),
+            Text(
+              'warehouse_transfer.ownership_choice_help'.tr(),
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
+            const SizedBox(height: 12),
+            Builder(
+              builder: (context) {
+                final owned = _quantityField(
+                  key: const ValueKey('transfer-owned-quantity'),
+                  controller: _ownedController,
+                  label: 'warehouse_transfer.owned_quantity'.tr(),
+                  enabled: item.ownedQuantity > 0,
+                  autofocus: !_mixed && item.ownedQuantity > 0,
+                );
+                final consignment = _quantityField(
+                  key: const ValueKey('transfer-consignment-quantity'),
+                  controller: _consignmentController,
+                  label: 'warehouse_transfer.consignment_quantity'.tr(),
+                  enabled: item.supplierOwnedQuantity > 0,
+                  autofocus: !_mixed && item.ownedQuantity == 0,
+                );
+                if (MediaQuery.sizeOf(context).width >= 700) {
+                  return Row(
+                    children: [
+                      Expanded(child: owned),
+                      const SizedBox(width: 12),
+                      Expanded(child: consignment),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [owned, const SizedBox(height: 12), consignment],
+                );
+              },
+            ),
+            if (_errorKey != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorKey!.tr(),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
           ],
         ),
       ),
@@ -1156,13 +1400,60 @@ class _TransferQuantityDialogState extends State<_TransferQuantityDialog> {
       ],
     );
   }
+
+  Widget _quantityField({
+    required Key key,
+    required TextEditingController controller,
+    required String label,
+    required bool enabled,
+    required bool autofocus,
+  }) => TextField(
+    key: key,
+    controller: controller,
+    enabled: enabled,
+    autofocus: autofocus,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    onChanged: (_) {
+      if (_errorKey != null) setState(() => _errorKey = null);
+    },
+    onSubmitted: (_) => _submit(),
+    decoration: InputDecoration(
+      labelText: label,
+      border: const OutlineInputBorder(),
+    ),
+  );
 }
 
 class _CartLine {
-  const _CartLine(this.item, this.quantity);
+  const _CartLine(this.item, this.selection);
   final WarehouseTransferAppCatalogItem item;
-  final int quantity;
+  final _TransferQuantityResult selection;
+  int get quantity => selection.quantity;
+  int get ownedQuantity => selection.ownedQuantity;
+  int get consignmentQuantity => selection.consignmentQuantity;
 }
+
+class _TransferQuantityResult {
+  const _TransferQuantityResult({
+    required this.ownedQuantity,
+    required this.consignmentQuantity,
+  });
+
+  final int ownedQuantity;
+  final int consignmentQuantity;
+  int get quantity => ownedQuantity + consignmentQuantity;
+}
+
+String _ownershipSummary(_CartLine line) =>
+    'warehouse_transfer.ownership_summary'.tr(
+      namedArgs: {
+        'owned': _displayQuantity(line.item.quantityScale, line.ownedQuantity),
+        'consignment': _displayQuantity(
+          line.item.quantityScale,
+          line.consignmentQuantity,
+        ),
+      },
+    );
 
 class _WarehouseChoice extends StatelessWidget {
   const _WarehouseChoice({
@@ -1221,7 +1512,9 @@ class _WarehousePickerState extends State<_WarehousePicker> {
   @override
   Widget build(BuildContext context) {
     final rows = widget.warehouses.where((warehouse) {
-      final haystack = '${warehouse.name} ${warehouse.code}'.toLowerCase();
+      final haystack =
+          '${warehouse.branchName ?? ''} ${warehouse.name} ${warehouse.code}'
+              .toLowerCase();
       return haystack.contains(_query.toLowerCase());
     }).toList();
     return SafeArea(
@@ -1256,10 +1549,29 @@ class _WarehousePickerState extends State<_WarehousePicker> {
                   itemCount: rows.length,
                   itemBuilder: (context, index) {
                     final row = rows[index];
+                    final branch = row.branchName?.trim() ?? '';
+                    final rawName = row.name.isEmpty ? row.code : row.name;
+                    final displayName = row.isBranchLocation
+                        ? '${'warehouse_transfer.location_branch'.tr()} — '
+                              '${branch.isEmpty ? rawName : branch}'
+                        : '${'warehouse_transfer.location_warehouse'.tr()} — '
+                              '$rawName';
+                    final kindKey = row.isBranchLocation
+                        ? 'warehouse_transfer.location_branch'
+                        : 'warehouse_transfer.location_warehouse';
+                    final details = <String>[
+                      if (branch.isNotEmpty) branch,
+                      kindKey.tr(),
+                      row.code,
+                    ];
                     return ListTile(
-                      leading: const Icon(Icons.warehouse_outlined),
-                      title: Text(row.name.isEmpty ? row.code : row.name),
-                      subtitle: row.name.isEmpty ? null : Text(row.code),
+                      leading: Icon(
+                        row.isBranchLocation
+                            ? Icons.storefront_outlined
+                            : Icons.warehouse_outlined,
+                      ),
+                      title: Text(displayName),
+                      subtitle: Text(details.join(' · ')),
                       onTap: () => Navigator.pop(context, row.id),
                     );
                   },
@@ -1323,8 +1635,23 @@ class _TransferReceiptDialogState extends State<_TransferReceiptDialog> {
             acceptedQuantity: accepted,
             damagedQuantity: damaged,
             lostQuantity: lost,
+            varianceResponsibility:
+                row.item.ownerType == 'consignment' && (damaged > 0 || lost > 0)
+                ? row.responsibility
+                : null,
+            liabilityUnitCents:
+                row.item.ownerType == 'consignment' &&
+                    row.responsibility == 'company' &&
+                    row.liability.text.trim().isNotEmpty
+                ? row.parseMoneyMinor(row.liability.text)
+                : null,
           ),
         );
+        if (row.item.ownerType == 'consignment' &&
+            (damaged > 0 || lost > 0) &&
+            row.responsibility == null) {
+          throw const FormatException('responsibility');
+        }
       }
       if (requests.isEmpty || (hasVariance && _notes.text.trim().isEmpty)) {
         throw const FormatException('empty');
@@ -1373,8 +1700,8 @@ class _TransferReceiptDialogState extends State<_TransferReceiptDialog> {
                         ].join(' · '),
                       ),
                       const SizedBox(height: 10),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
+                      Builder(
+                        builder: (context) {
                           final fields = [
                             _quantityField(
                               row.accepted,
@@ -1386,7 +1713,7 @@ class _TransferReceiptDialogState extends State<_TransferReceiptDialog> {
                             ),
                             _quantityField(row.lost, 'warehouse_transfer.lost'),
                           ];
-                          return constraints.maxWidth >= 520
+                          return MediaQuery.sizeOf(context).width >= 648
                               ? Row(
                                   children: [
                                     for (var i = 0; i < fields.length; i++) ...[
@@ -1405,6 +1732,56 @@ class _TransferReceiptDialogState extends State<_TransferReceiptDialog> {
                                 );
                         },
                       ),
+                      if (row.item.ownerType == 'consignment') ...[
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: row.responsibility,
+                          decoration: InputDecoration(
+                            labelText:
+                                'warehouse_transfer.variance_responsibility'
+                                    .tr(),
+                            helperText:
+                                'warehouse_transfer.variance_responsibility_help'
+                                    .tr(),
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: [
+                            DropdownMenuItem(
+                              value: 'supplier',
+                              child: Text(
+                                'warehouse_transfer.responsibility_supplier'
+                                    .tr(),
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'company',
+                              child: Text(
+                                'warehouse_transfer.responsibility_company'
+                                    .tr(),
+                              ),
+                            ),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => row.responsibility = value),
+                        ),
+                        if (row.responsibility == 'company') ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: row.liability,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText:
+                                  'warehouse_transfer.liability_unit_cost'.tr(),
+                              helperText:
+                                  'warehouse_transfer.liability_unit_cost_help'
+                                      .tr(),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
@@ -1463,6 +1840,8 @@ class _ReceiptControllers {
 
   final WarehouseTransferAppPending item;
   final TextEditingController accepted, damaged, lost;
+  final TextEditingController liability = TextEditingController();
+  String? responsibility;
 
   int parse(String input) {
     var text = input.trim().replaceAll('٫', '.').replaceAll(',', '.');
@@ -1485,10 +1864,26 @@ class _ReceiptControllers {
     return value.toInt();
   }
 
+  int parseMoneyMinor(String input) {
+    var text = input.trim().replaceAll('٫', '.').replaceAll(',', '.');
+    const arabic = '٠١٢٣٤٥٦٧٨٩';
+    const persian = '۰۱۲۳۴۵۶۷۸۹';
+    for (var i = 0; i < 10; i++) {
+      text = text.replaceAll(arabic[i], '$i').replaceAll(persian[i], '$i');
+    }
+    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(text)) {
+      throw const FormatException('money');
+    }
+    final parts = text.split('.');
+    return int.parse(parts.first) * 100 +
+        int.parse((parts.length == 1 ? '' : parts[1]).padRight(2, '0'));
+  }
+
   void dispose() {
     accepted.dispose();
     damaged.dispose();
     lost.dispose();
+    liability.dispose();
   }
 }
 

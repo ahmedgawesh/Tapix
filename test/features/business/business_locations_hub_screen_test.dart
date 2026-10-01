@@ -10,6 +10,7 @@ import 'package:tapix/features/business/data/online_branches_purchase_service.da
 import 'package:tapix/features/business/data/warehouse_setup_service.dart';
 import 'package:tapix/features/business/data/warehouse_transfer_application_service.dart';
 import 'package:tapix/features/business/presentation/screens/business_locations_hub_screen.dart';
+import 'package:tapix/core/services/lan/lan_network_service.dart';
 
 class _Assets extends AssetLoader {
   const _Assets();
@@ -101,6 +102,16 @@ void main() {
                     ),
                   ),
                   purchaseService: _Purchases(),
+                  syncHealthLoader: () async =>
+                      const LanBranchSyncHealthSnapshot(
+                        configured: false,
+                        coordinator: false,
+                        pendingDeliveries: 0,
+                        deadLetters: 0,
+                        activeBranchWriters: 0,
+                      ),
+                  syncRunner: () async =>
+                      const LanBranchSyncRunResult(uploaded: 0, downloaded: 0),
                 ),
               ),
             ),

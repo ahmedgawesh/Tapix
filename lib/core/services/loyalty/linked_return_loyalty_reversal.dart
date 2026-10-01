@@ -1,3 +1,4 @@
+import 'sale_loyalty_settlement.dart';
 import 'package:drift/drift.dart';
 import '../../database/app_database.dart';
 
@@ -16,6 +17,22 @@ class LinkedReturnLoyaltyReversal {
         .getSingle();
     final customerId = source.readNullable<int>('customer_id');
     if (customerId == null) return;
+    final redemptions = await db
+        .customSelect(
+          "SELECT COALESCE(SUM(points),0) AS net FROM loyalty_point_transactions WHERE customer_id=? AND reference_id=? AND reference_type IN ('sale_return_redemption','sale_return_redemption_void')",
+          variables: [Variable.withInt(customerId), Variable.withInt(returnId)],
+        )
+        .getSingle();
+    final returnedPoints = redemptions.read<int>('net');
+    if (returnedPoints != 0) {
+      await SaleLoyaltySettlement.changePoints(
+        db,
+        customerId: customerId,
+        points: -returnedPoints,
+        referenceId: returnId,
+        referenceType: 'sale_return_redemption_void',
+      );
+    }
     final rows = await db
         .customSelect(
           "SELECT COALESCE(SUM(points),0) AS net FROM loyalty_point_transactions WHERE customer_id=? AND reference_id=? AND reference_type IN ('sale_return','sale_return_void')",

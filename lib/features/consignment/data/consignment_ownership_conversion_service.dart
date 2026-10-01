@@ -15,6 +15,7 @@ import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/inventory/inventory_stock_source_service.dart';
 import '../../../core/services/journal_entry_service.dart';
 import '../../../core/services/stock_service.dart';
+import '../../../core/services/sync/consignment_sync_recorder.dart';
 import 'consignment_module_service.dart';
 import 'consignment_receipt_service.dart';
 
@@ -496,6 +497,40 @@ class ConsignmentOwnershipConversionService {
             supplierTransactionId: Value(supplierTransactionId),
           ),
         );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_conversion.posted.v1',
+      contract: 'consignment_conversion.posted',
+      documentType: 'consignment_ownership_conversion',
+      localDocumentId: conversionId,
+      action: 'posted',
+      occurredAt: instant,
+      supplierId: supplierId,
+      currencyId: currencyId,
+      warehouseId: warehouseId,
+      agreementId: agreementId,
+      values: {
+        'conversionNumber': number,
+        'evidenceReference': evidence,
+        'inventoryValueMinor': totalValue,
+        'supplierCreditNetMinor': supplierCreditNetCents,
+        'supplierCreditTaxMinor': supplierCreditTaxCents,
+        'supplierCreditTotalMinor': supplierCreditTotalCents,
+      },
+      lines: [
+        for (final item in pendingItems)
+          {
+            'lineId': item.id,
+            'productId': item.line.input.productId,
+            'variantId': item.line.input.variantId,
+            'quantity': item.line.input.quantity,
+            'quantityScale': item.line.quantityScale,
+            'inventoryUnitCostMinor': item.line.unitCostCents,
+            'inventoryAmountMinor': item.line.inventoryAmountCents,
+            'sourceBatchId': item.line.input.sourceBatchId,
+            'supplierIdentityId': item.line.input.supplierIdentityId,
+          },
+      ],
+    );
     return (_db.select(
       _db.consignmentOwnershipConversions,
     )..where((row) => row.id.equals(conversionId))).getSingle();
@@ -670,6 +705,36 @@ class ConsignmentOwnershipConversionService {
         'consignment.conversion_void_conflict',
       );
     }
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_conversion.voided.v1',
+      contract: 'consignment_conversion.voided',
+      documentType: 'consignment_ownership_conversion',
+      localDocumentId: conversionId,
+      action: 'voided',
+      occurredAt: now,
+      supplierId: any.supplierId,
+      currencyId: any.currencyId,
+      warehouseId: any.warehouseId,
+      agreementId: any.agreementId,
+      values: {
+        'conversionNumber': any.conversionNumber,
+        'reason': cleanReason,
+        'inventoryValueMinor': economics.inventoryValueCents,
+        'supplierCreditTotalMinor': economics.supplierCreditTotalCents,
+      },
+      lines: [
+        for (final item in items)
+          {
+            'lineId': item.id,
+            'productId': item.productId,
+            'variantId': item.variantId,
+            'quantity': item.quantity,
+            'quantityScale': item.quantityScale,
+            'inventoryUnitCostMinor': item.inventoryUnitCostCents,
+            'inventoryAmountMinor': item.inventoryAmountCents,
+          },
+      ],
+    );
     return (_db.select(
       _db.consignmentOwnershipConversions,
     )..where((row) => row.id.equals(conversionId))).getSingle();

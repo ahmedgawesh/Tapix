@@ -11,6 +11,7 @@ import '../../../core/services/business/warehouse_inventory_reader.dart';
 import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/journal_entry_service.dart';
 import '../../../core/services/stock_service.dart';
+import '../../../core/services/sync/consignment_sync_recorder.dart';
 import 'consignment_module_service.dart';
 
 class ConsignmentCustodyLineInput {
@@ -477,6 +478,39 @@ class ConsignmentCustodyService {
         updatedAt: Value(now),
       ),
     );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_custody.posted.v1',
+      contract: 'consignment_custody.posted',
+      documentType: 'consignment_custody',
+      localDocumentId: document.id,
+      action: 'posted',
+      occurredAt: document.occurredAt,
+      supplierId: document.supplierId,
+      currencyId: document.currencyId,
+      warehouseId: document.warehouseId,
+      agreementId: document.agreementId,
+      values: {
+        'documentNumber': document.documentNumber,
+        'custodyType': document.documentType,
+        'responsibility': document.responsibility,
+        'reason': document.reason,
+        'signedQuantity': totalQuantity,
+        'signedLiabilityMinor': totalAmount,
+      },
+      lines: [
+        for (final item in items)
+          {
+            'lineId': item.id,
+            'layerId': item.layerId,
+            'productId': item.productId,
+            'variantId': item.variantId,
+            'quantity': item.quantity,
+            'quantityScale': item.quantityScale,
+            'liabilityUnitMinor': item.liabilityUnitCents,
+            'liabilityAmountMinor': item.liabilityAmountCents,
+          },
+      ],
+    );
     return (_db.select(
       _db.consignmentCustodyDocuments,
     )..where((d) => d.id.equals(document.id))).getSingle();
@@ -684,6 +718,36 @@ class ConsignmentCustodyService {
         voidReason: Value(cleanReason),
         updatedAt: Value(now),
       ),
+    );
+    await ConsignmentSyncRecorder(_db).record(
+      eventType: 'consignment_custody.voided.v1',
+      contract: 'consignment_custody.voided',
+      documentType: 'consignment_custody',
+      localDocumentId: document.id,
+      action: 'voided',
+      occurredAt: now,
+      supplierId: document.supplierId,
+      currencyId: document.currencyId,
+      warehouseId: document.warehouseId,
+      agreementId: document.agreementId,
+      values: {
+        'documentNumber': document.documentNumber,
+        'custodyType': document.documentType,
+        'reason': cleanReason,
+        'signedQuantity': -posted.signedQuantity,
+        'signedLiabilityMinor': -posted.signedAmountCents,
+      },
+      lines: [
+        for (final item in items)
+          {
+            'lineId': item.id,
+            'layerId': item.layerId,
+            'productId': item.productId,
+            'variantId': item.variantId,
+            'quantity': item.quantity,
+            'quantityScale': item.quantityScale,
+          },
+      ],
     );
     return (_db.select(
       _db.consignmentCustodyDocuments,

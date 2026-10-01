@@ -543,7 +543,7 @@ void main() {
       );
       raw.close();
       db = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
-      expect(db.schemaVersion, 10115);
+      expect(db.schemaVersion, 10119);
       await verifyEveryLocation(db);
       expect(await fixtures.legacySnapshot(db), before);
       expect(

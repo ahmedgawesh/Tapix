@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/sync/branch_catalogue_sync_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../datasources/supplier_local_datasource.dart';
@@ -15,16 +16,28 @@ class SupplierRepositoryImpl implements SupplierRepository {
   final JournalEntryService _journalService;
   final AppDatabase _db;
   final AuditLogService _auditService;
+  final Future<bool> Function()? _canEditSharedCatalogue;
+  final Future<bool> Function()? _isSharedCatalogueDistributed;
 
   SupplierRepositoryImpl(
     this._datasource,
     this._sessionService,
     this._journalService,
     this._db,
-    this._auditService,
-  );
+    this._auditService, {
+    Future<bool> Function()? canEditSharedCatalogue,
+    Future<bool> Function()? isSharedCatalogueDistributed,
+  }) : _canEditSharedCatalogue = canEditSharedCatalogue,
+       _isSharedCatalogueDistributed = isSharedCatalogueDistributed;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
+
+  Future<void> _requireCatalogueAuthority() async {
+    final check = _canEditSharedCatalogue;
+    if (check != null && !await check()) {
+      throw const SharedCatalogueAuthorityRequired();
+    }
+  }
 
   @override
   Stream<List<Supplier>> watchAllSuppliers({bool? isActive}) {
@@ -69,6 +82,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
     required int currencyId,
     Decimal? initialBalance,
   }) async {
+    await _requireCatalogueAuthority();
     final balanceCents = initialBalance ?? Decimal.zero;
     final companion = SuppliersCompanion(
       name: Value(name),
@@ -111,16 +125,24 @@ class SupplierRepositoryImpl implements SupplierRepository {
   }
 
   @override
-  Future<bool> updateSupplier(Supplier supplier) {
+  Future<bool> updateSupplier(Supplier supplier) async {
+    await _requireCatalogueAuthority();
     return _datasource.updateSupplier(supplier);
   }
 
   @override
-  Future<void> setSupplierActive(int supplierId, bool isActive) =>
-      _datasource.setSupplierActive(supplierId, isActive);
+  Future<void> setSupplierActive(int supplierId, bool isActive) async {
+    await _requireCatalogueAuthority();
+    return _datasource.setSupplierActive(supplierId, isActive);
+  }
 
   @override
-  Future<int> deleteSupplier(int id) {
+  Future<int> deleteSupplier(int id) async {
+    await _requireCatalogueAuthority();
+    if (await _isSharedCatalogueDistributed?.call() ?? false) {
+      await _datasource.setSupplierActive(id, false);
+      return 1;
+    }
     return _datasource.deleteSupplier(id);
   }
 

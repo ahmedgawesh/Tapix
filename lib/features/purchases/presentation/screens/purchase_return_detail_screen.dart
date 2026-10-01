@@ -56,7 +56,7 @@ class _PurchaseReturnDetailScreenState
 
   Future<void> _loadData() async {
     final lan = sl<LanNetworkService>();
-    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+    if (lan.snapshot.mode == LanMode.client) {
       await _loadRemoteData(lan);
       return;
     }
@@ -242,9 +242,7 @@ class _PurchaseReturnDetailScreenState
               builder: (context) {
                 final authState = context.read<AuthBloc>().state;
                 final lan = sl<LanNetworkService>();
-                final remote =
-                    lan.snapshot.mode == LanMode.client &&
-                    lan.hasRemoteUserSession;
+                final remote = lan.snapshot.mode == LanMode.client;
                 final permissions = lan.remoteUser?.permissions;
                 final canVoid = remote
                     ? (permissions?.contains(Permissions.managePurchases) ==
@@ -276,6 +274,11 @@ class _PurchaseReturnDetailScreenState
             _buildOriginalPurchaseCard(context, _purchase!, cs),
           if (_purchase != null) const SizedBox(height: 12),
           _buildRefundMethodCard(context, ret),
+          if (ret.dispositionType == 'replace' && !ret.isVoided)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text('purchases.disposition_replace_info'.tr()),
+            ),
           const SizedBox(height: 12),
           _buildReturnItemsCard(context, _returnItems, cs),
           const SizedBox(height: 12),
@@ -317,7 +320,7 @@ class _PurchaseReturnDetailScreenState
     if (confirmed != true || !mounted) return;
     try {
       final lan = sl<LanNetworkService>();
-      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      if (lan.snapshot.mode == LanMode.client) {
         await lan.voidRemotePurchaseReturn(
           returnId: widget.returnId,
           adjustment: widget.adjustment,
@@ -519,8 +522,7 @@ class _PurchaseReturnDetailScreenState
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final lan = sl<LanNetworkService>();
-    final isRemote =
-        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+    final isRemote = lan.snapshot.mode == LanMode.client;
     final supplierInitial =
         purchase.supplierName != null && purchase.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
@@ -672,6 +674,9 @@ class _PurchaseReturnDetailScreenState
 
     IconData dispositionIcon;
     switch (ret.dispositionType) {
+      case 'replace':
+        dispositionIcon = LucideIcons.repeat;
+        break;
       case 'write_off':
         dispositionIcon = LucideIcons.trash2;
         break;

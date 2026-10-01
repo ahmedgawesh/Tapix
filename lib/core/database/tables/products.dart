@@ -300,7 +300,7 @@ class ProductBatches extends Table {
   TextColumn get transferAllocationId => text().nullable()();
 
   /// One of: 'purchase' | 'opening' | 'found' | 'sale_return' |
-  ///         'warehouse_transfer'.
+  ///         'warehouse_transfer' | 'distributed_transfer'.
   TextColumn get source => text().withDefault(const Constant('purchase'))();
 
   DateTimeColumn get receivedDate =>

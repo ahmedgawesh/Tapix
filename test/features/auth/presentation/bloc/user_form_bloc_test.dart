@@ -70,6 +70,8 @@ void main() {
             confirmPassword: 'password123',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -92,6 +94,8 @@ void main() {
             confirmPassword: 'password123',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -119,6 +123,8 @@ void main() {
             confirmPassword: 'password123',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -147,6 +153,8 @@ void main() {
             confirmPassword: '',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -175,6 +183,8 @@ void main() {
             confirmPassword: '12345',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -203,6 +213,8 @@ void main() {
             confirmPassword: 'different',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -228,6 +240,8 @@ void main() {
               password: 'password123',
               role: UserRole.cashier,
               employeeId: 7,
+              branchId: 'branch',
+              warehouseId: 'warehouse',
             ),
           ).thenAnswer((_) async => testUser);
         },
@@ -239,6 +253,8 @@ void main() {
             confirmPassword: 'password123',
             role: UserRole.cashier,
             employeeId: 7,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -266,7 +282,11 @@ void main() {
               password: null,
               role: UserRole.manager,
               employeeId: null,
+              branchId: 'branch',
+              warehouseId: 'warehouse',
+              hasGlobalLocationAccess: false,
               clearEmployeeLink: false,
+              clearLocationAssignment: false,
             ),
           ).thenAnswer((_) async {});
         },
@@ -278,6 +298,8 @@ void main() {
             password: '',
             confirmPassword: '',
             role: UserRole.manager,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [
@@ -303,7 +325,11 @@ void main() {
               password: 'newpass123',
               role: UserRole.manager,
               employeeId: null,
+              branchId: 'branch',
+              warehouseId: 'warehouse',
+              hasGlobalLocationAccess: false,
               clearEmployeeLink: false,
+              clearLocationAssignment: false,
             ),
           ).thenAnswer((_) async {});
         },
@@ -315,6 +341,8 @@ void main() {
             password: 'newpass123',
             confirmPassword: 'newpass123',
             role: UserRole.manager,
+            branchId: 'branch',
+            warehouseId: 'warehouse',
           ),
         ),
         expect: () => [

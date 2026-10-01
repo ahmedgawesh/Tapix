@@ -9,7 +9,7 @@ import 'package:printing/printing.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
-import '../../../../core/services/lan/lan_business_models.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../../settings/domain/entities/app_settings.dart';
@@ -24,11 +24,21 @@ import '../bloc/purchase_adj_return_form_bloc.dart'
     show parseAdjReturnNotes, adjReturnReasonLabel;
 
 class PurchasePdfService {
+  // A workstation's local supplier IDs/balances are not the branch ledger.
+  static Future<Supplier?> _localSupplierForBalance(int supplierId) async {
+    if (sl.isRegistered<LanNetworkService>() &&
+        sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+      return null;
+    }
+    return sl<SupplierRepository>().getSupplier(supplierId);
+  }
+
   /// Generate and print a purchase invoice PDF from saved purchase data
   static Future<void> printPurchaseInvoice({
     required BuildContext context,
     required PurchaseEntity purchase,
     required List<PurchaseItemEntity> items,
+    int? supplierBalanceCents,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -44,6 +54,7 @@ class PurchasePdfService {
       isRtl: isRtl,
       company: company,
       appSettings: appSettings,
+      supplierBalanceCents: supplierBalanceCents,
     );
 
     await Printing.layoutPdf(
@@ -57,6 +68,7 @@ class PurchasePdfService {
     required BuildContext context,
     required PurchaseEntity purchase,
     required List<PurchaseItemEntity> items,
+    int? supplierBalanceCents,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -72,6 +84,7 @@ class PurchasePdfService {
       isRtl: isRtl,
       company: company,
       appSettings: appSettings,
+      supplierBalanceCents: supplierBalanceCents,
     );
 
     final bytes = await pdf.save();
@@ -211,15 +224,23 @@ class PurchasePdfService {
     required bool isRtl,
     required CompanyProfile company,
     required AppSettings appSettings,
+    int? supplierBalanceCents,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
     // Fetch supplier balance for the PDF footer
     pw.Widget? supplierBalanceWidget;
+    if (supplierBalanceCents != null) {
+      supplierBalanceWidget = _buildSupplierBalance(
+        supplierName: purchase.supplierName ?? '',
+        balanceCents: supplierBalanceCents,
+        cs: cs,
+        fonts: fonts,
+      );
+    }
     try {
-      final supplierRepo = sl<SupplierRepository>();
-      final supplier = await supplierRepo.getSupplier(purchase.supplierId);
+      final supplier = await _localSupplierForBalance(purchase.supplierId);
       if (supplier != null) {
         supplierBalanceWidget = _buildSupplierBalance(
           supplierName: supplier.name,
@@ -356,8 +377,7 @@ class PurchasePdfService {
     pw.Widget? supplierBalanceWidget;
     try {
       if (state.supplierId != null) {
-        final supplierRepo = sl<SupplierRepository>();
-        final supplier = await supplierRepo.getSupplier(state.supplierId!);
+        final supplier = await _localSupplierForBalance(state.supplierId!);
         if (supplier != null) {
           supplierBalanceWidget = _buildSupplierBalance(
             supplierName: supplier.name,
@@ -498,8 +518,7 @@ class PurchasePdfService {
     pw.Widget? supplierBalanceWidget;
     if (loadLocalSupplierBalance) {
       try {
-        final supplierRepo = sl<SupplierRepository>();
-        final supplier = await supplierRepo.getSupplier(
+        final supplier = await _localSupplierForBalance(
           originalPurchase.supplierId,
         );
         if (supplier != null) {
@@ -1403,8 +1422,7 @@ class PurchasePdfService {
     // Supplier balance for the PDF footer (best-effort).
     pw.Widget? supplierBalanceWidget;
     try {
-      final supplierRepo = sl<SupplierRepository>();
-      final supplier = await supplierRepo.getSupplier(returnEntity.supplierId);
+      final supplier = await _localSupplierForBalance(returnEntity.supplierId);
       if (supplier != null) {
         supplierBalanceWidget = _buildSupplierBalance(
           supplierName: supplier.name,

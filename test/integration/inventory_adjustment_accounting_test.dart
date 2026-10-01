@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
@@ -7,6 +9,7 @@ import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/inventory_adjustment_dao.dart';
 import 'package:tapix/core/services/inventory/inventory_adjustment_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 
 /// Integration tests for the new `InventoryAdjustmentService`.
@@ -139,6 +142,33 @@ void main() {
           );
     }
   }
+
+  test('writer records opening balance as one immutable event', () async {
+    await OfflineSyncEventStore(db).activateWriterRecording(
+      enrollmentId: '51515151-5151-4151-8151-515151515151',
+    );
+    final result = await service.adjust(
+      productId: productId,
+      variantId: variantId,
+      type: InventoryAdjustmentType.openingBalance,
+      quantityDelta: 2,
+      reason: 'Initial verified count',
+      currencyId: currencyId,
+    );
+
+    final row = await db
+        .customSelect('SELECT event_type,payload_json FROM sync_outbox_events')
+        .getSingle();
+    expect(row.read<String>('event_type'), 'inventory_adjustment.posted.v1');
+    final payload =
+        jsonDecode(row.read<String>('payload_json')) as Map<String, dynamic>;
+    expect(payload['contract'], 'inventory_adjustment.posted');
+    expect(payload['sourceDocumentRef']['localId'], result.adjustmentId);
+    expect(payload['adjustmentType'], 'opening_balance');
+    expect(payload['quantityDeltaScaled'], 2);
+    expect(payload['totalValueMinor'], 6000);
+    expect(payload['journalRef'], isNotNull);
+  });
 
   for (final explicitVariant in [false, true]) {
     test(

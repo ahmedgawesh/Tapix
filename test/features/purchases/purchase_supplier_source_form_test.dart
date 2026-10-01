@@ -42,6 +42,7 @@ class _Purchases extends Mock implements PurchaseRepository {
     DateTime? dueDate,
     bool taxInclusiveAtPost = false,
     List<CheckoutPaymentAllocation> initialPayments = const [],
+    int? actorUserId,
   }) async {
     saves++;
     savedSupplier = supplierId;

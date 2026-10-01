@@ -16,6 +16,7 @@ import '../../../../core/services/lan/device_mode_reset_service.dart';
 import '../../../../core/utils/app_restart.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/entities/user_entity.dart';
+import '../../../business/presentation/screens/lan_branch_join_screen.dart';
 import 'lan_master_devices_sheet.dart';
 
 class LanNetworkSettingsScreen extends StatefulWidget {
@@ -38,6 +39,9 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
   StreamSubscription<LanNetworkSnapshot>? _subscription;
   late LanNetworkSnapshot _snapshot;
   bool _busy = false;
+  LanDeviceWarehouseOption? _invitationLocation;
+  LanDeviceKind? _invitationDeviceKind;
+  bool _independentBranchServer = false;
 
   @override
   void initState() {
@@ -48,11 +52,24 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     if (_snapshot.mode == LanMode.master) {
       unawaited(_service.refreshMasterNetwork());
     }
+    unawaited(_loadServerRole());
     _subscription = _service.changes.listen((snapshot) {
       if (!mounted) return;
       setState(() => _snapshot = snapshot);
       _hydrateControllers(snapshot, overwrite: false);
     });
+  }
+
+  Future<void> _loadServerRole() async {
+    try {
+      final health = await _service.inspectIndependentBranchSync();
+      if (mounted && health.configured != _independentBranchServer) {
+        setState(() => _independentBranchServer = health.configured);
+      }
+    } on Object {
+      // Role decoration is informational; LAN controls remain usable if the
+      // health snapshot is temporarily unavailable.
+    }
   }
 
   void _hydrateControllers(
@@ -102,6 +119,69 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     await _service.startMaster(port: port);
   });
 
+  Future<void> _createDeviceEnrollment() async {
+    final locations = await _service.getMasterAssignableWarehouses();
+    if (!mounted || locations.isEmpty) return;
+    final location = await showDialog<LanDeviceWarehouseOption>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('settings.network.enrollment.choose_location'.tr()),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Text(
+              'settings.network.enrollment.choose_location_help'.tr(),
+            ),
+          ),
+          for (final value in locations)
+            ListTile(
+              leading: const Icon(Icons.location_on_outlined),
+              title: Text(value.branchName),
+              subtitle: Text('${value.name} • ${value.code}'),
+              onTap: () => Navigator.pop(dialogContext, value),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || location == null) return;
+    final kind = await showDialog<LanDeviceKind>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('settings.network.enrollment.choose_kind'.tr()),
+        children: [
+          for (final value in LanDeviceKind.values)
+            ListTile(
+              leading: Icon(switch (value) {
+                LanDeviceKind.branchWorkstation => Icons.store_outlined,
+                LanDeviceKind.warehouseWorkstation => Icons.warehouse_outlined,
+                LanDeviceKind.pointOfSale => Icons.point_of_sale_outlined,
+              }),
+              title: Text(
+                'settings.network.enrollment.kind_${value.name}'.tr(),
+              ),
+              subtitle: Text(
+                'settings.network.enrollment.kind_${value.name}_help'.tr(),
+              ),
+              onTap: () => Navigator.pop(dialogContext, value),
+            ),
+        ],
+      ),
+    );
+    if (!mounted || kind == null) return;
+    await _run(() async {
+      await _service.createDeviceEnrollment(
+        warehouseId: location.id,
+        deviceKind: kind,
+      );
+      if (mounted) {
+        setState(() {
+          _invitationLocation = location;
+          _invitationDeviceKind = kind;
+        });
+      }
+    });
+  }
+
   Future<void> _pairClient() => _run(() async {
     final port = int.tryParse(_portController.text.trim()) ?? 45820;
     final result = await _service.pairWithMaster(
@@ -124,6 +204,10 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
       ),
     );
     if (result.success && widget.clientOnly) {
+      await sl<DeviceModeResetService>().clearPendingTarget(
+        FreshDeviceModeTarget.branchWarehouseDevice,
+      );
+      if (!mounted) return;
       context.read<AuthBloc>().add(const AuthCheckRequested());
       context.go('/login');
     }
@@ -150,14 +234,25 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated ||
         authState.user.role != UserRole.owner ||
-        _snapshot.mode != LanMode.client) {
+        !DeviceModeResetPolicy.canReset(
+          localRole: authState.user.role,
+          remoteRole: _service.remoteUser?.role,
+          currentMode: _snapshot.mode,
+        )) {
       context.go('/access-denied');
       return;
     }
 
-    final targetKey = target == FreshDeviceModeTarget.master
-        ? 'settings.network.fresh_reset.master_target'
-        : 'settings.network.fresh_reset.standalone_target';
+    final targetKey = switch (target) {
+      FreshDeviceModeTarget.standalone =>
+        'settings.network.fresh_reset.standalone_target',
+      FreshDeviceModeTarget.master =>
+        'settings.network.fresh_reset.master_target',
+      FreshDeviceModeTarget.independentBranch =>
+        'settings.network.fresh_reset.branch_target',
+      FreshDeviceModeTarget.branchWarehouseDevice =>
+        'settings.network.fresh_reset.location_device_target',
+    };
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -190,7 +285,7 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     if (confirmed != true || !mounted) return;
 
     await _run(() async {
-      await sl<DeviceModeResetService>().resetClientToFreshDatabase(
+      await sl<DeviceModeResetService>().resetToFreshDatabase(
         target: target,
         actorRole: authState.user.role,
       );
@@ -222,11 +317,16 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final authState = context.watch<AuthBloc>().state;
-    final ownerClientReset =
+    final ownerMayReset =
         !widget.clientOnly &&
-        _snapshot.mode == LanMode.client &&
         authState is AuthAuthenticated &&
-        authState.user.role == UserRole.owner;
+        authState.user.role == UserRole.owner &&
+        DeviceModeResetPolicy.canReset(
+          localRole: authState.user.role,
+          remoteRole: _service.remoteUser?.role,
+          currentMode: _snapshot.mode,
+        );
+    final ownerClientReset = ownerMayReset && _snapshot.mode == LanMode.client;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -251,7 +351,14 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
                   children: [
                     Icon(Icons.info_outline, color: theme.colorScheme.primary),
                     const SizedBox(width: 12),
-                    Expanded(child: Text('settings.network.phase_notice'.tr())),
+                    Expanded(
+                      child: Text(
+                        (_independentBranchServer
+                                ? 'settings.network.branch_server_phase_notice'
+                                : 'settings.network.phase_notice')
+                            .tr(),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -298,32 +405,98 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
               ),
               const SizedBox(height: 12),
               _RoleCard(
-                title: 'settings.network.master'.tr(),
+                title:
+                    (_independentBranchServer
+                            ? 'settings.network.branch_server_title'
+                            : 'settings.network.master')
+                        .tr(),
                 subtitle: ownerClientReset
                     ? 'settings.network.fresh_reset.master_desc'.tr()
-                    : 'settings.network.master_desc'.tr(),
-                icon: Icons.dns_outlined,
+                    : (_independentBranchServer
+                              ? 'settings.network.branch_server_desc'
+                              : 'settings.network.master_desc')
+                          .tr(),
+                icon: _independentBranchServer
+                    ? Icons.store_outlined
+                    : Icons.dns_outlined,
                 selected: _snapshot.mode == LanMode.master,
                 trailing: _snapshot.mode == LanMode.master
                     ? _statusChip(context)
                     : null,
                 onTap: ownerClientReset
                     ? () => _confirmFreshReset(FreshDeviceModeTarget.master)
-                    : (_snapshot.mode == LanMode.master ? () {} : _startMaster),
+                    : (_snapshot.mode == LanMode.master &&
+                              _snapshot.status != LanConnectionStatus.error
+                          ? () {}
+                          : _startMaster),
                 child: ownerClientReset ? null : _buildMasterControls(context),
               ),
               const SizedBox(height: 12),
+              if (!_independentBranchServer)
+                _RoleCard(
+                  title: 'settings.network.independent_branch'.tr(),
+                  subtitle: 'settings.network.independent_branch_desc'.tr(),
+                  icon: Icons.store_outlined,
+                  selected: false,
+                  onTap: () {},
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: ownerMayReset
+                            ? () => _confirmFreshReset(
+                                FreshDeviceModeTarget.independentBranch,
+                              )
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      LanBranchJoinScreen(service: sl()),
+                                ),
+                              ),
+                        icon: const Icon(Icons.hub_outlined),
+                        label: Text(
+                          (ownerMayReset
+                                  ? 'settings.network.reinitialize_branch'
+                                  : 'settings.network.open_branch_join')
+                              .tr(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
             ],
             _RoleCard(
-              title: 'settings.network.client'.tr(),
-              subtitle: 'settings.network.client_desc'.tr(),
-              icon: Icons.point_of_sale_outlined,
+              title: 'settings.network.location_device'.tr(),
+              subtitle: 'settings.network.location_device_desc'.tr(),
+              icon: Icons.warehouse_outlined,
               selected: _snapshot.mode == LanMode.client,
               trailing: _snapshot.mode == LanMode.client
                   ? _statusChip(context)
                   : null,
               onTap: () {},
-              child: _buildClientControls(context),
+              child:
+                  !widget.clientOnly &&
+                      ownerMayReset &&
+                      _snapshot.mode != LanMode.client
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () => _confirmFreshReset(
+                            FreshDeviceModeTarget.branchWarehouseDevice,
+                          ),
+                          icon: const Icon(Icons.restart_alt),
+                          label: Text(
+                            'settings.network.reinitialize_location_device'
+                                .tr(),
+                          ),
+                        ),
+                      ),
+                    )
+                  : _buildClientControls(context),
             ),
             if (_busy) ...[
               const SizedBox(height: 20),
@@ -336,7 +509,8 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
   }
 
   Widget _buildMasterControls(BuildContext context) {
-    if (_snapshot.mode != LanMode.master) {
+    if (_snapshot.mode != LanMode.master ||
+        _snapshot.status == LanConnectionStatus.error) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
         child: OutlinedButton.icon(
@@ -353,6 +527,39 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (_independentBranchServer
+                          ? 'settings.network.branch_link_flow_title'
+                          : 'settings.network.central_link_flow_title')
+                      .tr(),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (var step = 1; step <= 4; step++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 5),
+                    child: Text(
+                      (_independentBranchServer
+                              ? 'settings.network.branch_link_flow_$step'
+                              : 'settings.network.central_link_flow_$step')
+                          .tr(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             'settings.network.same_wifi_hint'.tr(),
             style: Theme.of(context).textTheme.bodySmall,
@@ -368,6 +575,29 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
             label: 'settings.network.port'.tr(),
             value: _snapshot.port.toString(),
           ),
+          if (_snapshot.pairingCode != null &&
+              _invitationLocation != null &&
+              _invitationDeviceKind != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'settings.network.enrollment.invitation_for'.tr(
+                  args: [
+                    _invitationLocation!.branchName,
+                    _invitationLocation!.name,
+                    'settings.network.enrollment.kind_${_invitationDeviceKind!.name}'
+                        .tr(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Text('settings.network.pairing_code'.tr()),
           const SizedBox(height: 8),
           SelectableText(
@@ -423,8 +653,8 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
                 label: Text('settings.network.refresh_address'.tr()),
               ),
               OutlinedButton.icon(
-                onPressed: () => _run(_service.regeneratePairingCode),
-                icon: const Icon(Icons.refresh),
+                onPressed: _createDeviceEnrollment,
+                icon: const Icon(Icons.add_link),
                 label: Text('settings.network.new_code'.tr()),
               ),
             ],
@@ -461,6 +691,60 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
   }
 
   Widget _buildClientControls(BuildContext context) {
+    final enrolled =
+        _snapshot.mode == LanMode.client &&
+        _snapshot.masterId != null &&
+        _snapshot.assignedWarehouseId != null;
+    if (enrolled) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'settings.network.enrollment.enrolled_title'.tr(),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _InfoRow(
+                      label: 'settings.network.assigned_branch'.tr(),
+                      value: _snapshot.assignedBranchName ?? '—',
+                    ),
+                    _InfoRow(
+                      label: 'settings.network.assigned_warehouse'.tr(),
+                      value: _snapshot.assignedWarehouseName ?? '—',
+                    ),
+                    _InfoRow(
+                      label: 'settings.network.enrollment.device_kind'.tr(),
+                      value: _snapshot.assignedDeviceKind == null
+                          ? '—'
+                          : 'settings.network.enrollment.kind_${_snapshot.assignedDeviceKind!.name}'
+                                .tr(),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('settings.network.enrollment.persistent_trust'.tr()),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _testConnection,
+              icon: const Icon(Icons.network_check),
+              label: Text('settings.network.test'.tr()),
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 16),
       child: Column(
@@ -470,9 +754,14 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
             keyboardType: TextInputType.url,
             decoration: InputDecoration(
               labelText: 'settings.network.master_address'.tr(),
-              hintText: '192.168.1.10',
+              hintText: 'settings.network.master_address_optional'.tr(),
               prefixIcon: const Icon(Icons.wifi),
             ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'settings.network.enrollment.auto_discovery_help'.tr(),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           Row(
@@ -534,6 +823,45 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
               prefixIcon: const Icon(Icons.badge_outlined),
             ),
           ),
+          if (_snapshot.mode == LanMode.client &&
+              _snapshot.assignedBranchName != null &&
+              _snapshot.assignedWarehouseName != null) ...[
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.secondaryContainer.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'settings.network.assigned_location'.tr(),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _InfoRow(
+                    label: 'settings.network.assigned_branch'.tr(),
+                    value: _snapshot.assignedBranchName!,
+                  ),
+                  _InfoRow(
+                    label: 'settings.network.assigned_warehouse'.tr(),
+                    value: _snapshot.assignedWarehouseName!,
+                  ),
+                  Text(
+                    'settings.network.assigned_location_help'.tr(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,

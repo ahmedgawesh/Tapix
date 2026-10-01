@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
@@ -6,6 +8,7 @@ import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
 import 'package:tapix/core/services/commissions/commission_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 
 /// Integration tests for adjustment return accounting flows.
@@ -842,6 +845,9 @@ void main() {
       () async {
         await seedData();
         await seedEmployee(rateBps: 100); // 1%
+        await OfflineSyncEventStore(db).activateWriterRecording(
+          enrollmentId: '62626262-6262-4262-8262-626262626262',
+        );
 
         // Field shape: subtotal 20000, discount 100 → net 19900 × 1% = 199.
         final returnId = await adjDao.createSaleAdjReturn(
@@ -893,6 +899,22 @@ void main() {
         );
         expect(rows.single.saleId, equals(null));
         expect(rows.single.period, equals('2026-06'));
+
+        final event = await db
+            .customSelect(
+              'SELECT payload_json FROM sync_outbox_events '
+              "WHERE event_type='sale_adjustment_return.posted.v1'",
+            )
+            .getSingle();
+        final payload =
+            jsonDecode(event.read<String>('payload_json'))
+                as Map<String, dynamic>;
+        final syncCommission =
+            (payload['commissions'] as List<dynamic>).single
+                as Map<String, dynamic>;
+        expect(syncCommission['rateBps'], isA<int>());
+        expect(syncCommission['rateBps'], 100);
+        expect(syncCommission['amountMinor'], -199);
 
         // Void must delete the reversal exactly.
         await adjDao.voidSaleAdjReturn(

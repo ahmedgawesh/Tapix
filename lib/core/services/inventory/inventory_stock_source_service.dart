@@ -45,7 +45,9 @@ class InventoryStockSourceBalance {
 
   bool get isConsignment => ownership == InventoryStockOwnership.consignment;
   bool get isVerified =>
-      supplierIdentityId != null || consignmentLayerId != null;
+      supplierId != null ||
+      supplierIdentityId != null ||
+      consignmentLayerId != null;
 }
 
 class ProductStockSourceSnapshot {
@@ -515,9 +517,11 @@ class InventoryStockSourceService {
       if (quantity <= 0 || layer['k'] == 'consignment_receipt') continue;
       final identityId = layer['i'] as int?;
       final purchaseItemId = layer['p'] as int?;
+      final directSupplierId = layer['s'] as int?;
       final source = await _resolveOwnedSource(
         identityId: identityId,
         purchaseItemId: purchaseItemId,
+        directSupplierId: directSupplierId,
       );
       result.add(
         InventoryStockSourceBalance(
@@ -543,7 +547,11 @@ class InventoryStockSourceService {
   Future<
     ({int supplierId, String supplierName, int? identityId, String? sourceSku})?
   >
-  _resolveOwnedSource({int? identityId, int? purchaseItemId}) async {
+  _resolveOwnedSource({
+    int? identityId,
+    int? purchaseItemId,
+    int? directSupplierId,
+  }) async {
     if (identityId != null) {
       final identity = await db
           .customSelect(
@@ -556,7 +564,11 @@ class InventoryStockSourceService {
             readsFrom: {db.supplierProductIdentities, db.suppliers},
           )
           .getSingleOrNull();
-      if (identity == null) return null;
+      if (identity == null ||
+          (directSupplierId != null &&
+              identity.read<int>('supplier_id') != directSupplierId)) {
+        return null;
+      }
       return (
         supplierId: identity.read<int>('supplier_id'),
         supplierName: identity.read<String>('supplier_name'),
@@ -564,7 +576,19 @@ class InventoryStockSourceService {
         sourceSku: identity.read<String>('source_sku'),
       );
     }
-    if (purchaseItemId == null) return null;
+    if (purchaseItemId == null) {
+      if (directSupplierId == null) return null;
+      final supplier = await (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(directSupplierId))).getSingleOrNull();
+      if (supplier == null) return null;
+      return (
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        identityId: null,
+        sourceSku: null,
+      );
+    }
     final row = await db
         .customSelect(
           '''SELECT pch.supplier_id,s.name AS supplier_name,
@@ -584,7 +608,11 @@ class InventoryStockSourceService {
           },
         )
         .getSingleOrNull();
-    if (row == null) return null;
+    if (row == null ||
+        (directSupplierId != null &&
+            row.read<int>('supplier_id') != directSupplierId)) {
+      return null;
+    }
     return (
       supplierId: row.read<int>('supplier_id'),
       supplierName: row.read<String>('supplier_name'),

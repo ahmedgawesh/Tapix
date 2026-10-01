@@ -6,6 +6,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'core/services/crashlytics_service.dart';
 import 'core/services/push_notification_service.dart';
+import 'core/services/sync/branch_location_directory_sync_service.dart';
+import 'features/business/data/warehouse_transfer_arrival_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -119,6 +121,25 @@ void main() {
       if (!kIsWeb && (PlatformUtils.isAndroid || PlatformUtils.isIOS)) {
         unawaited(PushNotificationService.instance.initialize());
       }
+      unawaited(
+        (() async {
+          await di
+              .sl<BranchLocationDirectorySyncService>()
+              .reconcileLocalWarehouses();
+          await di
+              .sl<WarehouseTransferArrivalNotificationService>()
+              .reconcilePending();
+        })().catchError((Object error, StackTrace stackTrace) {
+          LoggingService.error(
+            'Unable to reconcile local warehouses and transfer notifications',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }),
+      );
+      di.sl<WarehouseTransferArrivalNotificationService>().startRemotePolling(
+        di.sl<LanNetworkService>(),
+      );
     },
     (error, stackTrace) {
       LoggingService.error(

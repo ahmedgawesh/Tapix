@@ -74,7 +74,7 @@ void main() {
     isRemoteClient: () => remote,
   );
 
-  test('owner with Pro can use and list both local warehouses', () async {
+  test('owner with Pro can use and list all company stock locations', () async {
     final access = service();
 
     final actor = await access.authorize(
@@ -85,10 +85,52 @@ void main() {
     final warehouses = await access.warehouses();
 
     expect(actor, session.userId);
-    expect(warehouses.map((warehouse) => warehouse.id).toSet(), {
+    expect(warehouses.map((location) => location.warehouse.id).toSet(), {
       primary.warehouseId,
       destinationId,
     });
+  });
+
+  test('central owner can route between branch sales locations', () async {
+    const branchId = '88888888-8888-4888-8888-888888888888';
+    const branchLocationId = '99999999-9999-4999-8999-999999999999';
+    await db
+        .into(db.businessBranches)
+        .insert(
+          BusinessBranchesCompanion.insert(
+            id: branchId,
+            organizationId: primary.organizationId,
+            code: 'CAIRO',
+            name: const Value('Cairo branch'),
+          ),
+        );
+    await db
+        .into(db.businessWarehouses)
+        .insert(
+          BusinessWarehousesCompanion.insert(
+            id: branchLocationId,
+            organizationId: primary.organizationId,
+            branchId: branchId,
+            code: 'CAIRO',
+            name: const Value('Cairo branch'),
+            locationKind: const Value('branch_store'),
+          ),
+        );
+
+    final access = service();
+    final actor = await access.authorize(
+      TransferDraftAction.dispatch,
+      primary.warehouseId,
+      branchLocationId,
+    );
+    final locations = await access.warehouses();
+    final cairo = locations.singleWhere(
+      (row) => row.warehouse.id == branchLocationId,
+    );
+
+    expect(actor, session.userId);
+    expect(cairo.branchName, 'Cairo branch');
+    expect(cairo.warehouse.locationKind, 'branch_store');
   });
 
   test(
@@ -131,6 +173,51 @@ void main() {
       expect(rows.single.parseQuantity('٢'), 2);
       expect(() => rows.single.parseQuantity('6'), throwsFormatException);
       expect(() => rows.single.parseQuantity('1.5'), throwsFormatException);
+    },
+  );
+
+  test(
+    'warehouse clerk dispatches from and receives into the assigned location',
+    () async {
+      final clerk = await db
+          .into(db.users)
+          .insert(
+            UsersCompanion.insert(
+              username: 'assigned-warehouse-clerk',
+              passwordHash: 'test',
+              role: 'warehouseClerk',
+              branchId: Value(primary.branchId),
+              warehouseId: Value(primary.warehouseId),
+              createdAt: DateTime.utc(2026, 9, 24),
+              updatedAt: DateTime.utc(2026, 9, 24),
+            ),
+          );
+      session.userId = clerk;
+
+      expect(
+        await service().authorize(
+          TransferDraftAction.dispatch,
+          primary.warehouseId,
+          destinationId,
+        ),
+        clerk,
+      );
+      expect(
+        await service().authorize(
+          TransferDraftAction.receive,
+          destinationId,
+          primary.warehouseId,
+        ),
+        clerk,
+      );
+      await expectLater(
+        service().authorize(
+          TransferDraftAction.receive,
+          primary.warehouseId,
+          destinationId,
+        ),
+        throwsA(isA<WarehouseTransferAccessDenied>()),
+      );
     },
   );
 
